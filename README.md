@@ -19,7 +19,7 @@
 
 기본 화면은 로그인한 트레이너의 실제 회원 목록입니다. 회원 이름·목표·메모는 Firestore에 저장됩니다.
 기존 회원 A의 분석 및 파일 미리보기는 별도의 **예시 둘러보기** 화면입니다. 예시 화면의 파일과 선택값은 새로고침하면 초기화됩니다.
-회원별 PDF 저장 코드는 구현되어 있으며, 운영 Storage 버킷 연결을 기다리는 상태입니다. Gemini 판독·실제 운동 분석은 아직 연결되지 않았습니다.
+회원별 PDF 저장 코드는 구현되어 있으며, 운영 Storage 버킷 연결을 기다리는 상태입니다. 직접 확정한 운동 기록의 저장·집계가 연결됐습니다. Gemini 자동 판독과 AI 종합 분석은 아직입니다.
 
 2026-09-11: Documents/ChatGPT/Trainer-Note에서 작업했던 최신 UI를 이 폴더에 반영했습니다.
 이후 앱 개발은 이 폴더를 기준으로 진행합니다.
@@ -91,11 +91,11 @@ Firestore `(default)` / Standard / 기존 `nam5` 위치를 사용합니다.
 
 ### 운영 활성화 조건
 
-현재 프로젝트는 결제 계정 및 Storage 버킷 미연결 상태입니다. `NEXT_PUBLIC_STORAGE_ENABLED`가
+현재 프로젝트에는 결제 계정이 연결됐으나 계정 활성화/인증이 완료되지 않아 Storage 버킷 생성이 보류됐습니다. `NEXT_PUBLIC_STORAGE_ENABLED`가
 `true`일 때만 파일 기능을 활성화합니다. 현재 `.env.local`에는 이 값을 추가하지 않았으므로 준비 안내가 보입니다.
 이 환경변수는 UI 활성화 값이며 보안 장치가 아닙니다. 권한은 서버 규칙으로 검사합니다.
 
-1. 프로젝트 소유자가 Firebase Console에서 Blaze 결제 계정 연결 및 Storage 버킷 생성(위치 확인).
+1. 프로젝트 소유자가 결제 인증을 완료한 뒤 프로젝트 billingEnabled와 결제 계정 open 상태를 확인하고 Storage 버킷 생성(위치 확인).
 2. `.env.local`의 `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`을 실제 생성된 버킷 이름과 대조.
 3. `npx -y firebase-tools@latest deploy --only firestore:rules,storage --project trainer-note-a9dd7` 실행.
    Storage 규칙이 Firestore 문서를 읽는 데 필요한 교차 서비스 권한 설정도 확인합니다.
@@ -107,3 +107,31 @@ Firestore `(default)` / Standard / 기존 `nam5` 위치를 사용합니다.
 
 Blaze 관련 공식 안내: https://firebase.google.com/docs/storage/faqs-storage-changes-announced-sept-2024
 Blob/CORS 안내: https://firebase.google.com/docs/storage/web/download-files
+
+## 직접 확인한 운동 기록 (2026-09-11)
+
+`localhost:3001` → 로그인 → 회원 선택 → **기록 입력**.
+PDF를 로컬에서 열어 왼쪽 원본/오른쪽 입력 폼으로 대조하거나 PDF 없이 입력할 수 있습니다.
+원본 PDF는 서버에 업로드하지 않습니다. 브라우저 PDF 뷰어를 사용하며 표시되지 않으면 ‘원본을 새 탭에서 열기’를 이용합니다.
+
+한 기록은 한 날짜의 운동 한 종목입니다. 날짜(연도 필수), 원문 약어, 확인한 운동명, 주 부위,
+중량 기준(외부 중량/맨몸/중량 미상), 최대 8세트의 무게·횟수, 메모를 입력합니다.
+확인 체크 후 Firestore에 저장하며 이후 수정·삭제할 수 있습니다. 날짜는 UTC 정오로 저장하여 표시 시 날짜 이동을 피합니다.
+AI 판독 결과로 표시하지 않고 `origin: manual`, `status: confirmed`로 저장합니다.
+
+경로: `trainers/{uid}/members/{memberId}/records/{자동 ID}`.
+생성·삭제 시 회원 recordCount를 같은 트랜잭션에서 갱신합니다. 기존 회원은 0개로 처리합니다.
+기록이 남은 회원은 삭제할 수 없습니다. revision 비교로 다른 창에서 변경된 기록의 덮어쓰기를 막습니다.
+원본이 있으면 파일명·SHA-256·페이지를 보존하며, 수정 화면에서 다시 여는 PDF의 해시가 일치해야 합니다.
+PDF 없이 만든 기록에 사후 원본 연결은 아직 지원하지 않습니다.
+
+집계는 서버에서 확인된 실제 기록만 사용합니다. 운동 날짜 수, 총세트, 외부 중량 × 횟수의 볼륨,
+선택한 주 부위별 세트 비중을 계산합니다. 맨몸/중량 미상은 세트에 포함하고 kg·회 볼륨에서는 제외합니다.
+다른 운동/기구 사이 강도 비교, 목표 달성 예측, AI 처방으로 해석하지 않습니다.
+
+브라우저 검증: 실제 컴포넌트와 SDK + Firebase 에뮬레이터에서 PDF 선택, 확인 전 저장 차단,
+저장·새로고침·수정, 1,080 → 1,200 kg·회 재계산, 맨몸 제외, 계정별 분리, 삭제, 작성 취소 보호,
+모바일 가로 넘침 없음 및 JavaScript 오류 없음을 확인했습니다. 실제 운영 Google 계정 저장은 사용자 로그인 후 확인 대상입니다.
+
+사용자 결정: Firebase 결제 인증을 기다리는 동안 Storage 활성화는 보류합니다.
+자동 판독과 App Check 설정은 후속 작업이며 현재 AI 서비스를 초기화하거나 호출하지 않습니다.

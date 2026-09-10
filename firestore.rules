@@ -9,9 +9,11 @@ service cloud.firestore {
     function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
     function isValidMember(data) {
       return data.keys().hasAll(['name','goal','notes','createdAt','updatedAt'])
-        && data.keys().hasOnly(['name','goal','notes','createdAt','updatedAt','fileCount','lastFileId'])
+        && data.keys().hasOnly(['name','goal','notes','createdAt','updatedAt','fileCount','lastFileId','recordCount','lastRecordId'])
         && data.get('fileCount',0) is int && data.get('fileCount',0) >= 0 && data.get('fileCount',0) <= 500
         && data.get('lastFileId','') is string && data.get('lastFileId','').size() <= 64
+        && data.get('recordCount',0) is int && data.get('recordCount',0) >= 0 && data.get('recordCount',0) <= 5000
+        && data.get('lastRecordId','') is string && data.get('lastRecordId','').size() <= 20
         && data.name is string && data.name.size() > 0 && data.name.size() <= 60
         && data.name.matches('.*[^ ].*')
         && data.goal is string && data.goal.size() <= 300
@@ -25,6 +27,16 @@ service cloud.firestore {
       let path = /databases/$(database)/documents/trainers/$(uid)/members/$(memberId)/files/$(id);
       return (newCount == oldCount && id == resource.data.get('lastFileId',''))
         || (id.matches('[a-f0-9]{64}') && (
+          (newCount == oldCount + 1 && !exists(path) && existsAfter(path))
+          || (newCount == oldCount - 1 && exists(path) && !existsAfter(path))));
+    }
+    function validRecordCountChange(uid, memberId) {
+      let oldCount = resource.data.get('recordCount',0);
+      let newCount = request.resource.data.get('recordCount',0);
+      let id = request.resource.data.get('lastRecordId','');
+      let path = /databases/$(database)/documents/trainers/$(uid)/members/$(memberId)/records/$(id);
+      return (newCount == oldCount && id == resource.data.get('lastRecordId',''))
+        || (id.matches('[a-zA-Z0-9]{20}') && (
           (newCount == oldCount + 1 && !exists(path) && existsAfter(path))
           || (newCount == oldCount - 1 && exists(path) && !existsAfter(path))));
     }
@@ -42,13 +54,61 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid) && isValidMember(request.resource.data)
         && request.resource.data.get('fileCount',0) == 0 && request.resource.data.get('lastFileId','') == ''
+        && request.resource.data.get('recordCount',0) == 0 && request.resource.data.get('lastRecordId','') == ''
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if isOwner(uid) && isValidMember(request.resource.data)
-        && validFileCountChange(uid,memberId)
+        && validFileCountChange(uid,memberId) && validRecordCountChange(uid,memberId)
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time;
-      allow delete: if isOwner(uid) && resource.data.get('fileCount',0) == 0;
+      allow delete: if isOwner(uid) && resource.data.get('fileCount',0) == 0 && resource.data.get('recordCount',0) == 0;
+      match /records/{recordId} {
+        function parent() {return /databases/$(database)/documents/trainers/$(uid)/members/$(memberId);}
+        function counted(delta) {return exists(parent()) && existsAfter(parent())
+          && getAfter(parent()).data.recordCount == get(parent()).data.get('recordCount',0) + delta
+          && getAfter(parent()).data.lastRecordId == recordId;}
+        function validSingleSet(value,kind) {
+          let reps = value.reps;
+          let kg = value.kg;
+          return value.keys().hasOnly(['kg','reps'])
+            && reps is int && reps >= 1 && reps <= 1000
+            && (kind == 'weighted' ? kg is number && kg > 0 && kg <= 2000 : kg == null);
+        }
+        function validSets(sets,kind) {
+          let size = sets.size();
+          return sets is list && size > 0 && size <= 8
+            && (size <= 0 || validSingleSet(sets[0],kind))
+            && (size <= 1 || validSingleSet(sets[1],kind))
+            && (size <= 2 || validSingleSet(sets[2],kind))
+            && (size <= 3 || validSingleSet(sets[3],kind))
+            && (size <= 4 || validSingleSet(sets[4],kind))
+            && (size <= 5 || validSingleSet(sets[5],kind))
+            && (size <= 6 || validSingleSet(sets[6],kind))
+            && (size <= 7 || validSingleSet(sets[7],kind))
+          ;
+        }
+        function valid(data) {return recordId.matches('[a-zA-Z0-9]{20}')
+          && data.keys().hasAll(['performedAt','rawName','exerciseName','bodyPart','loadType','sets','sourceName','sourceHash','sourcePage','notes','status','origin','revision','createdAt','updatedAt'])
+          && data.keys().hasOnly(['performedAt','rawName','exerciseName','bodyPart','loadType','sets','sourceName','sourceHash','sourcePage','notes','status','origin','revision','createdAt','updatedAt'])
+          && data.performedAt is timestamp && data.performedAt >= timestamp.date(1900,1,1) && data.performedAt < timestamp.date(2101,1,1)
+          && data.rawName is string && data.rawName.size() <= 100
+          && data.exerciseName is string && data.exerciseName.size() > 0 && data.exerciseName.size() <= 100 && data.exerciseName.matches('.*[^ ].*')
+          && data.bodyPart in ['가슴','등','어깨','이두','삼두','하체','코어','전신','미분류']
+          && data.loadType in ['weighted','bodyweight','unknown']
+          && validSets(data.sets,data.loadType)
+          && data.sourceName is string && data.sourceName.size() <= 200 && data.sourceHash is string && data.sourcePage is int
+          && (data.sourceHash == '' ? data.sourceName == '' && data.sourcePage == 0 : data.sourceHash.matches('[a-f0-9]{64}') && data.sourceName.size() > 0 && data.sourcePage >= 1 && data.sourcePage <= 10000)
+          && data.notes is string && data.notes.size() <= 1000 && data.status == 'confirmed' && data.origin == 'manual'
+          && data.revision is int && data.revision > 0 && data.createdAt is timestamp && data.updatedAt == request.time;}
+        allow read: if isOwner(uid) && exists(parent());
+        allow create: if isOwner(uid) && valid(request.resource.data) && counted(1)
+          && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time;
+        allow update: if isOwner(uid) && exists(parent()) && valid(request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.sourceHash == resource.data.sourceHash && request.resource.data.sourceName == resource.data.sourceName;
+        allow delete: if isOwner(uid) && counted(-1);
+      }
       match /files/{fileId} {
         function parent() { return /databases/$(database)/documents/trainers/$(uid)/members/$(memberId); }
         function counted(delta) {
