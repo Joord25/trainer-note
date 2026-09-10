@@ -3,10 +3,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AccountControl, useTrainer } from "./auth-gate";
 import { Icon } from "./icons";
-import { MemberRecords } from "./member-records";
 import {LiveAnalysisWorkspace} from "./live-analysis-workspace";
-import {serverAiEnabled} from "../lib/server-ai";
-import { MemberFiles } from "./member-files";
+
 import { cleanMember, createMember, editMember, listenMembers, memberError, removeMember, type Member, type MemberInput } from "../lib/members";
 
 type Editor = { kind: "create" } | { kind: "edit"; member: Member } | { kind: "delete"; member: Member };
@@ -43,7 +41,7 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const visible = members.filter(m => m.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   const available = !loading && !error && online && !cached;
 
-  return <div className={"app-shell member-shell "+(serverAiEnabled&&selected?"live-member-shell":"")}>
+  return <div className={"app-shell member-shell "+(selected?"live-member-shell":"")}>
     <aside className="sidebar">
       <div className="brand-row"><span className="brand">trainer<span>note</span><i/></span></div>
       <button className="upload-nav" onClick={() => setEditor({kind: "create"})} disabled={!available} aria-label="회원 추가"><Icon name="plus"/><span>회원 추가</span></button>
@@ -57,21 +55,14 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
       <AccountControl/>
     </aside>
     <main className="main-workspace real-main">
-      <header className="topbar"><div className="breadcrumb"><Icon name="users" size={17}/><span>내 회원</span>{selected && <><span className="slash">/</span><strong>{selected.name}</strong></>}</div>{serverAiEnabled&&selected&&<div className="top-actions"><button disabled={!available} onClick={()=>setEditor({kind:"edit",member:selected})}>회원 정보</button><button disabled={!online} onClick={()=>setUploadRequest(v=>v+1)}><Icon name="plus" size={16}/> 일지 추가</button></div>}<span className="member-sync" role="status">{!online ? "오프라인" : cached ? "서버 연결 중" : "연결됨"}</span></header>
+      <header className="topbar"><div className="breadcrumb"><Icon name="users" size={17}/><span>내 회원</span>{selected && <><span className="slash">/</span><strong>{selected.name}</strong></>}</div>{selected&&<div className="top-actions"><button disabled={!available} onClick={()=>setEditor({kind:"edit",member:selected})}>회원 정보</button><button className="member-delete-button" disabled={!available||selected.pending||selected.fileCount>0||selected.recordCount>0} title={selected.fileCount>0||selected.recordCount>0?"연결된 파일과 운동 기록을 먼저 삭제해주세요.":undefined} onClick={()=>setEditor({kind:"delete",member:selected})}>회원 삭제</button><button disabled={!online} onClick={()=>setUploadRequest(v=>v+1)}><Icon name="plus" size={16}/> 일지 추가</button></div>}<span className="member-sync" role="status">{!online ? "오프라인" : cached ? "서버 연결 중" : "연결됨"}</span></header>
       <div className="real-content">
         {!online && <div className="member-notice" role="status">인터넷 연결을 확인해주세요. 다시 연결되면 회원 목록을 불러옵니다.</div>}
         {error ? <div className="member-error" role="alert"><h2>회원 목록을 불러오지 못했어요</h2><p>{error}</p><button onClick={() => setAttempt(v => v + 1)}>다시 시도</button></div> : loading ? <div className="empty-state" aria-busy="true"><span className="auth-spinner"/><p>{online ? "회원 정보를 불러오고 있어요." : "인터넷 연결을 기다리고 있어요."}</p></div> : !selected ? <section className="member-welcome">
           <span className="section-eyebrow">나의 첫 번째 회원</span><h1>회원부터 연결해볼까요?</h1><p>회원의 이름과 운동 목표를 등록하세요.<br/>다음 로그인에도 같은 회원 목록을 이어서 볼 수 있어요.</p>
           <button className="primary" onClick={() => setEditor({kind: "create"})} disabled={!available}><Icon name="plus" size={18}/> 첫 회원 등록하기</button>
           <button className="text-button" onClick={onDemo}>예시 화면 먼저 둘러보기 <Icon name="arrow" size={15}/></button>
-        </section> : serverAiEnabled&&selected.createdAt ? <LiveAnalysisWorkspace key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest}/> : <>
-          <div className="member-detail-heading"><div><span className="section-eyebrow">회원 프로필</span><h1>{selected.name}<span>님의 운동 기록</span></h1></div><button onClick={() => setEditor({kind: "edit", member: selected})} disabled={!available || selected.pending}><Icon name="edit" size={16}/> 정보 수정</button></div>
-          {selected.pending && <div className="member-notice" role="status">변경 내용을 서버에 저장하고 있어요.</div>}
-          <div className="member-profile-grid"><section className="member-info-card"><span className="section-eyebrow">운동 목표</span><h2>{selected.goal || "아직 목표를 설정하지 않았어요"}</h2><p>{selected.goal ? "앞으로 기록을 해석할 때 기준이 되는 목표예요." : "회원이 원하는 변화를 한 문장으로 남겨보세요."}</p></section><section className="member-info-card"><span className="section-eyebrow">트레이너 메모</span><p className="member-note-text">{selected.notes || "수업 준비에 필요한 내용을 남겨보세요."}</p><small>{selected.createdAt ? new Intl.DateTimeFormat("ko-KR").format(selected.createdAt.toDate()) + " 등록" : "등록 중"}</small></section></div>
-          {selected.createdAt&&<><MemberRecords key={selected.id+"-records"} memberId={selected.id} memberName={selected.name} online={online}/>
-          <MemberFiles key={selected.id} memberId={selected.id} memberName={selected.name} online={online}/></>}
-          <div className="member-bottom-actions"><p>{(selected.fileCount > 0 || selected.recordCount > 0) ? "회원을 삭제하려면 연결된 파일과 운동 기록을 먼저 삭제해주세요." : "회원 정보는 로그인한 트레이너 계정에 저장돼요."}</p><button className="member-delete-button" onClick={() => setEditor({kind: "delete", member: selected})} disabled={!available || selected.pending || (selected.fileCount > 0 || selected.recordCount > 0)} title={(selected.fileCount || selected.recordCount) ? "연결된 파일과 운동 기록을 먼저 삭제해주세요." : undefined}>회원 삭제</button></div>
-        </>}
+        </section> : selected.createdAt ? <LiveAnalysisWorkspace key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}
       </div>
     </main>
     {editor && <MemberDialog editor={editor} online={online} onClose={() => setEditor(null)} onSaved={(id, message) => {if (id) {setSelectedId(id); setSearch("");} setEditor(null); setToast(message);}}/>}
