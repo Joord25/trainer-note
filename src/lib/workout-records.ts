@@ -1,10 +1,10 @@
 "use client";
-import {collection,doc,getFirestore,onSnapshot,orderBy,query,runTransaction,serverTimestamp,Timestamp} from "firebase/firestore";
+import {collection,doc,getFirestore,getDocsFromServer,where,onSnapshot,orderBy,query,runTransaction,serverTimestamp,Timestamp} from "firebase/firestore";
 import {getClientAuth} from "./firebase-client";
 export const BODY_PARTS = ["가슴","등","어깨","이두","삼두","하체","코어","전신","미분류"] as const;
 export type WorkoutSet = {kg:number|null; reps:number};
 export type WorkoutInput = {date:string;rawName:string;exerciseName:string;bodyPart:string;loadType:"weighted"|"bodyweight"|"unknown";sets:WorkoutSet[];sourceName:string;sourceHash:string;sourcePage:number;notes:string};
-export type WorkoutRecord = WorkoutInput & {id:string;revision:number;pending:boolean};
+export type WorkoutRecord = WorkoutInput & {id:string;revision:number;pending:boolean;origin:"manual"|"ai-reviewed"};
 export function validateWorkout(input:WorkoutInput) {
   const v={...input,rawName:input.rawName.trim(),exerciseName:input.exerciseName.trim(),notes:input.notes.trim()};
   const date=new Date(v.date+"T12:00:00Z");
@@ -24,14 +24,16 @@ function scope(memberId:string){
 export function listenWorkouts(memberId:string,onData:(r:WorkoutRecord[],cached:boolean)=>void,onError:(e:unknown)=>void){
   return onSnapshot(query(scope(memberId).records,orderBy("performedAt","desc")),{includeMetadataChanges:true},s=>onData(s.docs.map(d=>{const v=d.data();return {...v,id:d.id,date:v.performedAt.toDate().toISOString().slice(0,10),pending:d.metadata.hasPendingWrites} as WorkoutRecord;}),s.metadata.fromCache),onError);
 }
-export async function saveWorkout(memberId:string,input:WorkoutInput,existing?:WorkoutRecord){
-  const v=validateWorkout(input),s=scope(memberId),reference=existing?doc(s.records,existing.id):doc(s.records);
+export async function saveWorkout(memberId:string,input:WorkoutInput,existing?:WorkoutRecord,importId?:string){
+  if(importId&&!/^[a-f0-9]{20}$/.test(importId))throw new Error("판독 기록 식별자를 확인해주세요.");
+  const v=validateWorkout(input),s=scope(memberId),reference=existing?doc(s.records,existing.id):importId?doc(s.records,importId):doc(s.records);
   const {date,...fields}=v;
   await runTransaction(s.db,async tx=>{
     const member=await tx.get(s.member),old=await tx.get(reference);
+    if(!existing&&old.exists())throw new Error("이미 저장한 판독 기록이에요. 확정 운동 기록에서 확인해주세요.");
     if(!member.exists())throw new Error("회원이 삭제됐어요.");
     if(existing&&(!old.exists()||old.data().revision!==existing.revision))throw new Error("다른 화면에서 기록이 변경됐어요. 닫은 뒤 최신 기록을 다시 열어주세요.");
-    const values={...fields,performedAt:Timestamp.fromDate(new Date(date+"T12:00:00Z")),status:"confirmed",origin:"manual",revision:(existing?.revision??0)+1,updatedAt:serverTimestamp()};
+    const values={...fields,performedAt:Timestamp.fromDate(new Date(date+"T12:00:00Z")),status:"confirmed",origin:existing?.origin??(importId?"ai-reviewed":"manual"),revision:(existing?.revision??0)+1,updatedAt:serverTimestamp()};
     if(existing)tx.update(reference,values);
     else{tx.set(reference,{...values,createdAt:serverTimestamp()});tx.update(s.member,{recordCount:(member.data().recordCount??0)+1,lastRecordId:reference.id,updatedAt:serverTimestamp()});}
   });return reference.id;
@@ -51,3 +53,8 @@ export function summarizeWorkouts(records:WorkoutRecord[]){
   return {...totals,volume:Math.round(totals.volume*100)/100};
 }
 export function workoutError(e:unknown){const code=(e as {code?:string})?.code;if(code==='permission-denied')return "기록에 접근할 수 없어요. 로그인 계정과 서비스 연결을 확인해주세요.";if(code)return "기록을 저장하지 못했어요. 연결 상태를 확인하고 다시 시도해주세요.";return e instanceof Error?e.message:"기록을 처리하지 못했어요.";}
+
+export async function findSourceRecords(memberId:string,sourceHash:string){
+  const result=await getDocsFromServer(query(scope(memberId).records,where("sourceHash","==",sourceHash)));
+  return result.docs.map(d=>({id:d.id,...d.data()} as WorkoutRecord));
+}

@@ -50,3 +50,10 @@ test('maximum eight distinct weighted sets can be created atomically',async()=>{
  assert.equal((await getDoc(doc(d,rp))).data().sets.length,8);
 });
 for(const [name,set]of [['missing kg',{reps:10}],['missing reps',{kg:20}],['extra field',{kg:20,reps:10,admin:true}],['negative kg',{kg:-1,reps:10}],['fractional reps',{kg:20,reps:1.5}],['null weighted kg',{kg:null,reps:10}]])test(`reject malformed set: ${name}`,async()=>{await assertFails(create(db('trainer-a'),{sets:[set]}));});
+
+test('AI-reviewed records require source provenance and retain origin on edit',async()=>{
+ const d=db('trainer-a');await assertFails(create(d,{origin:'ai-reviewed'}));
+ await assertSucceeds(create(d,{origin:'ai-reviewed',sourceHash:'a'.repeat(64),sourceName:'일지.png',sourcePage:1}));
+ await assertSucceeds(updateDoc(doc(d,rp),{notes:'트레이너가 무게 확인',revision:2,updatedAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(d,rp),{origin:'manual',revision:3,updatedAt:serverTimestamp()}));
+});

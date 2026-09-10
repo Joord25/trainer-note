@@ -1,0 +1,21 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+const code=ts.transpileModule(readFileSync(new URL('../src/lib/workout-extraction.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
+const {parseExtraction,EXTRACTION_MODEL}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const source={id:'a'.repeat(64),name:'일지.png',contentType:'image/png'};
+const row=()=>({page:1,memberName:'회원 A',year:null,month:6,day:9,rawName:'BB sq',exerciseName:'바벨 스쿼트',bodyPart:'하체',loadType:'weighted',sets:[{kg:40,reps:12},{kg:null,reps:null}],notes:'둘째 세트 판독 불명',issues:['운동 변형 확인']});
+const parse=(patch={},year)=>parseExtraction({records:[{...row(),...patch}],unparsed:[]},source,'회원 A',year);
+test('default model is user selected Gemini 3.1 Flash-Lite',()=>assert.equal(EXTRACTION_MODEL,'gemini-3.1-flash-lite'));
+test('missing year and uncertain numbers remain unconfirmed blanks',async()=>{const {records:[r]}=await parse();assert.equal(r.input.date,'');assert.equal(r.input.sets[1].kg,null);assert.equal(r.input.sets[1].reps,0);assert.ok(r.issues.some(v=>v.includes('날짜')));assert.ok(r.issues.some(v=>v.includes('2세트')));});
+test('explicit year fallback applies only when source omits year',async()=>{assert.equal((await parse({},2025)).records[0].input.date,'2025-06-09');assert.equal((await parse({year:2024},2025)).records[0].input.date,'2024-06-09');});
+test('impossible calendar dates do not silently roll over',async()=>{assert.equal((await parse({year:2025,month:2,day:29})).records[0].input.date,'');assert.equal((await parse({year:2024,month:2,day:29})).records[0].input.date,'2024-02-29');});
+test('member mismatch and missing name are prominent issues',async()=>{assert.ok((await parse({memberName:'다른 회원'})).records[0].issues.some(v=>v.includes('선택한 회원')));assert.ok((await parse({memberName:''})).records[0].issues.some(v=>v.includes('이름을 읽지')));});
+test('unknown load never becomes zero kg or invented bodyweight',async()=>{const r=(await parse({loadType:'unknown',sets:[{kg:null,reps:10}]})).records[0];assert.equal(r.input.loadType,'unknown');assert.equal(r.input.sets[0].kg,null);await assert.rejects(parse({loadType:'bodyweight',sets:[{kg:20,reps:10}]}));});
+for(const [name,patch]of [['negative kg',{sets:[{kg:-1,reps:10}]}],['fractional reps',{sets:[{kg:10,reps:2.5}]}],['numeric string',{sets:[{kg:'40',reps:10}]}],['missing field',{year:undefined}],['bad part',{bodyPart:'뇌'}],['invalid image page',{page:2}],['too many sets',{sets:Array.from({length:9},()=>({kg:40,reps:10}))}]] )test(`reject malformed model result: ${name}`,async()=>assert.rejects(parse(patch)));
+test('empty template and unsupported time/distance are preserved separately',async()=>{const result=await parseExtraction({records:[],unparsed:[{page:1,text:'200m 34s',reason:'시간·거리 기록'}]},source,'회원 A');assert.equal(result.records.length,0);assert.equal(result.unparsed[0].text,'200m 34s');});
+test('repeat reads yield stable IDs and repeated same-page exercises stay distinct',async()=>{const value={records:[row(),row()],unparsed:[]};const a=await parseExtraction(value,source,'회원 A'),b=await parseExtraction(value,source,'회원 A');assert.deepEqual(a.records.map(v=>v.id),b.records.map(v=>v.id));assert.notEqual(a.records[0].id,a.records[1].id);assert.match(a.records[0].id,/^[a-f0-9]{20}$/);});
+test('zero kg is a missing weighted value requiring review, not counted volume',async()=>{const r=(await parse({sets:[{kg:0,reps:10}]})).records[0];assert.equal(r.input.sets[0].kg,null);assert.ok(r.issues.some(v=>v.includes('중량')));});
+
+test('reject excessive record output before displaying drafts',async()=>assert.rejects(parseExtraction({records:Array.from({length:61},row),unparsed:[]},source,'회원 A')));

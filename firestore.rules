@@ -98,13 +98,14 @@ service cloud.firestore {
           && validSets(data.sets,data.loadType)
           && data.sourceName is string && data.sourceName.size() <= 200 && data.sourceHash is string && data.sourcePage is int
           && (data.sourceHash == '' ? data.sourceName == '' && data.sourcePage == 0 : data.sourceHash.matches('[a-f0-9]{64}') && data.sourceName.size() > 0 && data.sourcePage >= 1 && data.sourcePage <= 10000)
-          && data.notes is string && data.notes.size() <= 1000 && data.status == 'confirmed' && data.origin == 'manual'
+          && data.notes is string && data.notes.size() <= 1000 && data.status == 'confirmed' && data.origin in ['manual','ai-reviewed'] && (data.origin == 'manual' || data.sourceHash != '')
           && data.revision is int && data.revision > 0 && data.createdAt is timestamp && data.updatedAt == request.time;}
         allow read: if isOwner(uid) && exists(parent());
         allow create: if isOwner(uid) && valid(request.resource.data) && counted(1)
           && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time;
         allow update: if isOwner(uid) && exists(parent()) && valid(request.resource.data)
           && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.origin == resource.data.origin
           && request.resource.data.revision == resource.data.revision + 1
           && request.resource.data.sourceHash == resource.data.sourceHash && request.resource.data.sourceName == resource.data.sourceName;
         allow delete: if isOwner(uid) && counted(-1);
