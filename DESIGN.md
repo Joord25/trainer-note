@@ -1,0 +1,4 @@
+# Trainer Note — upload-first UI
+User direction: minimal entry screen inspired by provided UnivAI screenshot. White canvas, thin sidebar, one large central upload action. Remove sample member analytics from the entry screen. Muted green is reserved for the upload action and small brand detail. Tablet and desktop primary, mobile responsive. System Korean font stack. SVG icons only.
+
+Navigation: 일지 추가 / 내 일지. Local file selection and drag-and-drop accept PDF/JPEG/PNG/WEBP (50MB per file). Detect file signatures, not just extensions. .goodnotes has an explicit PDF-export message; do not claim native support. Source preview uses object URLs with lifecycle cleanup. The list lives in memory and clears on reload. No server upload, persistence, or AI extraction yet; show this limitation near the upload area.

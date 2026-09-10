@@ -1,0 +1,15 @@
+{
+  "auth": {
+    "authorizedDomains": [
+      "localhost",
+      "trainer-note-a9dd7.firebaseapp.com",
+      "trainer-note-a9dd7.web.app"
+    ],
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Trainer Note",
+        "supportEmail": "trainer.note.app@gmail.com"
+      }
+    }
+  }
+}
