@@ -19,7 +19,9 @@
 
 기본 화면은 로그인한 트레이너의 실제 회원 목록입니다. 회원 이름·목표·메모는 Firestore에 저장됩니다.
 기존 회원 A의 분석 및 파일 미리보기는 별도의 **예시 둘러보기** 화면입니다. 예시 화면의 파일과 선택값은 새로고침하면 초기화됩니다.
-회원별 PDF·PNG·JPEG 저장 코드와 실제 Storage 버킷 연결이 완료됐습니다. 로컬 3001 환경에서 업로드 기능을 활성화했습니다. 직접 확정한 운동 기록의 저장·집계가 연결됐습니다. Gemini 3.1 Flash-Lite 자동 판독과 원본 대조·확정 저장을 연결했습니다. 서버 자동 판독·AI 종합 분석·수업 계획 코드는 추가했으며, 아래 서버 모드 절차의 클라우드 승인·배포 전까지 기존 판독 흐름을 유지합니다.
+회원별 PDF·PNG·JPEG 업로드 → 원본·진행 분석·다음 수업 작업실 → Gemini 자동 판독·종합 의견·프로그램 생성이 연결됐습니다. 명확한 기록은 잠정 기록으로 바로 반영하고 필요한 값만 같은 화면에서 수정합니다. `EXPERT_JUDGMENT_PLAN.md`의 조건 검사·판단 카드·트레이너 피드백을 분석에 연결했습니다.
+
+**2026-09-11 실제 서버 검증:** `gemini-3.1-flash-lite`, Cloud Functions 5개 및 규칙 배포, 가상 PDF 3일/6세트 자동 판독, 판단 카드 5개와 다음 수업 초안 저장, 동일 분석 재요청 시 추가 모델 호출 없음. localhost:3001의 서버 AI를 활성화했습니다. 자세한 범위와 남은 운영 확인은 [실제 연결 검증](docs/gemini-live-verification.md)을 보세요.
 
 2026-09-11: Documents/ChatGPT/Trainer-Note에서 작업했던 최신 UI를 이 폴더에 반영했습니다.
 이후 앱 개발은 이 폴더를 기준으로 진행합니다.
@@ -69,7 +71,7 @@ Firestore `(default)` / Standard / 기존 `nam5` 위치를 사용합니다.
 등록, 수정, 새로고침 후 보존, 검색, 두 트레이너 목록 분리, 오프라인 버튼 상태, 확인 후 삭제, 모바일 가로 넘침을 확인했습니다.
 운영 Google 계정과 실제 Firestore를 연결한 최종 동작은 `localhost:3001`에서 회원 등록 후 새로고침하여 확인할 수 있습니다.
 
-다음 구현 순서: 확정 기록으로 집계 확장 → 근거를 포함한 분석과 수업 준비.
+이후 단계: 실제 트레이너 사용 피드백 수집, 손글씨 예외 개선, 전문가 판단 사례와 실제 후속 성과 검증.
 
 ## 회원별 PDF·이미지 원본 저장 (2026-09-11)
 
@@ -156,54 +158,32 @@ Firestore는 세 가지 MIME만 허용하며, Storage는 예약 문서 MIME·요
 JPG/JPEG 중복 방지, 로컬 기록 대조 이미지, 계정 분리와 모바일 레이아웃을 확인했습니다.
 
 
-## Gemini 3.1 Flash-Lite 판독 (2026-09-11)
+## Gemini 연결 설정
 
-회원 → 운동일지의 **AI로 읽기** → 회원 연결 확인 / 필요하면 기록 연도 입력 → **판독 시작** → **원본 대조·확인** → **확정하고 저장**.
-
-- 모델은 사용자 지정 `gemini-3.1-flash-lite`. Firebase AI Logic / Gemini Developer API를 사용하며 Gemini 비밀 키를 브라우저에 넣지 않습니다.
-- PDF·PNG·JPEG를 인증된 Storage `getBlob`으로 읽고 AI에 전송합니다. 원본 업로드 50MB 제한과 별도로 판독은 **10MB 이하, 한 번에 한 파일**입니다.
-- 날짜·운동명·주 부위·중량·횟수를 JSON으로 추출하고 응답을 별도 검증합니다. 연도가 없으면 지정 연도를 적용하거나 비워두며, 불명확한 숫자를 0kg·임의 횟수로 확정하지 않습니다.
-- 회원 이름 불일치, 약어 해석, 누락 날짜/수치를 확인 항목으로 표시합니다. 시간·거리·라운드는 반복 횟수로 바꾸지 않고 별도 원문 목록에 남깁니다.
-- AI 초안은 메모리에만 유지됩니다. 화면 종료/새로고침 시 미확정 초안은 사라지며 확인 안내를 표시합니다. 확정한 종목만 `origin: ai-reviewed`, `status: confirmed`로 Firestore에 저장됩니다. 직접 입력은 `manual`입니다.
-- 원본 해시·페이지·원문 운동 표기·동일 표기 등장 순서로 만든 식별자를 사용합니다. 같은 식별자로 재저장/덮어쓰지 않습니다. 재판독 시 표기가 달라지는 경우 완전한 중복 검출은 보장하지 않으므로 기존 날짜/운동을 비교하도록 안내합니다.
-- 원본 해시·파일명과 origin은 수정해도 유지합니다. 최대 60종목 / 종목당 8세트 응답 검증, 120초 제한, 중단, 계정 변경 시 결과 폐기, 429 크레딧/사용량 오류 안내가 있습니다.
-- 구조화 응답은 SDK `responseSchema`를 사용합니다. 큰 중첩 `maxItems`는 실제 모델에서 HTTP 400을 유발하므로 전송 스키마에서 제외하고 클라이언트 파서가 개수 제한을 강제합니다. 제한을 넘는 응답은 저장되지 않습니다.
-
-### AI 연결 설정
-
-`.env.local` 또는 배포 환경에 아래 이름의 설정을 넣습니다. 값은 저장소에 커밋하지 않습니다.
+현재 기본은 서버 모드입니다. 예전 브라우저 AI Logic 판독 버튼/메모리 초안 흐름은 사용하지 않습니다.
 
 ```dotenv
-NEXT_PUBLIC_AI_ENABLED=true
+NEXT_PUBLIC_SERVER_AI_ENABLED=true
+NEXT_PUBLIC_AI_ENABLED=false
 NEXT_PUBLIC_FIREBASE_AI_MODEL=gemini-3.1-flash-lite
 NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY=your-public-recaptcha-enterprise-site-key
-# 로컬 개발에만 사용. 등록된 토큰은 비밀로 보관하고 공유하지 않습니다.
+# 등록된 로컬 개발 토큰은 비밀로 유지합니다.
 NEXT_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN=your-local-development-debug-token
 ```
 
-Firebase CLI `init ailogic`으로 기존 `trainer-note-web`에 AI Logic을 활성화했습니다.
-프로젝트 소유자가 Generative Language 약관에 동의하고 `trainer-note-a9dd7`의 Gemini 결제/선불 크레딧을 활성화했습니다. Firebase 결제 연결만으로 Gemini 크레딧 충전이 완료되지는 않습니다.
+서버 키는 Secret Manager의 `TRAINER_NOTE_GEMINI_API_KEY`로만 전달합니다. 로컬 환경 파일/Git/브라우저에 Gemini 비밀키를 넣지 않습니다. 모델은 서버 `functions/domain.mjs`에서 고정합니다.
 
-App Check는 reCAPTCHA Enterprise를 사용하며 AI 서비스(`firebaseml.googleapis.com` App Check 서비스 ID)에 **ENFORCED**입니다.
-로컬 localhost/127.0.0.1의 개발 빌드만 등록한 debug token을 사용합니다. production 번들에는 이 토큰이 포함되지 않는 것을 검사했습니다.
-운영용 reCAPTCHA 허용 도메인은 현재 `trainer-note-a9dd7.firebaseapp.com`, `trainer-note-a9dd7.web.app`이며 localhost는 포함하지 않습니다. 새 운영 도메인은 키의 허용 도메인에도 추가해야 합니다.
-App Check는 앱 인증이지 로그인 사용자별 과금 한도를 대신하지 않습니다. 현재 사용자별 사용량/상품 과금 시스템은 미구현입니다.
+App Check는 reCAPTCHA Enterprise 및 함수 `enforceAppCheck`를 사용합니다. 개발 빌드의 localhost/127.0.0.1에서만 등록된 debug token을 사용하고 운영 번들에는 포함하지 않습니다. 새 운영 도메인은 Auth와 reCAPTCHA 허용 도메인에 추가해야 합니다.
+Firebase 브라우저 키에서는 `firebasevertexai.googleapis.com`을 제외하여 예전 직접 AI 호출의 원가 한도 우회를 막았습니다. Auth·App Check·Firestore·Storage 허용은 유지했습니다.
 
-규칙·형식·파서 검사 총 104개(기존/규칙 87개 + 판독 파서 17개)와 production 빌드를 통과했습니다. 실제 컴포넌트/SDK + Firestore/Storage 에뮬레이터 브라우저 테스트도 수행했습니다.
-브라우저 테스트에서는 AI 응답만 제어하여 누락 값 수정, 확인 전 집계 제외, 1,080kg·회 저장·새로고침,
-중복 식별자, 결제 오류/잘못된 응답/중단 시 미저장, 다른 트레이너 분리와 모바일 가로 넘침 없음을 확인했습니다.
-실제 Gemini 3.1 Flash-Lite 호출은 개인정보 없는 PNG·JPEG·PDF 테스트 일지로 각각 정상 응답(STOP)을 확인했습니다. 40kg×12회/60kg×10회를 추출하고 누락 연도를 비워두며 시간·거리를 별도 항목으로 분리했습니다. 이 테스트는 실제 손글씨 판독 정확도를 보증하지 않습니다.
-App Check 없는 실제 AI 요청은 HTTP 401로 차단됩니다.
+## 저장된 판독 · 자동 분석 · 무료 베타 서버 모드
 
-
-## 저장된 판독 · 자동 분석 · 무료 베타 서버 모드 (배포 대기)
-
-**현재 상태:** 로컬 코드·에뮬레이터 검증 완료. 클라우드 API 활성화, 서버 전용 Gemini 키/Secret Manager 생성은 자동 승인 심사에서 거부되어 실행하지 않았습니다. 3001은 원본·진행 분석·수업 준비 화면으로 통일했습니다. `NEXT_PUBLIC_SERVER_AI_ENABLED` 미설정 상태에서는 원본 열람과 연결 대기 안내를 표시하며 서버 AI 호출은 실행하지 않습니다. 아래 기능과 사용 한도는 서버 배포·설정 전에는 라이브에 적용되지 않습니다.
+**현재 상태:** `trainer-note-a9dd7`에 서버와 Firestore 규칙을 배포했고 `NEXT_PUBLIC_SERVER_AI_ENABLED=true`를 localhost:3001에 적용했습니다. 실제 Gemini 판독·리포트 및 캐시를 가상 회원으로 검증했습니다. 운영 회원의 손글씨 정확도와 목표 달성 예측 성능을 입증한 것은 아닙니다.
 
 ### 동작
 
 - 새 파일 manifest가 ready로 바뀌면 서버가 PDF/PNG/JPEG 원본을 읽습니다. 10MB 이하, 해시·MIME·크기를 검증하고 기존 추출 프롬프트에 원본 자체 대조 지시를 추가했습니다.
-- 원본 판독 JSON, 행별 검증 결과, 토큰 사용량을 회원의 `imports/{fileHash}`에 저장합니다. 동일 파일 재열람/새로고침은 추출을 재호출하지 않습니다. 기존 업로드 파일은 ‘처음 판독하기’에서 시작합니다.
+- 원본 판독 JSON, 행별 검증 결과, 토큰 사용량을 회원의 `imports/{fileHash}`에 저장합니다. 동일 파일 재열람/새로고침은 추출을 재호출하지 않습니다. 기존 업로드 파일도 회원 작업실을 열면 미판독 파일부터 자동 처리합니다.
 - 명확한 값은 `origin: ai-auto`, `status: provisional`로 자동 반영합니다. 규칙 검증 통과는 판독 정확도 보증이 아닙니다. UI에는 잠정 기록으로 표시합니다. 애매한 날짜·회원·숫자·단위·운동명 및 과거 동일 종목 대비 큰 중량 차이는 needs-review로 제외합니다.
 - 빠진 연도/회원 확인은 파일 단위 일괄 보완이며 Gemini를 다시 읽지 않습니다. 분석 대상이 달라지면 종합 분석만 갱신될 수 있습니다. 트레이너가 이미 확정한 행은 일괄 보완으로 덮어쓰지 않습니다.
 - 근거를 포함한 종합 의견과 다음 수업 프로그램은 **한 번의 AI 응답**으로 생성합니다. 최근 120개 운동 항목 + 목표·메모 + 최근 수정 이유를 사용합니다. 통계는 코드로 계산하고 원본을 다시 전송하지 않습니다.
@@ -224,28 +204,28 @@ Gemini 3.1 Flash-Lite 공식 텍스트/이미지/PDF 요금 기준(2026-09-11 �
 
 `aiUsage/{YYYY-MM}`, `aiDaily/{YYYY-MM-DD}`, `aiCalls/{id}`는 해당 트레이너만 읽고 서버만 기록합니다. 다른 사용자의 사용량이나 글로벌 예산은 브라우저에서 접근할 수 없습니다. `countTokens` 사전 확인 및 입력 32,768 / 추출 출력 12,288 / 분석 출력 4,096 토큰 제한을 사용합니다. 타임아웃 등 강제 종료로 예약만 남은 경우 자동 해제하지 않습니다(과소 집계를 방지). 운영자가 호출 로그/청구를 확인한 후 정산해야 합니다.
 
-### 승인 후 적용할 구체적 범위
+### 배포 구성 및 재배포
 
-대상은 기존 **trainer-note-a9dd7** 프로젝트 하나입니다. 다른 프로젝트/결제 계정은 만들지 않습니다.
+대상은 기존 **trainer-note-a9dd7**, codebase `trainer-ai`, region `us-central1`입니다. Auth/App Check callable `trainerAi`, 파일/기록/회원 트리거 3개와 단일 동시 실행 `buildMemberReport` 작업 큐를 사용합니다. 최소 인스턴스는 0이며 서버·빌드·작업 큐 비용은 모델 원가와 별도입니다. Artifact Registry에는 7일 보관 정책을 적용했습니다.
 
-1. 서버 실행에 필요한 Cloud Functions, Cloud Build, Artifact Registry, Cloud Run, Eventarc, Cloud Tasks 및 API Keys, Secret Manager API를 활성화합니다. 이미 켜진 API는 유지합니다.
-2. Generative Language API에만 제한된 서버 키 하나를 생성하고 Secret Manager의 `TRAINER_NOTE_GEMINI_API_KEY`에 저장합니다. 키 값은 브라우저·Git에 넣지 않습니다. 배포 서비스 계정에 필요한 비밀 조회/스토리지 원본 조회/Firestore/작업 큐 실행 권한만 부여합니다.
-3. `trainer-ai` codebase의 callable `trainerAi`, 파일/기록/회원 트리거와 단일 동시 실행 `buildMemberReport` 작업 큐를 배포합니다. 최소 인스턴스는 0이며 Functions/빌드/작업 큐는 사용량에 따른 비용이 생길 수 있습니다.
-4. 서버 소유 컬렉션과 잠정 기록 확인을 지원하는 Firestore 규칙을 배포합니다. 클라이언트의 자동 확정 위조·원가 리셋은 차단합니다.
-5. 실제 ID token + App Check 호출, 원본 판독/저장/캐시 재조회, 서버 토큰 집계를 소규모로 검증합니다. 그 다음 `.env.local` 및 배포 설정에 `NEXT_PUBLIC_SERVER_AI_ENABLED=true`를 설정하고 3001을 재시작합니다.
-6. 서버 경로 검증 후 기존 브라우저 AI Logic 직접 호출 경로를 차단합니다(API 비활성화 또는 허용 키 제한). 이 단계가 빠지면 구 클라이언트가 서버 한도를 우회할 수 있으므로 무료 베타를 외부에 공개하지 않습니다. Auth/Firestore/Storage 사용에 필요한 API 허용은 유지합니다.
+기존 Secret Manager의 최신 키를 바꾼 뒤에는 함수를 재배포해야 해당 비밀 버전이 적용됩니다. 키 값은 명령 인수나 채팅에 넣지 않습니다.
 
-위 변경은 아직 실행하지 않았습니다. 배포는 승인 후 `node scripts/build-functions.mjs`, `firebase deploy --only functions:trainer-ai,firestore:rules --project trainer-note-a9dd7` 범위로 진행하며 CLI의 추가 IAM 요구를 확인합니다.
+```sh
+node scripts/build-functions.mjs
+npx -y firebase-tools@latest deploy --only functions:trainer-ai,firestore:rules --project trainer-note-a9dd7 --account trainer.note.app@gmail.com
+```
+
+새 환경에서는 실제 호출·토큰 집계를 확인한 뒤 서버 플래그를 켭니다. 로컬 서버 플래그는 원격 트리거를 끄는 스위치가 아니며, 업로드 `ready` 이벤트는 배포된 서버에서 계속 처리됩니다.
 
 ### 검증
 
 `npm install --prefix functions` 후 `npm run test:all` (Java 21+, 로컬 Firebase 에뮬레이터 필요).
 서비스 테스트는 `FIRESTORE_EMULATOR_HOST`가 없으면 즉시 중단하며 라이브 DB에 접근하지 않습니다. Gemini와 큐 adapter는 제어된 테스트 대역을 사용합니다.
 
-143개 테스트 통과: 중복/동시 판독, 캐시, 누락 연도·회원 일괄 보완, 트레이너 수정 충돌, 잠정 데이터 제외/재집계, 예산 동시 예약/실패 정산, 분석 변경 감지, 수업 계획 보존, 소유자 읽기·서버 전용 쓰기 및 기존 업로드/수동 기록 회귀.
+167개 테스트 통과: 중복/동시 판독, 캐시, 누락 연도·회원 일괄 보완, 트레이너 수정 충돌, 잠정 데이터 제외/재집계, 예산 동시 예약/실패 정산, 분석 변경 감지, 수업 계획 보존, 소유자 읽기·서버 전용 쓰기 및 기존 업로드/수동 기록 회귀.
 별도 브라우저에서 실제 컴포넌트·Firestore/Storage SDK와 에뮬레이터를 연결해 자동 반영, 연도 보완 후 통계, 재열람/새로고침 시 AI 재호출 없음, 탭 전환 시 수업 입력 보존, 새 분석 후 저장된 계획 유지, 인체 그래픽/선 그래프, 모바일 가로 넘침 없음 및 런타임 오류 없음을 확인했습니다.
 
-실제 Cloud Functions 배포·IAM·Gemini 직접 API 경로는 승인 후 통합 검증 대상입니다. 테스트 성공을 손글씨 판독 정확도나 목표 달성 예측 정확도로 해석하지 않습니다.
+실제 Cloud Functions → Gemini → Firestore 저장 및 재요청 캐시는 가상 PDF로 통과했습니다. 실제 App Check 발급과 인증 없는 callable 차단도 확인했습니다. 로그인한 운영 브라우저의 전체 업로드 동선은 사용 환경에서 추가 확인합니다. 테스트 성공을 손글씨 판독 정확도나 목표 달성 예측 정확도로 해석하지 않습니다.
 
 
 ### UX 정정: 업로드 후 분석 화면이 기본 (2026-09-11)
@@ -262,5 +242,5 @@ Gemini 3.1 Flash-Lite 공식 텍스트/이미지/PDF 요금 기준(2026-09-11 �
 - 종합 의견 + AI 수업 초안: 실제 분석 입력이 바뀌었을 때만 수정 내용을 모아 한 번의 응답으로 갱신합니다. 같은 값의 재저장/revision만 변경/원문 표기만 수정은 기존 분석 캐시를 재사용합니다.
 - 트레이너가 직접 수정한 수업 계획 저장: AI 호출 없음. 이후 AI 의견 갱신에도 별도 저장 계획 보존.
 
-클라우드 배포와 서버 플래그 활성화는 여전히 승인 대기입니다. 현재 3001의 기존 기능과 무료 베타 원가 제한 적용 상태를 혼동하지 않습니다.
+클라우드 배포와 localhost:3001 서버 모드 활성화를 완료했습니다. 상세한 실제 검증 결과는 `docs/gemini-live-verification.md`에 기록합니다.
 추가 검증: 143개 테스트 통과. 에뮬레이터 브라우저에서 자동 업로드→분석 진입, 판독 표 안의 중량 수정(2,160→2,260 kg·회), 원본 재판독 없음, 2뷰/3뷰·모바일 전환 및 수정 계획 보존을 확인했습니다.

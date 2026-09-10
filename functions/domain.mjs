@@ -1,7 +1,7 @@
 import {KNOWLEDGE_VERSION,JUDGMENT_PROMPT,JUDGMENTS_SCHEMA,validateJudgments} from './judgment.mjs';
 import {createHash} from 'node:crypto';
 export const MODEL='gemini-3.1-flash-lite';
-export const REPORT_VERSION='trainer-judgment-v2';
+export const REPORT_VERSION='trainer-judgment-v3';
 export const PRICE_VERSION='2026-09-11-gemini-3.1-flash-lite';
 export const LIMITS={monthlyMicros:1_000_000,dailyCalls:30,globalMonthlyMicros:20_000_000,maxInputTokens:32768,extractOutputTokens:12288,reportOutputTokens:4096,maxRecords:120};
 export const hash=value=>createHash('sha256').update(typeof value==='string'||Buffer.isBuffer(value)?value:JSON.stringify(value)).digest('hex');

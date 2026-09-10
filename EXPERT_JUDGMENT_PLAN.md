@@ -91,4 +91,4 @@ validation_status (draft/reviewed/tested), unresolved_disagreements.
 
 ## 2026-09-11 구현 연결
 
-이 문서의 첫 판단 기능 5개를 `functions/judgment.mjs`의 버전 관리 초안 카드 및 조건 검사로 연결했다. 판단 이유와 당시 기준/기록, 후속 결과의 분리 저장과 다음 분석 입력 재사용도 구현했다. 실제 전문가가 검토한 사례집이나 모델 재학습은 아직 없으며, 서버 배포/실제 Gemini 검증도 별도다. 정확한 적용 범위와 코드 위치는 [구현 현황](docs/expert-judgment-implementation.md)을 따른다.
+이 문서의 첫 판단 기능 5개를 `functions/judgment.mjs`의 버전 관리 초안 카드 및 조건 검사로 연결했다. 판단 이유와 당시 기준/기록, 후속 결과의 분리 저장과 다음 분석 입력 재사용도 구현했다. 실제 전문가가 검토한 사례집이나 모델 재학습은 아직 없으며, 서버 배포와 가상 자료를 이용한 실제 Gemini 리포트·캐시 검증은 완료했다. 실제 전문가 성능 평가는 별도다. 정확한 적용 범위와 코드 위치는 [구현 현황](docs/expert-judgment-implementation.md)을 따른다.

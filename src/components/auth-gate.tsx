@@ -98,7 +98,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
           {busy ? "Google 로그인 진행 중…" : "Google로 계속하기"}
         </button> : <button className="auth-google" onClick={() => setAttempt(value => value + 1)}>연결 다시 시도</button>}
         <p className="auth-session-note">개인 기기에서 로그인 상태가 유지돼요.<br/>공용 기기에서는 사용 후 로그아웃해주세요.</p>
-        <div className="auth-preview-note"><span>현재 제공 기능</span>회원 등록과 목표·메모 저장을 사용할 수 있어요. 운동일지 저장과 AI 분석은 준비 중이에요.</div>
+        <div className="auth-preview-note"><span>현재 제공 기능</span>회원 관리와 운동일지 업로드를 사용할 수 있어요. {process.env.NEXT_PUBLIC_SERVER_AI_ENABLED === "true" ? "AI가 기록을 읽고 진행 분석과 다음 수업 초안을 준비해요." : "원본과 기록을 한곳에서 확인하세요."}</div>
       </section>
     </div>
     <footer className="auth-footer">기록 확인에서 다음 수업 준비까지, 트레이너 노트.</footer>
