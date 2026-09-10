@@ -1,3 +1,34 @@
 .member-records{max-width:1100px;margin-top:40px;padding-top:30px;border-top:1px solid var(--line)}.record-help{font-size:12px;color:#788773;line-height:1.7;margin:10px 0}.record-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}.record-metrics>div{padding:20px;background:#f4f7f1;border:1px solid #e5ebdf;border-radius:12px}.record-metrics small{display:block;font-size:12px;color:#718169}.record-metrics strong{display:block;font-size:28px;margin-top:12px;overflow-wrap:anywhere}.record-metrics em{font-size:12px;font-weight:400;font-style:normal;margin-left:7px}.record-parts{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.record-parts>span{padding:8px 12px;background:#f1f5ed;border-radius:8px;font-size:12px}.record-parts strong{font-weight:500;margin-left:8px}.record-empty{padding:30px;text-align:center;background:#fafbf8;border:1px dashed #dae4d3;border-radius:12px;margin-top:20px;color:#72866a}.record-empty h3{font-size:16px;margin:10px}.record-empty p{font-size:12px}.record-list{list-style:none;padding:0;margin:20px 0}.record-list>li{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:20px 0;border-bottom:1px solid var(--line)}.record-list>li>div:first-child{min-width:0;overflow-wrap:anywhere}.record-list h3{font-size:16px;margin:7px 0}.record-list small{font-size:11px;color:#7b8a72}.record-list p{font-size:13px;line-height:1.8;margin-bottom:8px}.record-editor{width:min(1200px,calc(100% - 24px));height:92dvh;max-height:92dvh;border:1px solid #dfe7d7;border-radius:18px;padding:0;color:var(--ink);background:#fff}.record-editor[open]{display:flex;flex-direction:column}.record-editor::backdrop{background:rgba(31,42,29,.4);backdrop-filter:blur(3px)}.record-editor-heading{display:flex;align-items:center;justify-content:space-between;padding:22px 26px;border-bottom:1px solid var(--line);flex-shrink:0}.record-editor-heading h2{font-size:20px;margin-top:5px}.record-editor-heading small{font-size:12px;color:#7b8c70}.record-editor-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,1fr);min-height:0;flex:1}.record-source{padding:22px;background:#f6f8f2;display:flex;flex-direction:column;min-height:0}.record-source-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.record-source h3{font-size:14px}.record-source>p{font-size:11px;line-height:1.7;color:#7c8b70;margin:12px 0}.record-source iframe{width:100%;flex:1;min-height:200px;border:1px solid #dce4d5;border-radius:8px}.record-source-empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:25px;border:1px dashed #d5dfcb;border-radius:10px;color:#819574;text-align:center;font-size:12px;line-height:1.8}.record-pick{position:relative;overflow:hidden;font-size:12px;border:1px solid #d2deca;padding:8px 12px;border-radius:8px;background:white;cursor:pointer}.record-pick input{position:absolute;inset:0;width:100%;opacity:0;cursor:pointer}.record-form{overflow-y:auto;padding:22px 26px;min-height:0}.record-form fieldset{border:0;padding:0;margin:0;min-width:0}.record-form .field-label:first-child{margin-top:0}.record-form select{width:100%;padding:11px 10px;border:1px solid #dce5d4;border-radius:8px;background:#fff;color:inherit;margin-top:8px}.record-form-pair{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:end}.record-set-heading{display:flex;align-items:center;justify-content:space-between;margin-top:24px}.record-set-heading h3{font-size:14px}.record-set-heading button{font-size:12px;padding:7px 10px}.record-set{display:grid;grid-template-columns:20px 1fr 1fr 32px;gap:10px;align-items:end;margin:10px 0}.record-set>span{padding-bottom:12px;font-size:12px;color:#7c8c73}.record-set label{font-size:11px;color:#738467;min-width:0}.record-set input{width:100%;margin-top:5px;padding:10px;border:1px solid #dce5d4;border-radius:7px;background:#fff;color:#30482d;min-width:0}.record-set input:disabled{background:#f3f5f0}.record-set>button{padding:12px 4px}.record-confirm{display:flex;align-items:center;gap:9px;margin-top:22px;font-size:13px;line-height:1.6}.record-confirm input{accent-color:#456d3c}.record-form .dialog-footer{position:sticky;bottom:-22px;background:#fff;padding:18px 0;border-top:1px solid var(--line);margin-top:20px}@media(max-width:760px){.record-editor-grid{grid-template-columns:1fr;overflow:auto;display:block}.record-source{height:280px;padding:16px}.record-source-empty{padding:15px}.record-source iframe{min-height:100px}.record-form{overflow:visible;padding:20px}.record-editor-heading{padding:18px}.record-metrics{grid-template-columns:1fr}.record-metrics>div{display:flex;align-items:center;justify-content:space-between}.record-metrics strong{font-size:24px;margin:0}.record-list>li{flex-wrap:wrap}.record-list .saved-file-actions{width:100%;justify-content:flex-end}.record-form .dialog-footer{bottom:-1px}.record-form-pair{gap:8px}}
 
 .record-source-link{font-size:12px;color:#496d3f;margin-bottom:12px;text-decoration:underline}
+
+/* Keep the optional note aligned with the other record fields. */
+.record-form .field-label > span {
+  margin-left: 5px;
+  color: #788773;
+  font-size: 11px;
+}
+.record-form textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 112px;
+  max-height: 240px;
+  margin-top: 7px;
+  padding: 12px;
+  border: 1px solid #dce5d4;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+.record-form textarea::placeholder { color: #788773; }
+.record-form textarea:focus-visible {
+  outline: 3px solid #83a48b;
+  outline-offset: 3px;
+}
+.record-form textarea:disabled { background: #f3f5f0; }
+/* Let the actions follow the form instead of covering the focused note. */
+.record-form .dialog-footer { position: static; }
