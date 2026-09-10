@@ -7,7 +7,7 @@ import {aiEnabled} from "../lib/workout-ai";
 import {Icon} from "./icons";
 import {deleteMemberFile,fileError,finalizeMemberFile,listenMemberFiles,readMemberFile,storageEnabled,uploadMemberFile,type MemberFile} from "../lib/member-files";
 
-export function MemberFiles({memberId,memberName,online}:{memberId:string;memberName:string;online:boolean}) {
+export function MemberFiles({memberId,memberName,online,onUploaded}:{memberId:string;memberName:string;online:boolean;onUploaded?:(id:string)=>void}) {
   const [files,setFiles]=useState<MemberFile[]>([]),[loading,setLoading]=useState(storageEnabled),[cached,setCached]=useState(true),[error,setError]=useState(""),[notice,setNotice]=useState(""),[retry,setRetry]=useState(0);
   const [upload,setUpload]=useState<{name:string;progress:number;index:number;total:number}|null>(null),[busy,setBusy]=useState(""),[remove,setRemove]=useState<MemberFile|null>(null),[preview,setPreview]=useState<{id:string;name:string;url:string;contentType:MemberFile["contentType"]}|null>(null),[drag,setDrag]=useState(false);
   const [imports,setImports]=useState<SavedImport[]>([]);
@@ -29,15 +29,15 @@ export function MemberFiles({memberId,memberName,online}:{memberId:string;member
     if(list.length>10){setError("한 번에 파일 10개까지 선택해주세요.");return;}
     working.current=true;setError("");setNotice("");
     const abort=new AbortController();controller.current=abort;
-    let count=0;const errors:string[]=[];
+    let count=0,lastId='';const errors:string[]=[];
     for(let i=0;i<list.length;i++){
       if(abort.signal.aborted||!alive.current)break;
       const file=list[i];setUpload({name:file.name,progress:0,index:i+1,total:list.length});
-      try{await uploadMemberFile(memberId,file,value=>{if(alive.current)setUpload({name:file.name,progress:value,index:i+1,total:list.length});},abort.signal);count++;}
+      try{lastId=await uploadMemberFile(memberId,file,value=>{if(alive.current)setUpload({name:file.name,progress:value,index:i+1,total:list.length});},abort.signal);count++;}
       catch(e){errors.push(file.name+": "+fileError(e));}
     }
     working.current=false;controller.current=null;
-    if(alive.current){setUpload(null);setError(errors.join("\n"));if(count)setNotice(`${count}개 파일을 저장했어요.`);}
+    if(alive.current){setUpload(null);setError(errors.join("\n"));if(count){setNotice(`${count}개 파일을 저장했어요.`);if(!errors.length)onUploaded?.(lastId);}}
   }
   async function act(file:MemberFile,action:"open"|"recover"|"delete"){
     if(working.current||!online)return;
