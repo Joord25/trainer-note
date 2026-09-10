@@ -1,0 +1,29 @@
+rules_version = '2';
+// trainers/{uid}/members/{memberId}: name(1..60), goal(0..300), notes(0..1000),
+// createdAt(timestamp, immutable), updatedAt(timestamp). All fields required.
+// UID in the path owns the whole document; trainer parent is a namespace only.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
+    function isValidMember(data) {
+      return data.keys().hasAll(['name','goal','notes','createdAt','updatedAt'])
+        && data.keys().hasOnly(['name','goal','notes','createdAt','updatedAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 60
+        && data.name.matches('.*[^ ].*')
+        && data.goal is string && data.goal.size() <= 300
+        && data.notes is string && data.notes.size() <= 1000
+        && data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+    match /trainers/{uid}/members/{memberId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && isValidMember(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if isOwner(uid) && isValidMember(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if isOwner(uid);
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

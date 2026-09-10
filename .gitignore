@@ -7,3 +7,5 @@ out/
 
 firebase-debug*.log
 .gstack/
+
+firestore-debug.log

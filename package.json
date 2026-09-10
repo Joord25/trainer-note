@@ -6,7 +6,8 @@
     "dev": "next dev --port 3001",
     "build": "next build",
     "start": "next start --port 3001",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:rules": "npx -y firebase-tools@latest emulators:exec --only firestore --project demo-trainer-note \"node --test tests/firestore.rules.test.mjs\""
   },
   "dependencies": {
     "firebase": "^12.19.0",
@@ -15,6 +16,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
