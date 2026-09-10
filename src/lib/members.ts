@@ -4,7 +4,7 @@ import { collection, deleteDoc, doc, getFirestore, onSnapshot, orderBy, query, s
 import { getClientAuth } from "./firebase-client";
 
 export type MemberInput = { name: string; goal: string; notes: string };
-export type Member = MemberInput & { id: string; createdAt: Timestamp | null; pending: boolean };
+export type Member = MemberInput & { id: string; createdAt: Timestamp | null; pending: boolean; fileCount: number };
 
 function membersCollection() {
   const auth = getClientAuth();
@@ -19,12 +19,12 @@ export function cleanMember(input: MemberInput): MemberInput {
 }
 export function listenMembers(onData: (members: Member[], fromCache: boolean) => void, onError: (error: unknown) => void) {
   return onSnapshot(query(membersCollection(), orderBy("createdAt", "desc")), {includeMetadataChanges: true}, snapshot => {
-    onData(snapshot.docs.map(d => ({id: d.id, name: d.data().name, goal: d.data().goal, notes: d.data().notes, createdAt: d.data().createdAt ?? null, pending: d.metadata.hasPendingWrites})), snapshot.metadata.fromCache);
+    onData(snapshot.docs.map(d => ({id: d.id, name: d.data().name, goal: d.data().goal, notes: d.data().notes, createdAt: d.data().createdAt ?? null, fileCount: d.data().fileCount ?? 0, pending: d.metadata.hasPendingWrites})), snapshot.metadata.fromCache);
   }, onError);
 }
 export async function createMember(input: MemberInput) {
   const ref = doc(membersCollection());
-  await setDoc(ref, {...cleanMember(input), createdAt: serverTimestamp(), updatedAt: serverTimestamp()});
+  await setDoc(ref, {...cleanMember(input), fileCount:0, lastFileId:"", createdAt: serverTimestamp(), updatedAt: serverTimestamp()});
   return ref.id;
 }
 export async function editMember(id: string, input: MemberInput) {

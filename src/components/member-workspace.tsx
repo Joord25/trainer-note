@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AccountControl, useTrainer } from "./auth-gate";
 import { Icon } from "./icons";
+import { MemberFiles } from "./member-files";
 import { cleanMember, createMember, editMember, listenMembers, memberError, removeMember, type Member, type MemberInput } from "../lib/members";
 
 type Editor = { kind: "create" } | { kind: "edit"; member: Member } | { kind: "delete"; member: Member };
@@ -63,8 +64,8 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
           <div className="member-detail-heading"><div><span className="section-eyebrow">회원 프로필</span><h1>{selected.name}<span>님의 운동 기록</span></h1></div><button onClick={() => setEditor({kind: "edit", member: selected})} disabled={!available || selected.pending}><Icon name="edit" size={16}/> 정보 수정</button></div>
           {selected.pending && <div className="member-notice" role="status">변경 내용을 서버에 저장하고 있어요.</div>}
           <div className="member-profile-grid"><section className="member-info-card"><span className="section-eyebrow">운동 목표</span><h2>{selected.goal || "아직 목표를 설정하지 않았어요"}</h2><p>{selected.goal ? "앞으로 기록을 해석할 때 기준이 되는 목표예요." : "회원이 원하는 변화를 한 문장으로 남겨보세요."}</p></section><section className="member-info-card"><span className="section-eyebrow">트레이너 메모</span><p className="member-note-text">{selected.notes || "수업 준비에 필요한 내용을 남겨보세요."}</p><small>{selected.createdAt ? new Intl.DateTimeFormat("ko-KR").format(selected.createdAt.toDate()) + " 등록" : "등록 중"}</small></section></div>
-          <section className="member-record-empty"><div className="member-empty-icon"><Icon name="file" size={28}/></div><h2>아직 연결된 운동일지가 없어요</h2><p>회원 정보 저장이 연결됐어요.<br/>일지 업로드와 AI 분석은 다음 단계에서 제공할 예정이에요.</p><div className="member-next-steps"><span className="done"><Icon name="check" size={14}/> 회원 등록</span><span>일지 업로드 준비 중</span><span>진행 분석 준비 중</span></div></section>
-          <div className="member-bottom-actions"><p>회원 정보는 로그인한 트레이너 계정에 저장돼요.</p><button className="member-delete-button" onClick={() => setEditor({kind: "delete", member: selected})} disabled={!available || selected.pending}>회원 삭제</button></div>
+          <MemberFiles key={selected.id} memberId={selected.id} memberName={selected.name} online={online}/>
+          <div className="member-bottom-actions"><p>{selected.fileCount > 0 ? "회원을 삭제하려면 연결된 PDF를 먼저 삭제해주세요." : "회원 정보는 로그인한 트레이너 계정에 저장돼요."}</p><button className="member-delete-button" onClick={() => setEditor({kind: "delete", member: selected})} disabled={!available || selected.pending || selected.fileCount > 0} title={selected.fileCount ? "연결된 PDF를 먼저 삭제해주세요." : undefined}>회원 삭제</button></div>
         </>}
       </div>
     </main>

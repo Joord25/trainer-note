@@ -24,6 +24,12 @@
     "ui": {
       "enabled": false
     },
-    "singleProjectMode": true
+    "singleProjectMode": true,
+    "storage": {
+      "port": 9198
+    }
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }

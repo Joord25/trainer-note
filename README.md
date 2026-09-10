@@ -19,7 +19,7 @@
 
 기본 화면은 로그인한 트레이너의 실제 회원 목록입니다. 회원 이름·목표·메모는 Firestore에 저장됩니다.
 기존 회원 A의 분석 및 파일 미리보기는 별도의 **예시 둘러보기** 화면입니다. 예시 화면의 파일과 선택값은 새로고침하면 초기화됩니다.
-실제 운동일지 파일 저장·Gemini 판독·실제 운동 분석은 아직 연결되지 않았습니다.
+회원별 PDF 저장 코드는 구현되어 있으며, 운영 Storage 버킷 연결을 기다리는 상태입니다. Gemini 판독·실제 운동 분석은 아직 연결되지 않았습니다.
 
 2026-09-11: Documents/ChatGPT/Trainer-Note에서 작업했던 최신 UI를 이 폴더에 반영했습니다.
 이후 앱 개발은 이 폴더를 기준으로 진행합니다.
@@ -37,7 +37,7 @@
 - 로그인은 브라우저 local persistence를 사용합니다. 공용 기기에서는 사용 후 로그아웃합니다.
 
 현재 AuthGate는 클라이언트 화면 전환을 담당합니다. 서버 API 인증이나 데이터 접근 권한을 대신하지 않습니다.
-Firestore 회원 정보에는 UID별 경로 및 Security Rules를 적용했습니다. 이후 Storage 연결에도 소유자 규칙을 적용하고, 서버 API에서는 ID 토큰을 검증해야 합니다.
+Firestore 회원 정보에는 UID별 경로 및 Security Rules를 적용했습니다. Storage에도 소유자 규칙을 작성했으며 버킷 연결 후 배포해야 합니다. 서버 API에서는 ID 토큰을 검증해야 합니다.
 Admin SDK 비밀 키는 브라우저나 NEXT_PUBLIC 환경변수에 넣지 않습니다.
 
 ### 실제 계정 확인
@@ -57,7 +57,7 @@ Admin SDK 비밀 키는 브라우저나 NEXT_PUBLIC 환경변수에 넣지 않�
 회원 필드: 이름(1~60자), 목표(0~300자), 메모(0~1000자), 서버 생성/수정 시각.
 동명이인은 문서 ID로 구분합니다. 조회는 생성 시각 내림차순 실시간 구독입니다.
 서버 확인 전에는 저장 완료로 표시하지 않으며, 오프라인과 조회/저장 오류를 구분합니다.
-회원 삭제는 확인 대화상자를 거칩니다. 현재 운동 기록 하위 문서는 지원하지 않습니다.
+회원 삭제는 확인 대화상자를 거칩니다. 연결된 PDF가 있으면 먼저 PDF를 삭제해야 회원을 삭제할 수 있습니다.
 
 Firestore `(default)` / Standard / 기존 `nam5` 위치를 사용합니다.
 `firestore.rules`는 소유자 UID 확인, 필드 검증, 생성 시각 불변, 서버 수정 시각을 요구하고 나머지 경로는 차단합니다.
@@ -69,4 +69,41 @@ Firestore `(default)` / Standard / 기존 `nam5` 위치를 사용합니다.
 등록, 수정, 새로고침 후 보존, 검색, 두 트레이너 목록 분리, 오프라인 버튼 상태, 확인 후 삭제, 모바일 가로 넘침을 확인했습니다.
 운영 Google 계정과 실제 Firestore를 연결한 최종 동작은 `localhost:3001`에서 회원 등록 후 새로고침하여 확인할 수 있습니다.
 
-다음 구현 순서: 회원별 PDF 저장 → 판독 및 기록 확인 → 확정 기록으로 집계 → 근거를 포함한 분석과 수업 준비.
+다음 구현 순서: Storage 운영 활성화 → 판독 및 기록 확인 → 확정 기록으로 집계 → 근거를 포함한 분석과 수업 준비.
+
+## 회원별 PDF 원본 저장 (2026-09-11)
+
+구현: 회원 선택 후 PDF 최대 10개 업로드(파일당 50MB), 진행률·중단, 실시간 파일 목록,
+새로고침 후 유지, 인증된 PDF 미리보기·내려받기·삭제. 내용의 SHA-256으로 같은 회원의 동일 PDF 중복을 막습니다.
+브라우저는 PDF 확장자·크기·헤더를 검사합니다. 원본 저장은 판독 완료를 뜻하지 않습니다.
+
+- Firestore: `trainers/{uid}/members/{memberId}/files/{sha256}`에 파일명·크기·상태·서버 시각.
+- Storage: 동일 경로 아래 `source.pdf`. 다른 계정 및 비로그인 접근을 거부합니다.
+- 업로드 전 연결 정보를 예약하고 회원 `fileCount`와 원자적으로 갱신합니다. 기존 회원은 0개로 처리합니다.
+- 업로드 중단 후에는 ‘저장 확인’으로 완료된 원본을 확인하거나 항목을 삭제 후 다시 올립니다.
+- 삭제는 상태 변경 → 원본 삭제 → 연결 정보·카운터 갱신 순서입니다. 중단되면 목록에서 삭제를 재시도합니다.
+- 브라우저 미리보기는 인증된 `getBlob`과 임시 URL을 사용하고 닫기/회원 전환/로그아웃 시 URL을 해제합니다.
+
+검증: 빌드 및 규칙 테스트 **34개** 통과. 실제 컴포넌트·SDK와 Firestore/Storage 에뮬레이터를 사용한
+브라우저 검사에서 PDF 업로드, 새로고침, Blob 미리보기, 중복·잘못된 PDF 차단, 계정별 분리,
+삭제 후 회원 삭제 가능 상태, 모바일 가로 넘침 없음, JavaScript 오류 없음을 확인했습니다.
+테스트에는 실제 Google 계정 대신 에뮬레이터 UID를 사용했습니다. 운영 Storage 검증은 아직입니다.
+
+### 운영 활성화 조건
+
+현재 프로젝트는 결제 계정 및 Storage 버킷 미연결 상태입니다. `NEXT_PUBLIC_STORAGE_ENABLED`가
+`true`일 때만 파일 기능을 활성화합니다. 현재 `.env.local`에는 이 값을 추가하지 않았으므로 준비 안내가 보입니다.
+이 환경변수는 UI 활성화 값이며 보안 장치가 아닙니다. 권한은 서버 규칙으로 검사합니다.
+
+1. 프로젝트 소유자가 Firebase Console에서 Blaze 결제 계정 연결 및 Storage 버킷 생성(위치 확인).
+2. `.env.local`의 `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`을 실제 생성된 버킷 이름과 대조.
+3. `npx -y firebase-tools@latest deploy --only firestore:rules,storage --project trainer-note-a9dd7` 실행.
+   Storage 규칙이 Firestore 문서를 읽는 데 필요한 교차 서비스 권한 설정도 확인합니다.
+4. `storage.cors.json`을 실제 버킷 CORS에 적용합니다. 현재 3001 개발 주소 두 개만 포함되어 있습니다.
+   예: `gcloud storage buckets update gs://실제버킷이름 --cors-file=storage.cors.json`.
+   공개 서비스 주소가 생기면 해당 origin도 추가해야 인증된 `getBlob` 미리보기가 동작합니다.
+5. 로컬 `.env.local`에 `NEXT_PUBLIC_STORAGE_ENABLED=true`를 추가하고 재시작합니다.
+   실제 계정으로 업로드·미리보기·다른 계정 차단을 확인한 뒤 운영 배포 환경에서도 활성화합니다.
+
+Blaze 관련 공식 안내: https://firebase.google.com/docs/storage/faqs-storage-changes-announced-sept-2024
+Blob/CORS 안내: https://firebase.google.com/docs/storage/web/download-files

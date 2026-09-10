@@ -1,0 +1,22 @@
+rules_version = '2';
+// Fixed PDF object path. Firestore manifest reserves uploads and protects parent deletion.
+// MIME/size are validated here; full PDF parsing belongs to the future server ingestion step.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /trainers/{uid}/members/{memberId}/files/{fileId}/source.pdf {
+      function owner() { return request.auth != null && request.auth.uid == uid; }
+      function manifest() { return firestore.get(/databases/(default)/documents/trainers/$(uid)/members/$(memberId)/files/$(fileId)); }
+      allow get: if owner() && manifest().data.status in ['uploading','ready'];
+      // Storage create also covers replacing bytes; resource must not already exist.
+      allow create: if resource == null && owner() && fileId.matches('[a-f0-9]{64}')
+        && manifest().data.status == 'uploading'
+        && request.resource.size > 0 && request.resource.size <= 50 * 1024 * 1024
+        && request.resource.size == manifest().data.size
+        && request.resource.contentType == 'application/pdf';
+      allow update: if false;
+      // Owner can clean up an orphan object even if a manifest is missing.
+      allow delete: if owner();
+    }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}

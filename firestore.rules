@@ -1,28 +1,71 @@
 rules_version = '2';
 // trainers/{uid}/members/{memberId}: name(1..60), goal(0..300), notes(0..1000),
 // createdAt(timestamp, immutable), updatedAt(timestamp). All fields required.
+// Optional member fileCount (0..500), lastFileId track manifest creates/deletes atomically.
+// files/{SHA256}: name(1..200), size(1..50MB), PDF contentType, lifecycle status, timestamps.
 // UID in the path owns the whole document; trainer parent is a namespace only.
 service cloud.firestore {
   match /databases/{database}/documents {
     function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
     function isValidMember(data) {
       return data.keys().hasAll(['name','goal','notes','createdAt','updatedAt'])
-        && data.keys().hasOnly(['name','goal','notes','createdAt','updatedAt'])
+        && data.keys().hasOnly(['name','goal','notes','createdAt','updatedAt','fileCount','lastFileId'])
+        && data.get('fileCount',0) is int && data.get('fileCount',0) >= 0 && data.get('fileCount',0) <= 500
+        && data.get('lastFileId','') is string && data.get('lastFileId','').size() <= 64
         && data.name is string && data.name.size() > 0 && data.name.size() <= 60
         && data.name.matches('.*[^ ].*')
         && data.goal is string && data.goal.size() <= 300
         && data.notes is string && data.notes.size() <= 1000
         && data.createdAt is timestamp && data.updatedAt is timestamp;
     }
+    function validFileCountChange(uid, memberId) {
+      let oldCount = resource.data.get('fileCount',0);
+      let newCount = request.resource.data.get('fileCount',0);
+      let id = request.resource.data.get('lastFileId','');
+      let path = /databases/$(database)/documents/trainers/$(uid)/members/$(memberId)/files/$(id);
+      return (newCount == oldCount && id == resource.data.get('lastFileId',''))
+        || (id.matches('[a-f0-9]{64}') && (
+          (newCount == oldCount + 1 && !exists(path) && existsAfter(path))
+          || (newCount == oldCount - 1 && exists(path) && !existsAfter(path))));
+    }
+    function validFile(data, fileId) {
+      return fileId.matches('[a-f0-9]{64}')
+        && data.keys().hasAll(['name','size','contentType','status','createdAt','updatedAt'])
+        && data.keys().hasOnly(['name','size','contentType','status','createdAt','updatedAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 200
+        && data.size is int && data.size > 0 && data.size <= 50 * 1024 * 1024
+        && data.contentType == 'application/pdf'
+        && data.status in ['uploading','ready','deleting']
+        && data.createdAt is timestamp && data.updatedAt == request.time;
+    }
     match /trainers/{uid}/members/{memberId} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid) && isValidMember(request.resource.data)
+        && request.resource.data.get('fileCount',0) == 0 && request.resource.data.get('lastFileId','') == ''
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
       allow update: if isOwner(uid) && isValidMember(request.resource.data)
+        && validFileCountChange(uid,memberId)
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time;
-      allow delete: if isOwner(uid);
+      allow delete: if isOwner(uid) && resource.data.get('fileCount',0) == 0;
+      match /files/{fileId} {
+        function parent() { return /databases/$(database)/documents/trainers/$(uid)/members/$(memberId); }
+        function counted(delta) {
+          return exists(parent()) && existsAfter(parent())
+            && getAfter(parent()).data.fileCount == get(parent()).data.get('fileCount',0) + delta
+            && getAfter(parent()).data.lastFileId == fileId;
+        }
+        allow read: if isOwner(uid) && exists(parent());
+        allow create: if isOwner(uid) && validFile(request.resource.data,fileId)
+          && request.resource.data.status == 'uploading' && request.resource.data.createdAt == request.time && counted(1);
+        allow update: if isOwner(uid) && exists(parent()) && validFile(request.resource.data,fileId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+          && (request.resource.data.status == resource.data.status
+            || (resource.data.status == 'uploading' && request.resource.data.status in ['ready','deleting'])
+            || (resource.data.status == 'ready' && request.resource.data.status == 'deleting'));
+        allow delete: if isOwner(uid) && resource.data.status == 'deleting' && counted(-1);
+      }
     }
     match /{document=**} { allow read, write: if false; }
   }
