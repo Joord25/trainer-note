@@ -3,72 +3,66 @@ import {collection, doc, getFirestore, onSnapshot, orderBy, query, runTransactio
 import {deleteObject, getBlob, getMetadata, getStorage, ref, uploadBytesResumable} from "firebase/storage";
 import {getClientAuth} from "./firebase-client";
 
-export const MAX_PDF_BYTES = 50 * 1024 * 1024;
+import {MAX_SOURCE_BYTES,inspectSourceFile,sourceObjectName,type SourceContentType} from "./source-file";
 export const storageEnabled = process.env.NEXT_PUBLIC_STORAGE_ENABLED === "true";
-export type MemberFile = {id: string; name: string; size: number; status: "uploading" | "ready" | "deleting"; createdAt: Timestamp | null; pending: boolean};
+export type MemberFile = {id: string; name: string; size: number; contentType: SourceContentType; status: "uploading" | "ready" | "deleting"; createdAt: Timestamp | null; pending: boolean};
 class FileActionError extends Error {}
-function scope(memberId: string, fileId?: string) {
+function scope(memberId: string, fileId?: string, contentType:SourceContentType="application/pdf") {
   const auth = getClientAuth(), uid = auth.currentUser?.uid;
   if (!uid) throw new FileActionError("다시 로그인해주세요.");
   const db = getFirestore(auth.app), storage = getStorage(auth.app);
   const member = doc(db, "trainers", uid, "members", memberId);
   const files = collection(member, "files");
   return {db, member, files, file: fileId ? doc(files, fileId) : undefined,
-    object: fileId ? ref(storage, `${member.path}/files/${fileId}/source.pdf`) : undefined,
+    object: fileId ? ref(storage, `${member.path}/files/${fileId}/${sourceObjectName(contentType)}`) : undefined,
     check: () => {if (auth.currentUser?.uid !== uid) throw new FileActionError("로그인 계정이 변경됐어요. 다시 시도해주세요.");}};
 }
 export function listenMemberFiles(memberId: string, onData: (files: MemberFile[], cached: boolean) => void, onError: (error: unknown) => void) {
   const s = scope(memberId);
-  return onSnapshot(query(s.files, orderBy("createdAt", "desc")), {includeMetadataChanges: true}, snapshot => onData(snapshot.docs.map(d => ({id:d.id, name:d.data().name, size:d.data().size, status:d.data().status, createdAt:d.data().createdAt ?? null, pending:d.metadata.hasPendingWrites})), snapshot.metadata.fromCache), onError);
+  return onSnapshot(query(s.files, orderBy("createdAt", "desc")), {includeMetadataChanges: true}, snapshot => onData(snapshot.docs.map(d => ({id:d.id, name:d.data().name, size:d.data().size, contentType:d.data().contentType, status:d.data().status, createdAt:d.data().createdAt ?? null, pending:d.metadata.hasPendingWrites})), snapshot.metadata.fromCache), onError);
 }
-export async function inspectPdf(file: File) {
-  if (!/\.pdf$/i.test(file.name) || !file.size || file.size > MAX_PDF_BYTES) throw new FileActionError("0바이트가 아닌 50MB 이하 PDF를 선택해주세요.");
-  if (file.name.length > 200) throw new FileActionError("파일 이름을 200자 이내로 줄여주세요.");
-  const bytes = await file.arrayBuffer();
-  if (new TextDecoder().decode(bytes.slice(0,5)) !== "%PDF-") throw new FileActionError("PDF 형식의 파일이 아니에요. PDF로 내보낸 파일을 선택해주세요.");
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2,"0")).join("");
-}
-export async function uploadMemberPdf(memberId: string, file: File, progress: (value: number) => void, signal: AbortSignal) {
+export async function uploadMemberFile(memberId: string, file: File, progress: (value: number) => void, signal: AbortSignal) {
   if (!storageEnabled) throw new FileActionError("파일 저장 기능을 준비하고 있어요.");
   const initial = scope(memberId);
-  const id = await inspectPdf(file);
+  let inspected;
+  try {inspected=await inspectSourceFile(file);}catch(e){throw new FileActionError((e as Error).message);}
+  const {id,contentType}=inspected;
   initial.check(); signal.throwIfAborted();
-  const s = scope(memberId,id);
+  const s = scope(memberId,id,contentType);
   await runTransaction(s.db, async tx => {
     const member = await tx.get(s.member), existing = await tx.get(s.file!);
     if (!member.exists()) throw new FileActionError("회원이 삭제됐어요. 목록을 다시 확인해주세요.");
-    if (existing.exists()) throw new FileActionError("이미 연결된 PDF예요. 저장 확인이 필요한 파일은 목록에서 확인해주세요.");
-    tx.set(s.file!, {name:file.name, size:file.size, contentType:"application/pdf", status:"uploading", createdAt:serverTimestamp(), updatedAt:serverTimestamp()});
+    if (existing.exists()) throw new FileActionError("이미 연결된 파일이에요. 저장 확인이 필요한 파일은 목록에서 확인해주세요.");
+    tx.set(s.file!, {name:file.name, size:file.size, contentType, status:"uploading", createdAt:serverTimestamp(), updatedAt:serverTimestamp()});
     tx.update(s.member, {fileCount:(member.data().fileCount ?? 0)+1, lastFileId:id, updatedAt:serverTimestamp()});
   });
   s.check(); signal.throwIfAborted();
-  const task = uploadBytesResumable(s.object!, file, {contentType:"application/pdf",cacheControl:"private, max-age=0, no-store"});
+  const task = uploadBytesResumable(s.object!, file, {contentType,cacheControl:"private, max-age=0, no-store"});
   const cancel = () => task.cancel(); signal.addEventListener("abort",cancel,{once:true});
   try {
     await new Promise<void>((resolve,reject) => {task.on("state_changed", snapshot => progress(Math.round(snapshot.bytesTransferred/snapshot.totalBytes*100)), reject, () => resolve());});
     s.check(); signal.throwIfAborted();
-    await finalizeMemberPdf(memberId,id);
+    await finalizeMemberFile(memberId,id,contentType);
   } finally {signal.removeEventListener("abort",cancel);}
   return id;
 }
-export async function finalizeMemberPdf(memberId: string, id: string) {
-  const s = scope(memberId,id), metadata = await getMetadata(s.object!);
+export async function finalizeMemberFile(memberId: string, id: string, contentType:SourceContentType) {
+  const s = scope(memberId,id,contentType), metadata = await getMetadata(s.object!);
   s.check();
   await runTransaction(s.db, async tx => {
     const existing = await tx.get(s.file!);
     if (!existing.exists() || existing.data().status === "deleting") throw new FileActionError("삭제된 파일이거나 삭제 중이에요.");
-    if (metadata.size !== existing.data().size || metadata.contentType !== "application/pdf") throw new FileActionError("파일 정보를 확인할 수 없어요. 삭제 후 다시 올려주세요.");
+    if (metadata.size !== existing.data().size || metadata.contentType !== existing.data().contentType || metadata.contentType !== contentType) throw new FileActionError("파일 정보를 확인할 수 없어요. 삭제 후 다시 올려주세요.");
     tx.update(s.file!,{status:"ready",updatedAt:serverTimestamp()});
   });
 }
-export async function readMemberPdf(memberId: string, id: string) {
-  const s = scope(memberId,id), blob = await getBlob(s.object!, MAX_PDF_BYTES);
+export async function readMemberFile(memberId: string, id: string, contentType:SourceContentType) {
+  const s = scope(memberId,id,contentType), blob = await getBlob(s.object!, MAX_SOURCE_BYTES);
   s.check();
-  return new Blob([blob],{type:"application/pdf"});
+  return new Blob([blob],{type:contentType});
 }
-export async function deleteMemberPdf(memberId: string, id: string) {
-  const s = scope(memberId,id);
+export async function deleteMemberFile(memberId: string, id: string, contentType:SourceContentType) {
+  const s = scope(memberId,id,contentType);
   await runTransaction(s.db, async tx => {
     const existing = await tx.get(s.file!);
     if (existing.exists()) tx.update(s.file!,{status:"deleting",updatedAt:serverTimestamp()});

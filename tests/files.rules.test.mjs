@@ -89,3 +89,27 @@ test("immutable metadata and cross-member path rejected",async()=>{
  await assertFails(updateDoc(doc(db,filePath),{size:1,updatedAt:serverTimestamp()}));
  await assertFails(uploadBytes(ref(own.storage(),objectPath.replace('member-1','member-2')),bytes,{contentType:"application/pdf"}));
 });
+for(const [contentType,objectName] of [['image/png','source.png'],['image/jpeg','source.jpg']]){
+ test(`${contentType} upload/read/delete and cross-account protection`,async()=>{
+  const own=context('trainer-a'),db=own.firestore(),path=filePath+'/'+objectName,object=ref(own.storage(),path);
+  await reserve(db,id,{contentType,name:objectName});
+  await assertFails(uploadBytes(ref(own.storage(),objectPath),bytes,{contentType}));
+  await assertFails(uploadBytes(object,bytes,{contentType:'application/pdf'}));
+  await assertSucceeds(uploadBytes(object,bytes,{contentType}));
+  assert.equal((await getMetadata(object)).contentType,contentType);
+  await assertFails(getMetadata(ref(context('trainer-b').storage(),path)));
+  await assertFails(deleteObject(ref(context('trainer-b').storage(),path)));
+  await assertFails(uploadBytes(object,bytes,{contentType}));
+  await updateDoc(doc(db,filePath),{status:'ready',updatedAt:serverTimestamp()});
+  await updateDoc(doc(db,filePath),{status:'deleting',updatedAt:serverTimestamp()});
+  await assertSucceeds(deleteObject(object));await assertSucceeds(erase(db));
+ });
+}
+test('unsupported image types and arbitrary object paths are denied',async()=>{
+ const own=context('trainer-a'),db=own.firestore();
+ await assertFails(reserve(db,id,{contentType:'image/svg+xml'}));
+ await assertFails(reserve(db,id,{contentType:'image/gif'}));
+ await reserve(db,id,{contentType:'image/jpeg'});
+ await assertFails(uploadBytes(ref(own.storage(),filePath+'/source.jpeg'),bytes,{contentType:'image/jpeg'}));
+ await assertFails(uploadBytes(ref(own.storage(),filePath+'/custom.jpg'),bytes,{contentType:'image/jpeg'}));
+});

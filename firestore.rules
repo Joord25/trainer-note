@@ -2,7 +2,7 @@ rules_version = '2';
 // trainers/{uid}/members/{memberId}: name(1..60), goal(0..300), notes(0..1000),
 // createdAt(timestamp, immutable), updatedAt(timestamp). All fields required.
 // Optional member fileCount (0..500), lastFileId track manifest creates/deletes atomically.
-// files/{SHA256}: name(1..200), size(1..50MB), PDF contentType, lifecycle status, timestamps.
+// files/{SHA256}: name(1..200), size(1..50MB), PDF/PNG/JPEG contentType, lifecycle status, timestamps.
 // UID in the path owns the whole document; trainer parent is a namespace only.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -46,7 +46,7 @@ service cloud.firestore {
         && data.keys().hasOnly(['name','size','contentType','status','createdAt','updatedAt'])
         && data.name is string && data.name.size() > 0 && data.name.size() <= 200
         && data.size is int && data.size > 0 && data.size <= 50 * 1024 * 1024
-        && data.contentType == 'application/pdf'
+        && data.contentType in ['application/pdf','image/png','image/jpeg']
         && data.status in ['uploading','ready','deleting']
         && data.createdAt is timestamp && data.updatedAt == request.time;
     }
