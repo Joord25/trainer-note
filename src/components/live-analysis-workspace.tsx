@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from 'react';
+import {JudgmentReport} from './judgment-report';
 import {Icon} from './icons';
 import {BodyMap} from './body-map';
 import {ActualTrend,bodyStats,SavedLessonPlan} from './member-analysis';
@@ -39,6 +40,7 @@ export function LiveAnalysisWorkspace({memberId,memberName,goal,online,uploadReq
  {(analysis?.status==='error'||analysis?.status==='limited'||stalled)&&<div className="file-error"><p>{analysis?.error||'분석이 지연되고 있어요.'}</p><button disabled={busy||!online} onClick={()=>void retry()}>분석 다시 시도</button></div>}
  {pendingRows.length>0&&<button className="live-review-banner" onClick={()=>openRow(pendingRows[0].id)}><Icon name="search"/><span><strong>확인하면 더 정확해지는 항목 {pendingRows.length}개</strong><small>분석은 먼저 볼 수 있어요. 잘못 읽힌 값만 원본 옆에서 수정하세요.</small></span><Icon name="arrow"/></button>}
  {tab==='summary'&&<><span className="section-eyebrow">업로드한 일지 기준 · 종합 의견</span><h1>{report?.headline||(reading||processing?'기록을 읽고, 다음 수업을 준비하고 있어요.':serverAiEnabled?'일지를 올리면 분석이 바로 시작돼요.':'원본은 준비됐어요. 자동 분석 연결이 남아 있어요.')}</h1><p className="intro ai-overview">{report?.overview||'운동일지 PDF·PNG·JPEG를 올려주세요. 원본과 진행 분석, 다음 수업을 한 화면에서 확인할 수 있어요.'}</p><div className="summary-metrics"><div><span>기록된 날짜</span><strong>{summary.days.size}<small>일</small></strong></div><div><span>기록된 세트</span><strong>{summary.sets}<small>세트</small></strong></div><div><span>기록 볼륨</span><strong className="live-volume">{summary.volume.toLocaleString()}<small>kg·회</small></strong></div></div>
+ <JudgmentReport memberId={memberId} context={analysis?.judgmentContext} judgments={report?.judgments} fingerprint={analysis?.fingerprint??''} records={records} online={online} onEvidence={openRow}/>
  {report?.findings.map((v,i)=><article className="finding" key={i}><span className="finding-index">{String(i+1).padStart(2,'0')}</span><div><h3>{v.title}</h3><p>{v.detail}</p><div className="ai-evidence">{v.evidenceIds.map(id=><button className="text-button" key={id} onClick={()=>openRow(id)}>{records.find(r=>r.id===id)?.date??'근거'} 기록 보기 <Icon name="arrow" size={14}/></button>)}</div></div></article>)}
  {records.length>0&&<><div className="section-title"><h2>부위별 운동 분포</h2><button className="text-button" onClick={()=>setTab('body')}>자세히 보기</button></div><BodyMap stats={stats} compact sourceLabel="실제 판독 기록" onSource={date=>{const r=records.find(r=>r.date===date);if(r)openRow(r.id);}}/></>}
  {!!report?.limitations.length&&<div className="quiet-card"><h3>해석할 때 함께 볼 점</h3><ul>{report.limitations.map((v,i)=><li key={i}>{v}</li>)}</ul></div>}<button className="primary wide next-step" onClick={()=>setPane('plan')}>다음 수업 준비 보기 <Icon name="arrow" size={16}/></button></>}

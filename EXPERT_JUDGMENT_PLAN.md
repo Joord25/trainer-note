@@ -88,3 +88,7 @@ validation_status (draft/reviewed/tested), unresolved_disagreements.
 
 ## 다음에 만들 우선 산출물
 전문가가 실제 일지를 보며 채우는 판단 사례 입력 양식과, 그 사례를 근거로 표시하는 수업 전 브리핑. 수집 인터뷰와 제품 동작을 같은 구조로 맞춘다.
+
+## 2026-09-11 구현 연결
+
+이 문서의 첫 판단 기능 5개를 `functions/judgment.mjs`의 버전 관리 초안 카드 및 조건 검사로 연결했다. 판단 이유와 당시 기준/기록, 후속 결과의 분리 저장과 다음 분석 입력 재사용도 구현했다. 실제 전문가가 검토한 사례집이나 모델 재학습은 아직 없으며, 서버 배포/실제 Gemini 검증도 별도다. 정확한 적용 범위와 코드 위치는 [구현 현황](docs/expert-judgment-implementation.md)을 따른다.

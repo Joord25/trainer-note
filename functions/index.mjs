@@ -41,6 +41,9 @@ export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
   if(data.action==='read'&&data.fileId)return await service.startImport(uid,data.memberId,data.fileId,!!data.retry);
   if(data.action==='review'&&data.fileId){await service.reviewImport(uid,data.memberId,data.fileId,data);return {ok:true};}
   if(data.action==='report'){if(data.retry)await service.retryReport(uid,data.memberId);else await service.scheduleReport(uid,data.memberId);return {ok:true};}
+  if(data.action==='judgmentCriteria'){await service.saveJudgmentCriteria(uid,data.memberId,data);return {ok:true};}
+  if(data.action==='judgmentDecision')return await service.saveJudgmentDecision(uid,data.memberId,data);
+  if(data.action==='judgmentOutcome')return await service.saveJudgmentOutcome(uid,data.memberId,data);
   if(data.action==='savePlan'){await service.savePlan(uid,data.memberId,data);return {ok:true};}
   throw Error('지원하지 않는 요청이에요.');
  }catch(e){throw new HttpsError('failed-precondition',safeError(e));}

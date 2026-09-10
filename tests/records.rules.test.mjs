@@ -66,7 +66,7 @@ test('client cannot forge auto acceptance but owner can confirm server provision
  await assertFails(updateDoc(doc(d,rp),{revision:2,updatedAt:serverTimestamp()}));
  await assertSucceeds(updateDoc(doc(d,rp),{status:'confirmed',revision:2,notes:'중량 확인',updatedAt:serverTimestamp()}));
 });
-for(const kind of ['imports','analysis','reports','plans','corrections'])test(`${kind} owner reads but no client may write AI-owned state`,async()=>{
+for(const kind of ['imports','analysis','reports','plans','corrections','judgmentSettings','judgmentDecisions','judgmentOutcomes'])test(`${kind} owner reads but no client may write AI-owned state`,async()=>{
  const target=path+'/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{status:'ready'}));
  await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(setDoc(doc(db('trainer-a'),target),{status:'ready'}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
 });

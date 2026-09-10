@@ -1,3 +1,4 @@
+import {evaluateJudgment,selectCases,validateCriteria,modelJudgmentContext} from './judgment.mjs';
 import {randomUUID} from 'node:crypto';
 import {FieldValue,Timestamp} from 'firebase-admin/firestore';
 import {parseExtraction,EXTRACTION_PROMPT,EXTRACTION_SCHEMA} from './generated/extraction.mjs';
@@ -104,22 +105,27 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    tx.update(ref,{rows,revision:request.revision+1,updatedAt:stamp()});tx.create(member.collection('corrections').doc(),{fileId,rowId:before.id,before:before.input,after:request.operation==='ignore'?null:input,reason:typeof request.reason==='string'?request.reason.slice(0,500):'',createdAt:stamp()});
   });await scheduleReport(uid,mid);
  }
+ async function knowledgeFor(member){
+  const [criteria,decisions,outcomes,corrections,plan]=await Promise.all([member.collection('judgmentSettings').doc('current').get(),member.collection('judgmentDecisions').orderBy('createdAt','desc').limit(20).get(),member.collection('judgmentOutcomes').orderBy('createdAt','desc').limit(40).get(),member.collection('corrections').orderBy('createdAt','desc').limit(5).get(),member.collection('plans').doc('current').get()]);
+  return {criteria:criteria.data()??null,decisions:decisions.docs.map(d=>({id:d.id,...d.data()})),outcomes:outcomes.docs.map(d=>({id:d.id,...d.data()})),corrections:corrections.docs.map(d=>{const v=d.data();return {id:d.id,before:v.before??null,after:v.after??null,reason:v.reason??''};}),plan:plan.data()??null};
+ }
  async function buildReport(uid,mid){
   const active=memberRef(uid,mid);if(!(await active.get()).exists)return;await active.collection('analysis').doc('current').set({status:'processing',startedAt:Timestamp.fromMillis(now()),updatedAt:stamp()},{merge:true});
-  const member=memberRef(uid,mid),[m,records,importsSnap,corrections,plan]=await Promise.all([member.get(),recordsFor(member),member.collection('imports').get(),member.collection('corrections').orderBy('createdAt','desc').limit(5).get(),member.collection('plans').doc('current').get()]);if(!m.exists)return;
-  const imports=importsSnap.docs.map(d=>({id:d.id,...d.data()})),fingerprint=reportFingerprint(m.data(),records,imports),cache=member.collection('reports').doc(fingerprint),current=member.collection('analysis').doc('current');
+  const member=memberRef(uid,mid),[m,records,importsSnap,knowledge]=await Promise.all([member.get(),recordsFor(member),member.collection('imports').get(),knowledgeFor(member)]);if(!m.exists)return;
+  const imports=importsSnap.docs.map(d=>({id:d.id,...d.data()})),fingerprint=reportFingerprint(m.data(),records,imports,knowledge),cache=member.collection('reports').doc(fingerprint),current=member.collection('analysis').doc('current');
   const cached=await cache.get();if(cached.data()?.status==='ready'){await current.set({...cached.data(),updatedAt:stamp()});return {cached:true};}
+  const judgmentContext=evaluateJudgment({records,goal:m.data().goal,criteria:knowledge.criteria,cases:selectCases(knowledge.decisions,knowledge.outcomes,records,now())});
   const summary=summarize(records),excludedCount=imports.reduce((n,i)=>n+(i.rows||[]).filter(r=>r.review==='needs-review').length+(i.unparsed||[]).length,0);
-  if(!records.length){await current.set({status:'ready',fingerprint,summary,excludedCount,scopeLimit:limits.maxRecords,report:{headline:'분석할 기록을 기다리고 있어요',overview:'확인이 필요한 날짜·중량을 수정하면 진행 분석과 수업 초안이 자동으로 준비돼요.',findings:[],limitations:['확인할 기록은 분석에 포함하지 않았어요.'],questions:[],program:[],quests:[]},updatedAt:stamp()});return {noCharge:true};}
+  if(!records.length){await current.set({status:'ready',fingerprint,judgmentContext,summary,excludedCount,scopeLimit:limits.maxRecords,report:{headline:'분석할 기록을 기다리고 있어요',overview:'확인이 필요한 날짜·중량을 수정하면 진행 분석과 수업 초안이 자동으로 준비돼요.',findings:[],limitations:['확인할 기록은 분석에 포함하지 않았어요.'],questions:[],program:[],quests:[]},updatedAt:stamp()});return {noCharge:true};}
   let claimed=false;const job=randomUUID();await db.runTransaction(async tx=>{claimed=false;const c=await tx.get(cache);if(c.data()?.status==='ready'||c.data()?.status==='processing')return;if(c.exists)return;tx.create(cache,{status:'processing',job,startedAt:Timestamp.fromMillis(now()),fingerprint});claimed=true;});if(!claimed){const state=(await cache.get()).data();if(state?.status==='error')await current.set({status:'error',error:state.error,updatedAt:stamp()},{merge:true});return {cached:true};}
   await current.set({status:'processing',fingerprint,summary,excludedCount,scopeLimit:limits.maxRecords,updatedAt:stamp()},{merge:true});
   try{
-   const facts={goal:m.data().goal,notes:m.data().notes,summary:{...summary,exerciseTrends:undefined},excludedCount,records:records.map(({id,date,exerciseName,bodyPart,loadType,sets,status,origin,notes})=>({id,date,exerciseName,bodyPart,loadType,sets,status,origin,notes})),corrections:corrections.docs.map(d=>{const v=d.data();return {before:v.before?.exerciseName,after:v.after?.exerciseName,reason:v.reason};}),confirmedPlan:plan.exists?'트레이너가 저장한 별도 계획이 있음':null};
+   const facts={goal:m.data().goal,notes:m.data().notes,summary:{...summary,exerciseTrends:undefined},excludedCount,records:records.map(({id,date,exerciseName,bodyPart,loadType,sets,status,origin,notes})=>({id,date,exerciseName,bodyPart,loadType,sets,status,origin,notes})),corrections:knowledge.corrections,confirmedPlan:knowledge.plan?{program:knowledge.plan.program,reason:knowledge.plan.reason}:null,judgmentContext:modelJudgmentContext(judgmentContext)};
    const result=await paid(uid,'analysis-and-plan',{system:REPORT_PROMPT,schema:REPORT_SCHEMA,parts:[{text:JSON.stringify(facts)}]},limits.reportOutputTokens);
-   const report=validateReport(result.value,records),value={status:'ready',fingerprint,model:MODEL,promptVersion:REPORT_VERSION,summary,excludedCount,scopeLimit:limits.maxRecords,report,usage:result.usage,updatedAt:stamp()};
-   await cache.set(value);const latestRecords=await recordsFor(member),latestMember=await member.get(),latestImports=await member.collection('imports').get();
+   const report=validateReport(result.value,records,judgmentContext),value={status:'ready',fingerprint,model:MODEL,promptVersion:REPORT_VERSION,judgmentContext,evidenceRecords:facts.records,summary,excludedCount,scopeLimit:limits.maxRecords,report,usage:result.usage,updatedAt:stamp()};
+   await cache.set(value);const latestRecords=await recordsFor(member),latestMember=await member.get(),latestImports=await member.collection('imports').get(),latestKnowledge=await knowledgeFor(member);
    if(!latestMember.exists)return;
-   if(reportFingerprint(latestMember.data(),latestRecords,latestImports.docs.map(d=>({id:d.id,...d.data()})))!==fingerprint){await scheduleReport(uid,mid);return {stale:true};}
+   if(reportFingerprint(latestMember.data(),latestRecords,latestImports.docs.map(d=>({id:d.id,...d.data()})),latestKnowledge)!==fingerprint){await scheduleReport(uid,mid);return {stale:true};}
    await current.set(value);return {cached:false};
   }catch(e){await cache.set({status:'error',error:safeError(e),updatedAt:stamp()},{merge:true});await current.set({status:String(e.message).startsWith('AI_USAGE_LIMIT')?'limited':'error',error:safeError(e),updatedAt:stamp()},{merge:true});return {error:safeError(e)};}
  }
@@ -129,6 +135,28 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   const program=request.program.map(v=>{if(!v||typeof v.exerciseName!=='string'||!v.exerciseName.trim()||v.exerciseName.length>100||!Number.isInteger(v.sets)||v.sets<1||v.sets>8||typeof v.reps!=='string'||v.reps.length>100||typeof v.loadGuide!=='string'||v.loadGuide.length>500)throw Error('운동별 이름·세트·횟수·강도를 확인해주세요.');return {exerciseName:v.exerciseName.trim(),sets:v.sets,reps:v.reps,loadGuide:v.loadGuide,reason:typeof v.reason==='string'?v.reason.slice(0,700):'',recordId:typeof v.recordId==='string'?v.recordId:''};});
   const member=memberRef(uid,mid),ref=member.collection('plans').doc('current');await db.runTransaction(async tx=>{const [m,p]=await tx.getAll(member,ref);if(!m.exists||(p.data()?.revision||0)!==request.revision)throw Error('수업 계획이 변경됐어요. 최신 화면에서 다시 저장해주세요.');tx.set(ref,{program,reason:request.reason,basedOn:typeof request.basedOn==='string'?request.basedOn:'',revision:request.revision+1,updatedAt:stamp()});});
  }
- return {startImport,reviewImport,buildReport,scheduleReport,retryReport,savePlan,paid};
+
+ async function saveJudgmentCriteria(uid,mid,request){
+  const member=memberRef(uid,mid),[m,records,plan]=await Promise.all([member.get(),recordsFor(member),member.collection('plans').doc('current').get()]);if(!m.exists)throw Error('회원이 없어요.');
+  const input=validateCriteria(request.input,records,m.data().goal,plan.data());
+  const ref=member.collection('judgmentSettings').doc('current');await db.runTransaction(async tx=>{const [current,parent,...latest]=await tx.getAll(ref,member,...records.filter(r=>input.confirmedRecordSignatures.some(v=>v.id===r.id)).map(r=>member.collection('records').doc(r.id)));if(!parent.exists||parent.data().goal!==m.data().goal||(current.data()?.revision??0)!==request.revision)throw Error('판단 기준이나 목표가 변경됐어요. 다시 확인해주세요.');for(const d of latest){const old=records.find(r=>r.id===d.id);if(!d.exists||d.data().revision!==old.revision)throw Error('비교할 기록이 변경됐어요. 다시 확인해주세요.');}tx.set(ref,{...input,revision:(current.data()?.revision??0)+1,updatedAt:stamp()});});await scheduleReport(uid,mid);
+ }
+ function short(value,max=500,required=true){if(typeof value!=='string'||value.length>max||(required&&!value.trim()))throw Error('판단 내용과 이유를 확인해주세요.');return value.trim();}
+ function requestId(value){if(typeof value!=='string'||!/^[-a-f0-9]{36}$/.test(value))throw Error('요청 식별자를 확인해주세요.');return value;}
+ async function saveJudgmentDecision(uid,mid,request){
+  const id=requestId(request.requestId),member=memberRef(uid,mid),ref=member.collection('judgmentDecisions').doc(id);
+  if(!['maintain','adjust','check'].includes(request.choice))throw Error('유지·조정·추가 확인 중 선택해주세요.');
+  const reason=short(request.reason),alternative=short(request.alternative,500,false),changeCondition=short(request.changeCondition,500,false),followUpMetric=short(request.followUpMetric,200),followUpDate=short(request.followUpDate,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(followUpDate)||!Number.isFinite(Date.parse(followUpDate))||new Date(followUpDate).toISOString().slice(0,10)!==followUpDate||followUpDate<new Date(now()).toISOString().slice(0,10))throw Error('다음 확인 날짜를 지정해주세요.');
+  await db.runTransaction(async tx=>{const [parent,analysis,existing]=await tx.getAll(member,member.collection('analysis').doc('current'),ref);if(!parent.exists)throw Error('회원이 없어요.');if(existing.exists)return;const v=analysis.data(),card=v?.judgmentContext?.cards.find(c=>c.id===request.cardId);if(v?.status!=='ready'||v.fingerprint!==request.fingerprint||!card)throw Error('최신 분석에서 판단을 남겨주세요.');const records=(v.evidenceRecords??[]).filter(r=>card.evidenceIds.includes(r.id)).slice(0,10);tx.create(ref,{cardId:card.id,cardVersion:card.version,action:request.choice,reason,alternative,changeCondition,followUpMetric,followUpDate,basedOn:v.fingerprint,snapshot:{goal:parent.data().goal,criteria:v.judgmentContext.criteria,card,records,analysis:v.report?.judgments?.find(j=>j.cardId===card.id)??null},createdAt:Timestamp.fromMillis(now())});});await scheduleReport(uid,mid);return {id};
+ }
+ async function saveJudgmentOutcome(uid,mid,request){
+  const id=requestId(request.requestId),decisionId=requestId(request.decisionId),member=memberRef(uid,mid),ref=member.collection('judgmentOutcomes').doc(id);
+  if(!['as_expected','different','unclear'].includes(request.result))throw Error('관찰 결과를 선택해주세요.');
+  const note=short(request.note),observedDate=short(request.observedDate,10),records=await recordsFor(member);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(observedDate)||!Number.isFinite(Date.parse(observedDate))||new Date(observedDate).toISOString().slice(0,10)!==observedDate||observedDate>new Date(now()).toISOString().slice(0,10))throw Error('실제로 관찰한 날짜를 입력해주세요.');
+  await db.runTransaction(async tx=>{const [parent,decision,existing]=await tx.getAll(member,member.collection('judgmentDecisions').doc(decisionId),ref);if(!parent.exists||!decision.exists)throw Error('연결할 판단이 없어요.');if(existing.exists)return;if(observedDate<decision.data().createdAt.toDate().toISOString().slice(0,10))throw Error('판단 이전 결과를 후속 결과로 기록할 수 없어요.');tx.create(ref,{decisionId,result:request.result,note,observedDate,records:records.filter(r=>r.date===observedDate).slice(0,10).map(r=>({id:r.id,date:r.date,exerciseName:r.exerciseName,sets:r.sets})),createdAt:Timestamp.fromMillis(now())});});await scheduleReport(uid,mid);return {id};
+ }
+ return {startImport,reviewImport,buildReport,scheduleReport,retryReport,savePlan,paid,saveJudgmentCriteria,saveJudgmentDecision,saveJudgmentOutcome};
 }
 export function safeError(e){const s=String(e?.message||'');if(s.startsWith('AI_USAGE_LIMIT:'))return s.slice(15);if(/prepayment|credits.*depleted/i.test(s))return 'Gemini 크레딧이 부족해요. 서비스 관리자에게 알려주세요.';if(/429|quota/i.test(s))return 'AI 요청 한도에 도달했어요. 저장된 결과는 계속 볼 수 있어요.';if(/^[가-힣]/.test(s))return s.slice(0,500);return 'AI 작업을 완료하지 못했어요. 저장된 기록은 유지됩니다. 다시 시도할 수 있어요.';}
