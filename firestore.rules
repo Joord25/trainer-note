@@ -62,6 +62,11 @@ service cloud.firestore {
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.updatedAt == request.time;
       allow delete: if isOwner(uid) && resource.data.get('fileCount',0) == 0 && resource.data.get('recordCount',0) == 0;
+      match /{kind}/{id} {
+        allow read: if kind in ['imports','analysis','reports','plans','corrections'] && isOwner(uid)
+          && exists(/databases/$(database)/documents/trainers/$(uid)/members/$(memberId));
+        allow write: if false;
+      }
       match /records/{recordId} {
         function parent() {return /databases/$(database)/documents/trainers/$(uid)/members/$(memberId);}
         function counted(delta) {return exists(parent()) && existsAfter(parent())
@@ -98,10 +103,11 @@ service cloud.firestore {
           && validSets(data.sets,data.loadType)
           && data.sourceName is string && data.sourceName.size() <= 200 && data.sourceHash is string && data.sourcePage is int
           && (data.sourceHash == '' ? data.sourceName == '' && data.sourcePage == 0 : data.sourceHash.matches('[a-f0-9]{64}') && data.sourceName.size() > 0 && data.sourcePage >= 1 && data.sourcePage <= 10000)
-          && data.notes is string && data.notes.size() <= 1000 && data.status == 'confirmed' && data.origin in ['manual','ai-reviewed'] && (data.origin == 'manual' || data.sourceHash != '')
+          && data.notes is string && data.notes.size() <= 1000 && data.status == 'confirmed' && data.origin in ['manual','ai-reviewed','ai-auto'] && (data.origin == 'manual' || data.sourceHash != '')
           && data.revision is int && data.revision > 0 && data.createdAt is timestamp && data.updatedAt == request.time;}
         allow read: if isOwner(uid) && exists(parent());
         allow create: if isOwner(uid) && valid(request.resource.data) && counted(1)
+          && request.resource.data.origin in ['manual','ai-reviewed']
           && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time;
         allow update: if isOwner(uid) && exists(parent()) && valid(request.resource.data)
           && request.resource.data.createdAt == resource.data.createdAt
@@ -127,6 +133,10 @@ service cloud.firestore {
             || (resource.data.status == 'ready' && request.resource.data.status == 'deleting'));
         allow delete: if isOwner(uid) && resource.data.status == 'deleting' && counted(-1);
       }
+    }
+    match /trainers/{uid}/{kind}/{id} {
+      allow read: if kind in ['aiUsage','aiDaily','aiCalls'] && isOwner(uid);
+      allow write: if false;
     }
     match /{document=**} { allow read, write: if false; }
   }

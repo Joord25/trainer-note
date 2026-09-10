@@ -9,3 +9,5 @@ firebase-debug*.log
 .gstack/
 
 firestore-debug.log
+functions/generated/
+functions/.secret.local

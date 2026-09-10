@@ -15,8 +15,8 @@ const regionStyle: Record<PartId, {color: string; x: number; y: number; endX: nu
   back: {color: '#789daf', x: 78, y: 37, endX: 76, targetX: 53, targetY: 34},
 };
 
-export function BodyMap({stats, compact=false, onSource}: {
-  stats: Insights; compact?: boolean; onSource: (date: string) => void;
+export function BodyMap({stats, compact=false, onSource, sourceLabel="예시 기록 기준"}: {
+  stats: Insights; compact?: boolean; sourceLabel?: string; onSource: (date: string) => void;
 }) {
   const [selected, setSelected] = useState<PartId | null>(null);
   const [side, setSide] = useState<'front' | 'back'>('front');
@@ -83,6 +83,6 @@ export function BodyMap({stats, compact=false, onSource}: {
       </div>}
       </> : <p className="atlas-select-hint">부위나 이름에 마우스를 올려 확인하고, 클릭해 운동 기록을 열어보세요.</p>}
     </div>
-    <p className="muscle-footnote">색은 강조한 부위, %는 세트 비중 · 예시 기록 기준 · 보조근 중복 합산 없음{stats.unknownSets > 0 ? ` · 비중에서 미분류 ${stats.unknownSets}세트 제외` : ''}</p>
+    <p className="muscle-footnote">색은 강조한 부위, %는 세트 비중 · {sourceLabel} · 보조근 중복 합산 없음{stats.unknownSets > 0 ? ` · 비중에서 미분류 ${stats.unknownSets}세트 제외` : ''}</p>
   </section>;
 }

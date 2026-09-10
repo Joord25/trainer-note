@@ -31,5 +31,22 @@
   },
   "storage": {
     "rules": "storage.rules"
-  }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "trainer-ai",
+      "runtime": "nodejs22",
+      "predeploy": [
+        "node scripts/build-functions.mjs"
+      ],
+      "ignore": [
+        "node_modules",
+        ".git",
+        "tests",
+        "*.log",
+        ".secret.local"
+      ]
+    }
+  ]
 }

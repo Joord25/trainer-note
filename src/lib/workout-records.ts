@@ -4,7 +4,7 @@ import {getClientAuth} from "./firebase-client";
 export const BODY_PARTS = ["가슴","등","어깨","이두","삼두","하체","코어","전신","미분류"] as const;
 export type WorkoutSet = {kg:number|null; reps:number};
 export type WorkoutInput = {date:string;rawName:string;exerciseName:string;bodyPart:string;loadType:"weighted"|"bodyweight"|"unknown";sets:WorkoutSet[];sourceName:string;sourceHash:string;sourcePage:number;notes:string};
-export type WorkoutRecord = WorkoutInput & {id:string;revision:number;pending:boolean;origin:"manual"|"ai-reviewed"};
+export type WorkoutRecord = WorkoutInput & {id:string;revision:number;pending:boolean;origin:"manual"|"ai-reviewed"|"ai-auto";status:"confirmed"|"provisional"};
 export function validateWorkout(input:WorkoutInput) {
   const v={...input,rawName:input.rawName.trim(),exerciseName:input.exerciseName.trim(),notes:input.notes.trim()};
   const date=new Date(v.date+"T12:00:00Z");

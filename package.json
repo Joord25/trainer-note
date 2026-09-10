@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start --port 3001",
     "typecheck": "tsc --noEmit",
-    "test:rules": "npx -y firebase-tools@latest emulators:exec --only firestore,storage --project demo-trainer-note \"node --test --test-concurrency=1 tests/*.test.mjs\""
+    "test:rules": "npx -y firebase-tools@latest emulators:exec --only firestore,storage --project demo-trainer-note \"node --test --test-concurrency=1 tests/*.test.mjs\"",
+    "test:ai": "node scripts/build-functions.mjs && node --test functions/tests/domain.test.mjs",
+    "test:all": "node scripts/build-functions.mjs && npx -y firebase-tools@latest emulators:exec --only firestore,storage --project demo-trainer-note \"node --test --test-concurrency=1 functions/tests/*.test.mjs tests/*.test.mjs\""
   },
   "dependencies": {
     "firebase": "^12.19.0",

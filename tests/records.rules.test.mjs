@@ -57,3 +57,19 @@ test('AI-reviewed records require source provenance and retain origin on edit',a
  await assertSucceeds(updateDoc(doc(d,rp),{notes:'트레이너가 무게 확인',revision:2,updatedAt:serverTimestamp()}));
  await assertFails(updateDoc(doc(d,rp),{origin:'manual',revision:3,updatedAt:serverTimestamp()}));
 });
+
+test('client cannot forge auto acceptance but owner can confirm server provisional record',async()=>{
+ const d=db('trainer-a'),provenance={sourceHash:'a'.repeat(64),sourceName:'일지.png',sourcePage:1};
+ await assertFails(create(d,{...provenance,origin:'ai-auto'}));await assertFails(create(d,{...provenance,origin:'ai-auto',status:'provisional'}));
+ await env.withSecurityRulesDisabled(async context=>{const admin=context.firestore();await setDoc(doc(admin,rp),{...valid(),...provenance,origin:'ai-auto',status:'provisional'});await updateDoc(doc(admin,path),{recordCount:1,lastRecordId:id});});
+ await assertSucceeds(getDoc(doc(d,rp)));await assertFails(getDoc(doc(db('trainer-b'),rp)));
+ await assertFails(updateDoc(doc(d,rp),{revision:2,updatedAt:serverTimestamp()}));
+ await assertSucceeds(updateDoc(doc(d,rp),{status:'confirmed',revision:2,notes:'중량 확인',updatedAt:serverTimestamp()}));
+});
+for(const kind of ['imports','analysis','reports','plans','corrections'])test(`${kind} owner reads but no client may write AI-owned state`,async()=>{
+ const target=path+'/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{status:'ready'}));
+ await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(setDoc(doc(db('trainer-a'),target),{status:'ready'}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
+});
+for(const kind of ['aiUsage','aiDaily','aiCalls'])test(`${kind} cannot be reset or forged by client`,async()=>{
+ const target='trainers/trainer-a/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{calls:5}));await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(updateDoc(doc(db('trainer-a'),target),{calls:0}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
+});
