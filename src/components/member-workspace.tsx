@@ -89,7 +89,7 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
         {!online && <div className="member-notice" role="status">인터넷 연결을 확인해주세요. 다시 연결되면 회원 목록을 불러옵니다.</div>}
         {error ? <div className="member-error" role="alert"><h2>회원 목록을 불러오지 못했어요</h2><p>{error}</p><button onClick={() => setAttempt(v => v + 1)}>다시 시도</button></div> : loading ? <div className="empty-state" aria-busy="true"><span className="auth-spinner"/><p>{online ? "회원 정보를 불러오고 있어요." : "인터넷 연결을 기다리고 있어요."}</p></div> : <>
           {showHome&&<MemberDirectory preferences={preferences} onPreferences={updatePreferences} members={members} search={search} onSearch={setSearch} onOpen={openMember} onCreate={()=>setEditor({kind:"create"})} canCreate={available}/>}
-          {selected&&<div className="member-session" hidden={showHome}>{selected.createdAt ? <LiveAnalysisWorkspace initialViewMode={preferences.viewMode} key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest} onUnsavedChange={v=>{unsaved.current=v;}}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}</div>}
+          {selected&&<div className="member-session" hidden={showHome}>{selected.createdAt ? <LiveAnalysisWorkspace onBack={goHome} initialViewMode={preferences.viewMode} key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest} onUnsavedChange={v=>{unsaved.current=v;}}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}</div>}
         </>}
 
       </div>

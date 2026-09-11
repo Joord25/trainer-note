@@ -105,3 +105,18 @@
  .member-shell.sidebar-compact .sidebar-toggle>svg{opacity:1}
 }
 @media(max-width:600px){.member-shell:not(.live-member-shell) .real-content{padding:16px 18px 24px}}
+
+/* Shared title row stays above all document, editing and assistant columns. */
+.review-titlebar{display:grid;grid-template-columns:minmax(100px,1fr) minmax(0,2fr) minmax(100px,1fr);align-items:center;gap:12px;min-height:54px;padding:6px 18px;border-bottom:1px solid var(--line);background:#fff;flex-shrink:0}
+.review-titlebar h1{min-width:0;margin:0;text-align:center;font-size:14px;font-weight:600;line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.3px}
+.review-titlebar .review-back{justify-self:start;display:flex;align-items:center;gap:5px;min-height:36px;padding:6px 8px;border:0;background:transparent;font-size:12px;white-space:nowrap}
+.review-titlebar .review-back:hover{background:#f0f3ed}
+.review-titlebar .review-view-mode{justify-self:end;margin:0}
+.review-titlebar button:focus-visible{outline:2px solid #547c62;outline-offset:2px}
+@media(max-width:1250px){.review-workspace .review-assistant:not([hidden]){top:66px}}
+@media(max-width:600px){
+ .review-titlebar{grid-template-columns:minmax(70px,1fr) minmax(0,2fr) minmax(70px,1fr);padding:5px 8px;gap:6px}
+ .review-titlebar h1{font-size:12px}
+ .review-titlebar .review-back{width:40px;min-height:40px;justify-content:center;padding:8px}
+ .review-titlebar .review-back span{display:none}
+}
