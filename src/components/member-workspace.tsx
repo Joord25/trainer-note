@@ -51,11 +51,13 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
         <span className={"avatar tone-" + i % 3}>{m.name.slice(0,1)}</span><span className="member-copy"><strong>{m.name}</strong><small>{m.pending ? "저장 중…" : m.goal || "목표를 설정해주세요"}</small></span>
       </button>)}</nav>
       {!loading && !error && !visible.length && members.length > 0 && <p className="member-search-empty">검색 결과가 없어요.</p>}
+      {selected&&<details className="sidebar-member-actions" key={selected.id}><summary><span>{selected.name} 회원 관리</span><Icon name="more" size={17}/></summary><div><button disabled={!available} onClick={()=>setEditor({kind:"edit",member:selected})}>회원 정보 수정</button><button disabled={!online} onClick={()=>setUploadRequest(v=>v+1)}>일지 추가</button><button className="member-delete-button" disabled={!available||selected.pending||selected.fileCount>0||selected.recordCount>0} title={selected.fileCount>0||selected.recordCount>0?"연결된 파일과 운동 기록을 먼저 삭제해주세요.":undefined} onClick={()=>setEditor({kind:"delete",member:selected})}>회원 삭제</button></div></details>}
+      <span className="sidebar-sync" role="status">{!online ? "오프라인" : cached ? "서버 연결 중" : "연결됨"}</span>
       <button className="member-demo-button" onClick={onDemo} title="예시 둘러보기"><Icon name="chart" size={17}/><span>예시 둘러보기</span></button>
       <AccountControl/>
     </aside>
     <main className="main-workspace real-main">
-      <header className="topbar"><div className="breadcrumb"><Icon name="users" size={17}/><span>내 회원</span>{selected && <><span className="slash">/</span><strong>{selected.name}</strong></>}</div>{selected&&<div className="top-actions"><button disabled={!available} onClick={()=>setEditor({kind:"edit",member:selected})}>회원 정보</button><button className="member-delete-button" disabled={!available||selected.pending||selected.fileCount>0||selected.recordCount>0} title={selected.fileCount>0||selected.recordCount>0?"연결된 파일과 운동 기록을 먼저 삭제해주세요.":undefined} onClick={()=>setEditor({kind:"delete",member:selected})}>회원 삭제</button><button disabled={!online} onClick={()=>setUploadRequest(v=>v+1)}><Icon name="plus" size={16}/> 일지 추가</button></div>}<span className="member-sync" role="status">{!online ? "오프라인" : cached ? "서버 연결 중" : "연결됨"}</span></header>
+      {!selected&&<header className="topbar"><div className="breadcrumb"><Icon name="users" size={17}/><span>내 회원</span></div></header>}
       <div className="real-content">
         {!online && <div className="member-notice" role="status">인터넷 연결을 확인해주세요. 다시 연결되면 회원 목록을 불러옵니다.</div>}
         {error ? <div className="member-error" role="alert"><h2>회원 목록을 불러오지 못했어요</h2><p>{error}</p><button onClick={() => setAttempt(v => v + 1)}>다시 시도</button></div> : loading ? <div className="empty-state" aria-busy="true"><span className="auth-spinner"/><p>{online ? "회원 정보를 불러오고 있어요." : "인터넷 연결을 기다리고 있어요."}</p></div> : !selected ? <section className="member-welcome">
