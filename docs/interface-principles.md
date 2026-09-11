@@ -53,3 +53,13 @@
 삭제는 확인창을 거치며 기존 서버의 빈 회원 삭제 조건을 유지한다. 연결된 일지·기록이 있으면 삭제를 비활성화하고 이유를 표시한다. 연결 자료까지 일괄 삭제하는 서버 기능은 이번 UI 변경에 포함되지 않는다.
 
 접힌 원본은 오른쪽 화살표의 원본 펼치기 버튼으로, 닫힌 도우미는 AI 도우미 버튼으로 복원한다. 도우미와 원본은 닫을 때 제거하지 않아 입력과 뷰어 상태를 유지한다.
+
+## Page-linked record review (2026-09-12)
+
+- Original reopening uses the mirrored collapse chevron alone. The assistant reopen button points right.
+- Clicking a source page locates its file/page in record correction; selecting a record opens that exact source page. The duplicate source-link action above the paper is removed.
+- Each paper groups records by source file and physical page. A date control explicitly applies to that page, including manual records; different existing dates require confirmation. Other pages stay unchanged, and unrelated review warnings remain unresolved. All writes use a revision fence and one transaction.
+- Missing source years default to the current Korean calendar year on new imports. Original explicit years win, and the applied default is preserved in notes. Existing imports without a year receive the same default without another model read. The default remains adjustable; explicitly corrected page dates and individually confirmed dates survive later year changes.
+- One checklist combines ambiguous records and unparsed source text. Each item opens the source page and inline correction. A footer adds an exercise linked to that page. Resolving unparsed text atomically adds the record and removes the checklist entry, including after later year changes.
+- Analysis options provide text scaling (100–200%), clipboard copy, PDF through the browser print dialog, and explicit regeneration. Regeneration uses a new cache generation under the analysis namespace and the existing quota checks; it never rereads the source or overwrites a saved trainer lesson plan.
+- Proposed next data-model change, not enabled yet: represent unilateral repetitions as left/right counts on one set, e.g. `좌 10 / 우 10`, with the load basis recorded separately. Keep one exercise and one bilateral round rather than silently converting to 20 reps or two exercises. Compute comparisons only with compatible side/load conventions. Ambiguous `LR 10` remains a review item until the trainer confirms whether it means each side or total.

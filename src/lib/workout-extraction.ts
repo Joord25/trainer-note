@@ -65,7 +65,7 @@ export async function parseExtraction(value:unknown,source:{id:string;name:strin
   if(!exerciseName||bodyPart==='미분류')issues.push('운동명과 주 운동 부위를 확인해주세요.');
   const sets=array(r.sets,8).map((item,i)=>{const s=object(item),kg=number(s.kg,0,2000),reps=number(s.reps,1,1000,true);if(reps===null)issues.push(`${i+1}세트 횟수를 확인해주세요.`);if(loadType==='weighted'&&(kg===null||kg===0))issues.push(`${i+1}세트 중량을 확인해주세요.`);if(loadType!=='weighted'&&kg!==null)throw new Error('AI가 중량 기준과 맞지 않는 값을 반환했어요.');return {kg:kg===0?null:kg,reps:reps??0};});
   if(!sets.length){sets.push({kg:null,reps:0});issues.push('세트 기록을 확인해주세요.');}
-  const notes=string(r.notes,1000);
+  const notes=[string(r.notes,1000),...(sourceYear===null&&year?[`연도 기본값: ${year}년 (원본 연도 미기재)`]:[])].filter(Boolean).join(' / ').slice(0,1000);
   // Stable for repeated reads with the same page and raw exercise spelling; no overwrite on collision.
   const key=`${page}:${rawName.toLowerCase().replace(/\s/g,'')}`,occurrence=occurrences.get(key)??0;occurrences.set(key,occurrence+1);
   const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(`${source.id}:${key}:${occurrence}`));

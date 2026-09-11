@@ -9,8 +9,8 @@ type Viewport = RefObject<HTMLDivElement | null>;
 type Position = {fileId: string; page: number; total: number};
 
 /** Originals stay separate in Storage; only the browser presentation is continuous. */
-export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePage = 1, selectionMode=false, onSelection, jumpRequest=0}: {
-  memberId: string; files: MemberFile[]; selectedFile: string; sourcePage?: number; selectionMode?:boolean; onSelection?:(s:SourceSelection)=>void; jumpRequest?:number;
+export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePage = 1, selectionMode=false, onSelection, jumpRequest=0, onPageClick}: {
+  memberId: string; files: MemberFile[]; selectedFile: string; sourcePage?: number; selectionMode?:boolean; onSelection?:(s:SourceSelection)=>void; jumpRequest?:number; onPageClick?:(fileId:string,page:number)=>void;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
@@ -40,7 +40,7 @@ export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePag
       <div className="original-stream" style={{width: Math.round(width * zoom / 100)}}>
         {files.map((file, i) => <SourceDocument key={`${memberId}/${file.id}`} memberId={memberId} file={file}
           index={i + 1} viewport={viewport} width={Math.round(width * zoom / 100)}
-          selected={selectedFile === file.id} sourcePage={sourcePage} onPosition={setPosition} selectionMode={selectionMode} onSelection={onSelection} jumpRequest={jumpRequest}/>) }
+          selected={selectedFile === file.id} sourcePage={sourcePage} onPosition={setPosition} selectionMode={selectionMode} onSelection={onSelection} jumpRequest={jumpRequest} onPageClick={onPageClick}/>) }
         <p className="original-end">원본 {files.length}개 · 마지막 파일이에요</p>
       </div>
     </div>
@@ -63,9 +63,9 @@ function useNearby(ref: RefObject<HTMLElement | null>, viewport: Viewport, margi
   return near;
 }
 
-function SourceDocument({memberId, file, index, viewport, width, selected, sourcePage, onPosition, selectionMode, onSelection, jumpRequest}: {
+function SourceDocument({memberId, file, index, viewport, width, selected, sourcePage, onPosition, selectionMode, onSelection, jumpRequest, onPageClick}: {
   memberId: string; file: MemberFile; index: number; viewport: Viewport; width: number;
-  selected: boolean; sourcePage: number; onPosition: (p: Position) => void; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; jumpRequest:number;
+  selected: boolean; sourcePage: number; onPosition: (p: Position) => void; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; jumpRequest:number; onPageClick?:(fileId:string,page:number)=>void;
 }) {
   const container = useRef<HTMLElement>(null);
   const near = useNearby(container, viewport, '600px', true);
@@ -139,19 +139,19 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
     </header>
     {file.status !== 'ready' ? <p className="original-placeholder" role="status">{file.status === 'deleting' ? '삭제 중인 원본이에요.' : '원본을 저장하고 있어요…'}</p>
       : error || imageError ? <div className="original-placeholder" role="alert"><p>{error || '이미지를 표시할 수 없어요. 파일을 다시 확인해주세요.'}</p><button onClick={() => setAttempt(v => v + 1)}>원본 다시 불러오기</button></div>
-      : document ? Array.from({length: total}, (_, i) => <SourcePage key={i} fileId={file.id} number={i + 1} total={total} viewport={viewport} onPosition={onPosition} selectionMode={selectionMode} onSelection={onSelection} fileName={file.name}>
+      : document ? Array.from({length: total}, (_, i) => <SourcePage key={i} fileId={file.id} number={i + 1} total={total} viewport={viewport} onPosition={onPosition} selectionMode={selectionMode} onSelection={onSelection} fileName={file.name} onPageClick={onPageClick}>
           <PdfCanvas pdf={document} number={i + 1} width={width} viewport={viewport} onReady={i + 1 === page ? pageReady : undefined}/>
         </SourcePage>)
-      : url && file.contentType !== 'application/pdf' ? <SourcePage fileId={file.id} number={1} total={1} viewport={viewport} onPosition={onPosition} selectionMode={selectionMode} onSelection={onSelection} fileName={file.name}>
+      : url && file.contentType !== 'application/pdf' ? <SourcePage fileId={file.id} number={1} total={1} viewport={viewport} onPosition={onPosition} selectionMode={selectionMode} onSelection={onSelection} fileName={file.name} onPageClick={onPageClick}>
           <img src={url} alt={`${file.name} 원본`} onLoad={pageReady} onError={() => setImageError(true)}/>
         </SourcePage>
       : <p className="original-placeholder" role="status">{requested ? '원본을 불러오고 있어요…' : '스크롤하면 원본을 불러와요'}</p>}
   </section>;
 }
 
-function SourcePage({fileId, number, total, viewport, onPosition, children, selectionMode, onSelection, fileName}: {
+function SourcePage({fileId, number, total, viewport, onPosition, children, selectionMode, onSelection, fileName, onPageClick}: {
   fileId: string; number: number; total: number; viewport: Viewport;
-  onPosition: (p: Position) => void; children: React.ReactNode; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; fileName:string;
+  onPosition: (p: Position) => void; children: React.ReactNode; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; fileName:string; onPageClick?:(fileId:string,page:number)=>void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -163,7 +163,7 @@ function SourcePage({fileId, number, total, viewport, onPosition, children, sele
     observer.observe(el);
     return () => observer.disconnect();
   }, [fileId, number, total, viewport, onPosition]);
-  return <div className="original-page" ref={ref} data-source-page={number}>
+  return <div className="original-page" ref={ref} data-source-page={number} tabIndex={onPageClick&&!selectionMode?0:undefined} role={onPageClick&&!selectionMode?'button':undefined} aria-label={onPageClick?`${fileName} ${number}쪽 판독 기록으로 이동`:undefined} onClick={()=>{if(!selectionMode)onPageClick?.(fileId,number);}} onKeyDown={e=>{if(e.target===e.currentTarget&&!selectionMode&&(e.key==='Enter'||e.key===' ')){e.preventDefault();onPageClick?.(fileId,number);}}}>
     <PageSelection enabled={selectionMode} onSelect={value=>onSelection?.({fileId,fileName,page:number,...value})}>{children}</PageSelection><span className="original-page-label">{number} / {total}</span>
   </div>;
 }

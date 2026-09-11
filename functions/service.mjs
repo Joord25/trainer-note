@@ -40,7 +40,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    const [m,current,file]=await tx.getAll(member,ref,member.collection('files').doc(fileId));
    if(!m.exists||!file.exists||file.data().status!=='ready'||current.data()?.job!==job)throw Error('원본이나 판독 상태가 변경됐어요.');
    const old=current.data(),existingRows=new Map((old.rows||[]).map(r=>[r.id,r]));
-   const merged=rows.map(r=>{const previous=existingRows.get(r.id);return previous?.review==='confirmed'||previous?.review==='ignored'?previous:r;});
+   const merged=rows.map(r=>{const previous=existingRows.get(r.id);if(previous?.review==='confirmed'||previous?.review==='ignored')return previous;if(previous?.dateOverride){const next=classify({...r,input:{...r.input,date:previous.input.date},issues:r.issues.filter(i=>!i.includes('운동 날짜')&&!i.includes('원본에 연도가 없어 지정한'))},history,opts);return {...next,dateOverride:true};}return r;});
    for(const previous of existingRows.values())if(['confirmed','ignored'].includes(previous.review)&&!merged.some(r=>r.id===previous.id))merged.push(previous);
    const refs=merged.map(r=>member.collection('records').doc(r.id)),existing=refs.length?await tx.getAll(...refs):[];let delta=0,lastId=m.data().lastRecordId||'';
    for(let i=0;i<merged.length;i++){
@@ -55,7 +55,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    }
    if((m.data().recordCount||0)+delta>5000)throw Error('회원 기록 한도에 도달했어요.');
    if(delta)tx.update(member,{recordCount:(m.data().recordCount||0)+delta,lastRecordId:lastId,updatedAt:stamp()});
-   const state={raw,rows:merged,unparsed:parsed.unparsed,status:'ready',revision:(old.revision||0)+1,year:opts.year??null,memberConfirmed:!!opts.memberConfirmed,error:'',updatedAt:stamp()};
+   const state={raw,rows:merged,unparsed:parsed.unparsed.filter(v=>!(old.resolvedUnparsed||[]).includes(hash(v))),status:'ready',revision:(old.revision||0)+1,year:opts.year??null,memberConfirmed:!!opts.memberConfirmed,error:'',updatedAt:stamp()};
    if(Buffer.byteLength(JSON.stringify(state))>700000)throw Error('판독 결과가 너무 커요. 파일을 나눠주세요.');tx.update(ref,state);
   });
   await scheduleReport(uid,mid);
@@ -74,7 +74,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    const data=await readSource(uid,mid,source);
    const result=await paid(uid,'extraction',{system:EXTRACTION_PROMPT+'\n응답 전에 날짜·단위·각 세트의 대응을 원본과 다시 대조하고, 애매한 점은 issues에 한국어로 기록한다.',schema:openApiSchema(EXTRACTION_SCHEMA),parts:[{text:'원본 기록을 판독하고 자체 점검한 결과만 반환해주세요.'},{inlineData:{mimeType:source.contentType,data}}]},limits.extractOutputTokens);
    await ref.update({usage:result.usage});
-   const parsed=await parseExtraction(result.value,source,memberData.name);await storeRows(uid,mid,fileId,job,result.value,parsed);
+   const year=Number(dateKeys(now()).day.slice(0,4));const parsed=await parseExtraction(result.value,source,memberData.name,year);await storeRows(uid,mid,fileId,job,result.value,parsed,{year,yearConfirmed:true});
    return {cached:false};
   }catch(e){await db.runTransaction(async tx=>{const current=await tx.get(ref);if(current.data()?.job===job)tx.update(ref,{status:String(e.message).startsWith('AI_USAGE_LIMIT')?'limited':'error',error:safeError(e),updatedAt:stamp()});});await scheduleReport(uid,mid);return {error:safeError(e)};}
  }
@@ -89,6 +89,55 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    // Revision fence before the bulk correction; no Gemini call for year/member fixes.
    const job=randomUUID();await db.runTransaction(async tx=>{const cur=await tx.get(ref);if(cur.data()?.revision!==request.revision)throw Error('다른 화면에서 수정됐어요.');tx.update(ref,{job});});
    await storeRows(uid,mid,fileId,job,data.raw,parsed,{year,yearConfirmed:!!year,memberConfirmed});return;
+  }
+  if(request.operation==='date'){
+   const date=request.date,page=request.page,d=new Date(date+'T12:00:00Z');
+   if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==date||date<'1900-01-01'||date>'2100-12-31'||!Number.isInteger(page)||page<1||page>10000)throw Error('날짜와 페이지를 확인해주세요.');
+   await db.runTransaction(async tx=>{
+    const [cur,parent,file]=await tx.getAll(ref,member,member.collection('files').doc(fileId));
+    if(!parent.exists||file.data()?.status!=='ready'||cur.data()?.revision!==request.revision)throw Error('다른 화면에서 수정됐어요.');
+    if(file.data().contentType!=='application/pdf'&&page!==1)throw Error('이미지는 1쪽만 적용할 수 있어요.');
+    const saved=await tx.get(member.collection('records').where('sourceHash','==',fileId));
+    const onPage=saved.docs.filter(d=>d.data().sourcePage===page),byId=new Map(onPage.map(d=>[d.id,d]));
+    const rows=cur.data().rows.map(r=>({...r})),targets=rows.filter(r=>r.input.sourcePage===page&&r.review!=='ignored');
+    if(!targets.length&&!onPage.length)throw Error('이 페이지에 적용할 기록이 없어요.');
+    if(new Set([...targets.map(r=>r.id),...onPage.map(r=>r.id)]).size>240)throw Error('한 페이지에 기록이 너무 많아요. 나누어 수정해주세요.');
+    const missing=targets.filter(r=>!byId.has(r.id));const missingDocs=missing.length?await tx.getAll(...missing.map(r=>member.collection('records').doc(r.id))):[];
+    if(missingDocs.some(d=>d.exists))throw Error('원본 연결이 변경된 기록이 있어요. 다시 확인해주세요.');
+    let delta=0;const changes=[];
+    for(const r of targets){const before=r.input;r.input={...r.input,date};r.dateOverride=true;changes.push({id:r.id,before,after:r.input});
+     if(r.review!=='confirmed'){
+      // Resolve date warnings only; unit, identity and ambiguous values stay pending.
+      const issues=r.issues.filter(i=>!['연도를 포함한 운동 날짜를 확인해주세요.','원본에 연도가 없어 지정한'].some(v=>i.startsWith(v)));
+      const next=classify({...r,issues});r.issues=next.issues;r.review=next.review;
+     }
+     r.revision=(r.revision||0)+1;
+     if(!byId.has(r.id)&&(r.review==='auto'||r.review==='confirmed')){
+      const {date:_,...fields}=validInput(r.input);tx.create(member.collection('records').doc(r.id),{...fields,performedAt:Timestamp.fromDate(d),origin:'ai-auto',status:r.review==='confirmed'?'confirmed':'provisional',revision:1,createdAt:stamp(),updatedAt:stamp()});delta++;
+     }
+    }
+    for(const doc of onPage)tx.update(doc.ref,{performedAt:Timestamp.fromDate(d),revision:(doc.data().revision||0)+1,updatedAt:stamp()});
+    if((parent.data().recordCount||0)+delta>5000)throw Error('회원 기록 한도에 도달했어요.');
+    if(delta)tx.update(member,{recordCount:(parent.data().recordCount||0)+delta,updatedAt:stamp()});
+    tx.update(ref,{rows,revision:request.revision+1,updatedAt:stamp()});
+    tx.create(member.collection('corrections').doc(),{fileId,page,before:{dates:changes.map(c=>c.before.date)},after:{date},reason:'같은 페이지 날짜 일괄 적용',createdAt:stamp()});
+   });await scheduleReport(uid,mid);return;
+  }
+  if(request.operation==='add'){
+   const input=validInput(request.input),id=request.rowId;
+   if(typeof id!=='string'||!/^[a-zA-Z0-9]{20}$/.test(id)||input.sourceHash!==fileId||input.sourceName!==data.name)throw Error('원본 연결을 확인해주세요.');
+   await db.runTransaction(async tx=>{
+    const record=member.collection('records').doc(id),[cur,parent,file,old]=await tx.getAll(ref,member,member.collection('files').doc(fileId),record);
+    if(!parent.exists||file.data()?.status!=='ready'||cur.data()?.revision!==request.revision||old.exists)throw Error('다른 화면에서 수정됐어요. 최신 판독을 확인해주세요.');
+    if(file.data().contentType!=='application/pdf'&&input.sourcePage!==1)throw Error('이미지는 1쪽만 기록할 수 있어요.');
+    const v=cur.data(),unparsed=[...(v.unparsed||[])],resolvedUnparsed=[...(v.resolvedUnparsed||[])];
+    if(request.unparsedIndex!==undefined){const i=request.unparsedIndex;if(!Number.isInteger(i)||i<0||i>=unparsed.length||unparsed[i].page!==input.sourcePage)throw Error('별도 원문이 변경됐어요.');resolvedUnparsed.push(hash(unparsed[i]));unparsed.splice(i,1);}
+    if((parent.data().recordCount||0)>=5000||v.rows.length>=240)throw Error('기록 한도에 도달했어요.');
+    const {date,...fields}=input;tx.create(record,{...fields,performedAt:Timestamp.fromDate(new Date(date+'T12:00:00Z')),status:'confirmed',origin:'ai-reviewed',revision:1,createdAt:stamp(),updatedAt:stamp()});
+    tx.update(member,{recordCount:(parent.data().recordCount||0)+1,lastRecordId:id,updatedAt:stamp()});
+    tx.update(ref,{rows:[...v.rows,{id,input,issues:[],memberName:parent.data().name,review:'confirmed',revision:1}],unparsed,resolvedUnparsed,revision:v.revision+1,updatedAt:stamp()});
+    tx.create(member.collection('corrections').doc(),{fileId,rowId:id,before:request.unparsedIndex===undefined?null:v.unparsed[request.unparsedIndex],after:input,reason:'원본에서 운동 추가·판독 보완',createdAt:stamp()});
+   });await scheduleReport(uid,mid);return;
   }
   if(request.operation!=='row'&&request.operation!=='ignore')throw Error('지원하지 않는 수정이에요.');
   const index=data.rows.findIndex(r=>r.id===request.rowId);if(index<0)throw Error('판독 항목이 없어요.');
@@ -107,8 +156,8 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   });await scheduleReport(uid,mid);
  }
  async function knowledgeFor(member){
-  const [criteria,decisions,outcomes,corrections,plan]=await Promise.all([member.collection('judgmentSettings').doc('current').get(),member.collection('judgmentDecisions').orderBy('createdAt','desc').limit(20).get(),member.collection('judgmentOutcomes').orderBy('createdAt','desc').limit(40).get(),member.collection('corrections').orderBy('createdAt','desc').limit(5).get(),member.collection('plans').doc('current').get()]);
-  return {criteria:criteria.data()??null,decisions:decisions.docs.map(d=>({id:d.id,...d.data()})),outcomes:outcomes.docs.map(d=>({id:d.id,...d.data()})),corrections:corrections.docs.map(d=>{const v=d.data();return {id:d.id,before:v.before??null,after:v.after??null,reason:v.reason??''};}),plan:plan.data()??null};
+  const [generation,criteria,decisions,outcomes,corrections,plan]=await Promise.all([member.collection('analysis').doc('generation').get(),member.collection('judgmentSettings').doc('current').get(),member.collection('judgmentDecisions').orderBy('createdAt','desc').limit(20).get(),member.collection('judgmentOutcomes').orderBy('createdAt','desc').limit(40).get(),member.collection('corrections').orderBy('createdAt','desc').limit(5).get(),member.collection('plans').doc('current').get()]);
+  return {generation:generation.data()?.value||null,criteria:criteria.data()??null,decisions:decisions.docs.map(d=>({id:d.id,...d.data()})),outcomes:outcomes.docs.map(d=>({id:d.id,...d.data()})),corrections:corrections.docs.map(d=>{const v=d.data();return {id:d.id,before:v.before??null,after:v.after??null,reason:v.reason??''};}),plan:plan.data()??null};
  }
  async function buildReport(uid,mid){
   const active=memberRef(uid,mid);if(!(await active.get()).exists)return;await active.collection('analysis').doc('current').set({status:'processing',startedAt:Timestamp.fromMillis(now()),updatedAt:stamp()},{merge:true});
@@ -130,7 +179,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    await current.set(value);return {cached:false};
   }catch(e){await cache.set({status:'error',error:safeError(e),updatedAt:stamp()},{merge:true});await current.set({status:String(e.message).startsWith('AI_USAGE_LIMIT')?'limited':'error',error:safeError(e),updatedAt:stamp()},{merge:true});return {error:safeError(e)};}
  }
- async function retryReport(uid,mid){const member=memberRef(uid,mid),current=await member.collection('analysis').doc('current').get();const value=current.data();if(value?.fingerprint){const cache=member.collection('reports').doc(value.fingerprint);await db.runTransaction(async tx=>{const c=await tx.get(cache);if(c.data()?.status==='error'||(c.data()?.status==='processing'&&c.data()?.startedAt?.toMillis()<now()-180000))tx.delete(cache);});}await scheduleReport(uid,mid);}
+ async function retryReport(uid,mid,regenerate=false){const member=memberRef(uid,mid);if(regenerate){await member.collection('analysis').doc('generation').set({value:randomUUID()});await scheduleReport(uid,mid);return;}const current=await member.collection('analysis').doc('current').get();const value=current.data();if(value?.fingerprint){const cache=member.collection('reports').doc(value.fingerprint);await db.runTransaction(async tx=>{const c=await tx.get(cache);if(c.data()?.status==='error'||(c.data()?.status==='processing'&&c.data()?.startedAt?.toMillis()<now()-180000))tx.delete(cache);});}await scheduleReport(uid,mid);}
  async function savePlan(uid,mid,request){
   if(typeof request.reason!=='string'||request.reason.length>1000||!Array.isArray(request.program)||request.program.length>6)throw Error('수업 계획 입력을 확인해주세요.');
   const program=request.program.map(v=>{if(!v||typeof v.exerciseName!=='string'||!v.exerciseName.trim()||v.exerciseName.length>100||!Number.isInteger(v.sets)||v.sets<1||v.sets>8||typeof v.reps!=='string'||v.reps.length>100||typeof v.loadGuide!=='string'||v.loadGuide.length>500)throw Error('운동별 이름·세트·횟수·강도를 확인해주세요.');return {exerciseName:v.exerciseName.trim(),sets:v.sets,reps:v.reps,loadGuide:v.loadGuide,reason:typeof v.reason==='string'?v.reason.slice(0,700):'',recordId:typeof v.recordId==='string'?v.recordId:''};});
