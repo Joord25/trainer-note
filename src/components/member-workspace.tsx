@@ -16,6 +16,27 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const trainer = useTrainer();
   const {preferences,update:updatePreferences,error:preferenceError}=useDisplayPreferences(trainer.uid);
   const [settings,setSettings]=useState(false);
+  const [narrow,setNarrow]=useState(false),[mobileSidebarOpen,setMobileSidebarOpen]=useState(false);
+  const sidebarRef=useRef<HTMLElement>(null),sidebarToggleRef=useRef<HTMLButtonElement>(null);
+  const compact=narrow?!mobileSidebarOpen:preferences.sidebarCollapsed;
+  function closeMobileSidebar(){setMobileSidebarOpen(false);}
+  function dismissSidebar(){setMobileSidebarOpen(false);sidebarToggleRef.current?.focus();}
+  function toggleSidebar(){if(narrow)setMobileSidebarOpen(v=>!v);else updatePreferences({sidebarCollapsed:!preferences.sidebarCollapsed});}
+  useEffect(()=>{const query=window.matchMedia('(max-width: 850px)');const sync=()=>{setNarrow(query.matches);setMobileSidebarOpen(false);};sync();query.addEventListener('change',sync);return()=>query.removeEventListener('change',sync);},[]);
+  useEffect(()=>{
+    if(!mobileSidebarOpen||!narrow)return;
+    sidebarToggleRef.current?.focus();
+    function keydown(event:KeyboardEvent){
+      if(document.querySelector('dialog[open]'))return;
+      if(event.key==='Escape'){event.preventDefault();setMobileSidebarOpen(false);sidebarToggleRef.current?.focus();}
+      if(event.key!=='Tab')return;
+      const items=Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),summary,[href]')||[]).filter(el=>el.getClientRects().length>0);
+      const first=items[0],last=items[items.length-1];
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+    }
+    document.addEventListener('keydown',keydown);return()=>document.removeEventListener('keydown',keydown);
+  },[mobileSidebarOpen,narrow]);
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [home,setHome]=useState(true);
@@ -31,8 +52,8 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const [uploadRequest,setUploadRequest]=useState(0);
   const selected = members.find(m => m.id === selectedId);
   const showHome=home||!selected;
-  function openMember(id:string){if(selectedId!==id&&unsaved.current&&!window.confirm('저장하지 않은 수정 내용이 있어요. 버리고 다른 회원으로 이동할까요?'))return;if(selectedId!==id){unsaved.current=false;setUploadRequest(0);}setSelectedId(id);setHome(false);}
-  function goHome(){setHome(true);setSearch('');}
+  function openMember(id:string){if(selectedId!==id&&unsaved.current&&!window.confirm('저장하지 않은 수정 내용이 있어요. 버리고 다른 회원으로 이동할까요?'))return;if(selectedId!==id){unsaved.current=false;setUploadRequest(0);}setSelectedId(id);setHome(false);closeMobileSidebar();}
+  function goHome(){setHome(true);setSearch('');closeMobileSidebar();}
 
   useEffect(() => {
     setLoading(true); setError("");
@@ -51,23 +72,24 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const visible = members.filter(m => m.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   const available = !loading && !error && online && !cached;
 
-  return <div className={"app-shell member-shell "+(!showHome?"live-member-shell":"")}>
-    <aside className="sidebar">
-      <div className="brand-row"><button className="brand" aria-label="회원 홈으로" onClick={goHome}>trainer<span>note</span><i/></button></div>
-      <button className="upload-nav" onClick={() => setEditor({kind: "create"})} disabled={!available} aria-label="회원 추가"><Icon name="plus"/><span>회원 추가</span></button>
-      <button className="member-home-nav" aria-current={showHome?"page":undefined} onClick={goHome} title="회원 목록으로"><Icon name="users" size={18}/><span>회원 목록</span></button>
+  return <div className={"app-shell member-shell "+(!showHome?"live-member-shell ":"")+(compact?"sidebar-compact ":"sidebar-expanded ")+(mobileSidebarOpen?"sidebar-mobile-open":"")}>
+    {narrow&&mobileSidebarOpen&&<button className="sidebar-backdrop" tabIndex={-1} aria-label="사이드바 닫기" onClick={dismissSidebar}/>}
+    <aside id="member-sidebar" ref={sidebarRef} className="sidebar" aria-label="주 메뉴" role={narrow&&mobileSidebarOpen?"dialog":undefined} aria-modal={narrow&&mobileSidebarOpen?true:undefined}>
+      <div className="brand-row"><button className="brand" aria-label="회원 홈으로" title="회원 홈" onClick={goHome}><span className="brand-full">trainer<span>note</span><i/></span><span className="brand-short" aria-hidden="true">tn<i/></span></button><button ref={sidebarToggleRef} className="sidebar-toggle icon-button" aria-label={compact?"사이드바 펼치기":"사이드바 접기"} title={compact?"사이드바 펼치기":"사이드바 접기"} aria-expanded={!compact} aria-controls="member-sidebar" onClick={toggleSidebar}><Icon name="panel" size={19}/></button></div>
+      <button className="upload-nav" onClick={() => {closeMobileSidebar();setEditor({kind: "create"});}} disabled={!available} aria-label="회원 추가" title="회원 추가"><Icon name="plus"/><span>회원 추가</span></button>
+      <button className="member-home-nav" aria-current={showHome?"page":undefined} onClick={goHome} title="회원 목록" aria-label="회원 목록"><Icon name="users" size={18}/><span>회원 목록</span></button>
       <div className="nav-label"><span>내 회원</span><span>{members.length}</span></div>
       <label className="member-search"><Icon name="search" size={16}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="회원 검색" aria-label="회원 검색"/></label>
       <nav className="real-member-list" aria-label="회원 목록">{visible.map((m, i) => <button key={m.id} className={"member " + (!showHome && selected?.id === m.id ? "active" : "")} onClick={() => openMember(m.id)} aria-label={m.name + " 회원 보기"} aria-current={!showHome && selected?.id === m.id ? "true" : undefined} title={m.name}>
         <span className={"avatar tone-" + i % 3}>{m.name.slice(0,1)}</span><span className="member-copy"><strong>{m.name}</strong><small>{m.pending ? "저장 중…" : m.goal || "목표를 설정해주세요"}</small></span>
       </button>)}</nav>
       {!loading && !error && !visible.length && members.length > 0 && <p className="member-search-empty">검색 결과가 없어요.</p>}
-      {!showHome&&selected&&<details className="sidebar-member-actions" key={selected.id}><summary><span>{selected.name} 회원 관리</span><Icon name="more" size={17}/></summary><div><button disabled={!available} onClick={()=>setEditor({kind:"edit",member:selected})}>회원 정보 수정</button><button disabled={!online} onClick={()=>setUploadRequest(v=>v+1)}>일지 추가</button><button className="member-delete-button" disabled={!available||selected.pending||selected.fileCount>0||selected.recordCount>0} title={selected.fileCount>0||selected.recordCount>0?"연결된 파일과 운동 기록을 먼저 삭제해주세요.":undefined} onClick={()=>setEditor({kind:"delete",member:selected})}>회원 삭제</button></div></details>}
-      <span className="sidebar-sync" role="status">{!online ? "오프라인" : cached ? "서버 연결 중" : "연결됨"}</span>
-      <button className="member-demo-button" onClick={()=>{if(!unsaved.current||window.confirm('저장하지 않은 수정 내용을 버리고 예시로 이동할까요?'))onDemo();}} title="예시 둘러보기"><Icon name="chart" size={17}/><span>예시 둘러보기</span></button>
-      <AccountControl onSettings={()=>setSettings(true)}/>
+      {!showHome&&selected&&<details className="sidebar-member-actions" key={selected.id}><summary title={`${selected.name} 회원 관리`} aria-label={`${selected.name} 회원 관리`} onClick={()=>{if(compact){if(narrow)setMobileSidebarOpen(true);else updatePreferences({sidebarCollapsed:false});}}}><span>{selected.name} 회원 관리</span><Icon name="more" size={17}/></summary><div><button disabled={!available} onClick={()=>{closeMobileSidebar();setEditor({kind:"edit",member:selected});}}>회원 정보 수정</button><button disabled={!online} onClick={()=>{closeMobileSidebar();setUploadRequest(v=>v+1);}}>일지 추가</button><button className="member-delete-button" disabled={!available||selected.pending||selected.fileCount>0||selected.recordCount>0} title={selected.fileCount>0||selected.recordCount>0?"연결된 파일과 운동 기록을 먼저 삭제해주세요.":undefined} onClick={()=>{closeMobileSidebar();setEditor({kind:"delete",member:selected});}}>회원 삭제</button></div></details>}
+      <span className={"sidebar-sync "+(!online||cached?"sync-pending":"sync-ready")} role="status" title={!online?"오프라인":cached?"서버 연결 중":"연결됨"}><i aria-hidden="true"/><span>{!online ? "오프라인" : cached ? "서버 연결 중" : "연결됨"}</span></span>
+      <button className="member-demo-button" onClick={()=>{if(!unsaved.current||window.confirm('저장하지 않은 수정 내용을 버리고 예시로 이동할까요?'))onDemo();}} title="예시 둘러보기" aria-label="예시 둘러보기"><Icon name="chart" size={17}/><span>예시 둘러보기</span></button>
+      <AccountControl onSettings={()=>{closeMobileSidebar();setSettings(true);}}/>
     </aside>
-    <main className="main-workspace real-main">
+    <main className="main-workspace real-main" inert={narrow&&mobileSidebarOpen}>
 
       <div className="real-content">
         {!online && <div className="member-notice" role="status">인터넷 연결을 확인해주세요. 다시 연결되면 회원 목록을 불러옵니다.</div>}

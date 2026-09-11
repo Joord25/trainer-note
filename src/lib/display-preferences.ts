@@ -1,8 +1,8 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from 'react';
-export type DisplayPreferences={cardSize:'small'|'medium'|'large';sort:'recent'|'name';viewMode:2|3};
-export const defaultDisplayPreferences:DisplayPreferences={cardSize:'small',sort:'recent',viewMode:2};
-function parse(value:string|null):DisplayPreferences{try{const v=JSON.parse(value||'{}');return {cardSize:['small','medium','large'].includes(v?.cardSize)?v.cardSize:'small',sort:v?.sort==='name'?'name':'recent',viewMode:v?.viewMode===3?3:2};}catch{return {...defaultDisplayPreferences};}}
+export type DisplayPreferences={cardSize:'small'|'medium'|'large';sort:'recent'|'name';viewMode:2|3;sidebarCollapsed:boolean};
+export const defaultDisplayPreferences:DisplayPreferences={cardSize:'small',sort:'recent',viewMode:2,sidebarCollapsed:false};
+function parse(value:string|null):DisplayPreferences{try{const v=JSON.parse(value||'{}');return {cardSize:['small','medium','large'].includes(v?.cardSize)?v.cardSize:'small',sort:v?.sort==='name'?'name':'recent',viewMode:v?.viewMode===3?3:2,sidebarCollapsed:v?.sidebarCollapsed===true};}catch{return {...defaultDisplayPreferences};}}
 export function useDisplayPreferences(uid:string){
  const [state,setState]=useState({uid:'',value:defaultDisplayPreferences}),[error,setError]=useState('');
  const current=useRef(state),key=`trainer-note:display:v1:${uid}`;
