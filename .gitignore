@@ -11,3 +11,6 @@ firebase-debug*.log
 firestore-debug.log
 functions/generated/
 functions/.secret.local
+
+# PDF.js runtime assets copied from the pinned npm package
+public/pdfjs/
