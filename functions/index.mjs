@@ -38,6 +38,7 @@ export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
  if(!request.auth)throw new HttpsError('unauthenticated','로그인이 필요해요.');const uid=request.auth.uid,data=input(request.data);
  if(!(await db.doc(`trainers/${uid}/members/${data.memberId}`).get()).exists)throw new HttpsError('not-found','회원 정보를 찾을 수 없어요.');
  try{
+  if(data.action==='chat')return await service.chat(uid,data.memberId,data);
   if(data.action==='read'&&data.fileId)return await service.startImport(uid,data.memberId,data.fileId,!!data.retry);
   if(data.action==='review'&&data.fileId){await service.reviewImport(uid,data.memberId,data.fileId,data);return {ok:true};}
   if(data.action==='report'){if(data.retry)await service.retryReport(uid,data.memberId);else await service.scheduleReport(uid,data.memberId);return {ok:true};}

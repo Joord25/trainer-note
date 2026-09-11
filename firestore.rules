@@ -63,7 +63,7 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow delete: if isOwner(uid) && resource.data.get('fileCount',0) == 0 && resource.data.get('recordCount',0) == 0;
       match /{kind}/{id} {
-        allow read: if kind in ['imports','analysis','reports','plans','corrections','judgmentSettings','judgmentDecisions','judgmentOutcomes'] && isOwner(uid)
+        allow read: if kind in ['imports','analysis','reports','plans','chats','corrections','judgmentSettings','judgmentDecisions','judgmentOutcomes'] && isOwner(uid)
           && exists(/databases/$(database)/documents/trainers/$(uid)/members/$(memberId));
         allow write: if false;
       }

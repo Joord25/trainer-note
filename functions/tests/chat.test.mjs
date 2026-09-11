@@ -1,0 +1,7 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {validateChatRequest,validateChatAnswer} from '../chat.mjs';
+const request={requestId:'11111111-1111-4111-a111-111111111111',question:'이번 기록은 어때?',fileId:'a'.repeat(64)};
+test('chat rejects unbounded question, invalid source and foreign path traversal',()=>{for(const v of [{question:''},{question:'a'.repeat(1201)},{fileId:'../other'},{previousId:'../other'},{requestId:'x'}])assert.throws(()=>validateChatRequest({...request,...v}));});
+test('selected image requires valid source/page/normalized bounds and bounded JPEG bytes',()=>{const s={page:1,rect:{x:0,y:0,width:.5,height:.5},image:'data:image/jpeg;base64,'+Buffer.from([255,216,255,...new Array(20).fill(0)]).toString('base64')};assert.ok(validateChatRequest({...request,selection:s}).image);for(const patch of [{page:0},{rect:{...s.rect,x:.8}},{image:'https://example.com/private.jpg'},{image:'data:image/jpeg;base64,'+'x'.repeat(500000)}])assert.throws(()=>validateChatRequest({...request,selection:{...s,...patch}}));});
+test('chat references are limited to supplied records',()=>{assert.throws(()=>validateChatAnswer({answer:'답변',references:['foreign'],questions:[]},[{id:'local'}]));assert.deepEqual(validateChatAnswer({answer:'기록 없음',references:['none'],questions:[]},[]).references,[]);assert.throws(()=>validateChatAnswer({answer:'a'.repeat(2201),references:[],questions:[]},[]));});

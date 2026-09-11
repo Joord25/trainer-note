@@ -1,7 +1,8 @@
+import {CHAT_VERSION,CHAT_PROMPT,validateChatRequest,chatSchema,validateChatAnswer} from './chat.mjs';
 import {evaluateJudgment,selectCases,validateCriteria,modelJudgmentContext,judgmentResponseSchema,judgmentDate} from './judgment.mjs';
 import {randomUUID} from 'node:crypto';
 import {FieldValue,Timestamp} from 'firebase-admin/firestore';
-import {parseExtraction,EXTRACTION_PROMPT,EXTRACTION_SCHEMA} from './generated/extraction.mjs';
+import {parseExtraction,EXTRACTION_PROMPT,EXTRACTION_SCHEMA,EXTRACTION_VERSION} from './generated/extraction.mjs';
 import {MODEL,REPORT_VERSION,PRICE_VERSION,LIMITS,hash,costMicros,classify,summarize,reportFingerprint,REPORT_PROMPT,REPORT_SCHEMA,validateReport,validInput,openApiSchema} from './domain.mjs';
 const stamp=()=>FieldValue.serverTimestamp();
 const dateKeys=now=>{const d=new Date(now+9*3600000).toISOString().slice(0,10);return {month:d.slice(0,7),day:d};};
@@ -66,7 +67,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    const old=i.data();if(old?.status==='ready')return;if(old?.status==='processing'&&old.startedAt?.toMillis()>now()-180000)return;
    if(old&&!retry)return;
    source={id:fileId,...f.data()};memberData=m.data();if(source.size>10*1024*1024){tx.set(ref,{status:'error',name:source.name,rows:[],unparsed:[],revision:0,error:'자동 판독은 파일당 10MB까지 가능해요. 파일을 나눠주세요.',updatedAt:stamp()});return;}
-   tx.set(ref,{status:'processing',job,model:MODEL,promptVersion:'workout-v1',name:source.name,contentType:source.contentType,revision:old?.revision||0,rows:old?.rows||[],unparsed:old?.unparsed||[],startedAt:Timestamp.fromMillis(now()),updatedAt:stamp(),error:''},{merge:true});claimed=true;
+   tx.set(ref,{status:'processing',job,model:MODEL,promptVersion:EXTRACTION_VERSION,name:source.name,contentType:source.contentType,revision:old?.revision||0,rows:old?.rows||[],unparsed:old?.unparsed||[],startedAt:Timestamp.fromMillis(now()),updatedAt:stamp(),error:''},{merge:true});claimed=true;
   });
   if(!claimed)return {cached:true};
   try{
@@ -157,6 +158,27 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   if(!/^\d{4}-\d{2}-\d{2}$/.test(observedDate)||!Number.isFinite(Date.parse(observedDate))||new Date(observedDate).toISOString().slice(0,10)!==observedDate||observedDate>judgmentDate(now()))throw Error('실제로 관찰한 날짜를 입력해주세요.');
   await db.runTransaction(async tx=>{const [parent,decision,existing]=await tx.getAll(member,member.collection('judgmentDecisions').doc(decisionId),ref);if(!parent.exists||!decision.exists)throw Error('연결할 판단이 없어요.');if(existing.exists)return;if(observedDate<judgmentDate(decision.data().createdAt.toMillis()))throw Error('판단 이전 결과를 후속 결과로 기록할 수 없어요.');tx.create(ref,{decisionId,result:request.result,note,observedDate,records:records.filter(r=>r.date===observedDate).slice(0,10).map(r=>({id:r.id,date:r.date,exerciseName:r.exerciseName,sets:r.sets})),createdAt:Timestamp.fromMillis(now())});});await scheduleReport(uid,mid);return {id};
  }
- return {startImport,reviewImport,buildReport,scheduleReport,retryReport,savePlan,paid,saveJudgmentCriteria,saveJudgmentDecision,saveJudgmentOutcome};
+ async function chat(uid,mid,request){
+  const input=validateChatRequest(request),{image,...storedInput}=input,member=memberRef(uid,mid),ref=member.collection('chats').doc(input.requestId),payloadHash=hash({...storedInput,version:CHAT_VERSION});
+  const [m,allRecords,a,p,source,importSnap]=await Promise.all([member.get(),recordsFor(member),member.collection('analysis').doc('current').get(),member.collection('plans').doc('current').get(),input.fileId?member.collection('files').doc(input.fileId).get():null,input.fileId?member.collection('imports').doc(input.fileId).get():null]);
+  if(!m.exists)throw Error('회원이 없어요.');
+  if(input.fileId&&(!source?.exists||source.data().status!=='ready'))throw Error('저장된 회원 원본을 선택해주세요.');
+  if(input.selection&&source.data().contentType!=='application/pdf'&&input.selection.page!==1)throw Error('이미지 원본은 1쪽만 선택할 수 있어요.');
+  const selectedRecords=allRecords.filter(r=>!input.fileId||r.sourceHash===input.fileId),byId=new Map(selectedRecords.map(r=>[r.id,r]));
+  for(const row of importSnap?.data()?.rows??[])if(row.review!=='ignored'&&!byId.has(row.id))byId.set(row.id,{id:row.id,...row.input,status:row.review});
+  const records=[...byId.values()].slice(0,120).map(({id,date,rawName,exerciseName,bodyPart,loadType,sets,notes,sourceHash,sourcePage,status})=>({id,date,rawName,exerciseName,bodyPart,loadType,sets,notes,sourceHash,sourcePage,status}));
+  const history=[];let previous=input.previousId;
+  for(let i=0;i<3&&previous;i++){const doc=await member.collection('chats').doc(previous).get(),v=doc.data();if(v?.status!=='ready')throw Error('이전 답변이 완료된 뒤 질문해주세요.');history.unshift({question:v.question,answer:v.answer});previous=v.previousId;}
+  let claimed=false;const job=randomUUID();
+  await db.runTransaction(async tx=>{claimed=false;const [parent,current]=await tx.getAll(member,ref);if(!parent.exists)throw Error('회원이 없어요.');const v=current.data();if(v){if(v.payloadHash!==payloadHash)throw Error('같은 질문 식별자로 다른 내용을 보낼 수 없어요.');if(v.status==='ready'||v.status==='error')return;if(v.startedAt?.toMillis()>now()-180000)throw Error('도우미가 답변 중이에요. 잠시 기다려주세요.');}
+   tx.set(ref,{...storedInput,payloadHash,status:'processing',job,createdAt:v?.createdAt??Timestamp.fromMillis(now()),startedAt:Timestamp.fromMillis(now()),updatedAt:stamp(),version:CHAT_VERSION});claimed=true;});
+  if(!claimed){const v=(await ref.get()).data();if(v.status==='error')throw Error(v.error);return {answer:v.answer,references:v.references,questions:v.questions,cached:true};}
+  try{
+   const analysis=a.data(),facts={question:input.question,history,scope:input.fileId?{fileId:input.fileId,name:source.data().name,selection:input.selection}: '최근 회원 기록 최대120개',goal:m.data().goal,notes:m.data().notes,records,summary:summarize(selectedRecords),analysis:analysis?.report??null,analysisStatus:analysis?.status??'missing',judgmentContext:analysis?.judgmentContext?modelJudgmentContext(analysis.judgmentContext):null,plan:p.data()?.program??[]};
+   const result=await paid(uid,'assistant-chat',{system:CHAT_PROMPT,schema:chatSchema(records),parts:[{text:JSON.stringify(facts)},...(image?[image]:[])]},1800),answer=validateChatAnswer(result.value,records);
+   await db.runTransaction(async tx=>{const [parent,current]=await tx.getAll(member,ref);if(!parent.exists||current.data()?.job!==job)throw Error('대화 상태가 변경됐어요.');tx.update(ref,{...answer,status:'ready',usage:result.usage,updatedAt:stamp()});});return {...answer,cached:false};
+  }catch(e){await db.runTransaction(async tx=>{const [parent,current]=await tx.getAll(member,ref);if(parent.exists&&current.data()?.job===job)tx.update(ref,{status:'error',error:safeError(e),updatedAt:stamp()});});throw e;}
+ }
+ return {startImport,reviewImport,buildReport,scheduleReport,retryReport,savePlan,paid,saveJudgmentCriteria,saveJudgmentDecision,saveJudgmentOutcome,chat};
 }
 export function safeError(e){const s=String(e?.message||'');if(s.startsWith('AI_USAGE_LIMIT:'))return s.slice(15);if(/ACCESS_TOKEN_TYPE_UNSUPPORTED|invalid authentication credentials|API key not valid/i.test(s))return 'Gemini 인증 설정을 확인해주세요. 서비스 관리자에게 알려주세요.';if(/prepayment|credits.*depleted/i.test(s))return 'Gemini 크레딧이 부족해요. 서비스 관리자에게 알려주세요.';if(/429|quota/i.test(s))return 'AI 요청 한도에 도달했어요. 저장된 결과는 계속 볼 수 있어요.';if(/^[가-힣]/.test(s))return s.slice(0,500);return 'AI 작업을 완료하지 못했어요. 저장된 기록은 유지됩니다. 다시 시도할 수 있어요.';}

@@ -1,5 +1,5 @@
 "use client";
-import {collection,doc,getFirestore,onSnapshot} from "firebase/firestore";
+import {collection,doc,getFirestore,onSnapshot,query,orderBy,limitToLast} from "firebase/firestore";
 import {getFunctions,httpsCallable} from "firebase/functions";
 import {getClientAuth} from "./firebase-client";
 import type {ExtractedWorkout} from "./workout-extraction";
@@ -16,3 +16,6 @@ export function aiMessage(e:unknown){return e instanceof Error?e.message.replace
 export function listenImports(mid:string,cb:(rows:SavedImport[])=>void,error:(e:unknown)=>void){const s=scope();return onSnapshot(collection(s.db,'trainers',s.uid,'members',mid,'imports'),snapshot=>cb(snapshot.docs.map(d=>({id:d.id,...d.data()} as SavedImport))),error);}
 export function listenAiDocument<T>(mid:string,kind:'analysis'|'plans',cb:(v:T|null)=>void,error:(e:unknown)=>void){const s=scope();return onSnapshot(doc(s.db,'trainers',s.uid,'members',mid,kind,'current'),snapshot=>{if(!snapshot.metadata.fromCache||snapshot.exists())cb(snapshot.exists()?snapshot.data() as T:null);},error);}
 export function listenUsage(cb:(v:AiUsage)=>void,error:(e:unknown)=>void){const s=scope(),month=new Date(Date.now()+9*3600000).toISOString().slice(0,7);return onSnapshot(doc(s.db,'trainers',s.uid,'aiUsage',month),d=>cb(d.data()??{}),error);}
+
+export type ChatMessage={id:string;question:string;fileId:string;previousId:string;status:'processing'|'ready'|'error';answer?:string;references?:string[];questions?:string[];error?:string;selection?:{page:number;rect:{x:number;y:number;width:number;height:number}}};
+export function listenChats(mid:string,cb:(v:ChatMessage[])=>void,error:(e:unknown)=>void){const s=scope();return onSnapshot(query(collection(s.db,'trainers',s.uid,'members',mid,'chats'),orderBy('createdAt','asc'),limitToLast(40)),snapshot=>cb(snapshot.docs.map(d=>({id:d.id,...d.data()} as ChatMessage))),error);}

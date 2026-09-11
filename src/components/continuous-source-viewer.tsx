@@ -1,6 +1,7 @@
 "use client";
 
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
+import type {SourceSelection} from './assistant-chat';
 import type {PDFDocumentProxy, PDFDocumentLoadingTask, RenderTask} from 'pdfjs-dist';
 import {readMemberFile, fileError, type MemberFile} from '../lib/member-files';
 
@@ -8,8 +9,8 @@ type Viewport = RefObject<HTMLDivElement | null>;
 type Position = {fileId: string; page: number; total: number};
 
 /** Originals stay separate in Storage; only the browser presentation is continuous. */
-export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePage = 1}: {
-  memberId: string; files: MemberFile[]; selectedFile: string; sourcePage?: number;
+export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePage = 1, selectionMode=false, onSelection, jumpRequest=0}: {
+  memberId: string; files: MemberFile[]; selectedFile: string; sourcePage?: number; selectionMode?:boolean; onSelection?:(s:SourceSelection)=>void; jumpRequest?:number;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
@@ -39,7 +40,7 @@ export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePag
       <div className="original-stream" style={{width: Math.round(width * zoom / 100)}}>
         {files.map((file, i) => <SourceDocument key={`${memberId}/${file.id}`} memberId={memberId} file={file}
           index={i + 1} viewport={viewport} width={Math.round(width * zoom / 100)}
-          selected={selectedFile === file.id} sourcePage={sourcePage} onPosition={setPosition}/>) }
+          selected={selectedFile === file.id} sourcePage={sourcePage} onPosition={setPosition} selectionMode={selectionMode} onSelection={onSelection} jumpRequest={jumpRequest}/>) }
         <p className="original-end">원본 {files.length}개 · 마지막 파일이에요</p>
       </div>
     </div>
@@ -62,9 +63,9 @@ function useNearby(ref: RefObject<HTMLElement | null>, viewport: Viewport, margi
   return near;
 }
 
-function SourceDocument({memberId, file, index, viewport, width, selected, sourcePage, onPosition}: {
+function SourceDocument({memberId, file, index, viewport, width, selected, sourcePage, onPosition, selectionMode, onSelection, jumpRequest}: {
   memberId: string; file: MemberFile; index: number; viewport: Viewport; width: number;
-  selected: boolean; sourcePage: number; onPosition: (p: Position) => void;
+  selected: boolean; sourcePage: number; onPosition: (p: Position) => void; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; jumpRequest:number;
 }) {
   const container = useRef<HTMLElement>(null);
   const near = useNearby(container, viewport, '600px', true);
@@ -126,7 +127,7 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
     root?.addEventListener('touchstart', cancel, {passive: true});
     root?.addEventListener('keydown', cancel);
     return () => {root?.removeEventListener('wheel', cancel); root?.removeEventListener('touchstart', cancel); root?.removeEventListener('keydown', cancel);};
-  }, [selected, document, jump, viewport]);
+  }, [selected, document, jump, viewport, jumpRequest]);
   const pageReady = useCallback(() => {
     if (!pendingJump.current) return;
     requestAnimationFrame(() => {if (pendingJump.current) {jump(); pendingJump.current = false;}});
@@ -138,19 +139,19 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
     </header>
     {file.status !== 'ready' ? <p className="original-placeholder" role="status">{file.status === 'deleting' ? '삭제 중인 원본이에요.' : '원본을 저장하고 있어요…'}</p>
       : error || imageError ? <div className="original-placeholder" role="alert"><p>{error || '이미지를 표시할 수 없어요. 파일을 다시 확인해주세요.'}</p><button onClick={() => setAttempt(v => v + 1)}>원본 다시 불러오기</button></div>
-      : document ? Array.from({length: total}, (_, i) => <SourcePage key={i} fileId={file.id} number={i + 1} total={total} viewport={viewport} onPosition={onPosition}>
+      : document ? Array.from({length: total}, (_, i) => <SourcePage key={i} fileId={file.id} number={i + 1} total={total} viewport={viewport} onPosition={onPosition} selectionMode={selectionMode} onSelection={onSelection} fileName={file.name}>
           <PdfCanvas pdf={document} number={i + 1} width={width} viewport={viewport} onReady={i + 1 === page ? pageReady : undefined}/>
         </SourcePage>)
-      : url && file.contentType !== 'application/pdf' ? <SourcePage fileId={file.id} number={1} total={1} viewport={viewport} onPosition={onPosition}>
+      : url && file.contentType !== 'application/pdf' ? <SourcePage fileId={file.id} number={1} total={1} viewport={viewport} onPosition={onPosition} selectionMode={selectionMode} onSelection={onSelection} fileName={file.name}>
           <img src={url} alt={`${file.name} 원본`} onLoad={pageReady} onError={() => setImageError(true)}/>
         </SourcePage>
       : <p className="original-placeholder" role="status">{requested ? '원본을 불러오고 있어요…' : '스크롤하면 원본을 불러와요'}</p>}
   </section>;
 }
 
-function SourcePage({fileId, number, total, viewport, onPosition, children}: {
+function SourcePage({fileId, number, total, viewport, onPosition, children, selectionMode, onSelection, fileName}: {
   fileId: string; number: number; total: number; viewport: Viewport;
-  onPosition: (p: Position) => void; children: React.ReactNode;
+  onPosition: (p: Position) => void; children: React.ReactNode; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; fileName:string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -163,7 +164,7 @@ function SourcePage({fileId, number, total, viewport, onPosition, children}: {
     return () => observer.disconnect();
   }, [fileId, number, total, viewport, onPosition]);
   return <div className="original-page" ref={ref} data-source-page={number}>
-    {children}<span className="original-page-label">{number} / {total}</span>
+    <PageSelection enabled={selectionMode} onSelect={value=>onSelection?.({fileId,fileName,page:number,...value})}>{children}</PageSelection><span className="original-page-label">{number} / {total}</span>
   </div>;
 }
 
@@ -203,4 +204,18 @@ function PdfCanvas({pdf, number, width, viewport, onReady}: {pdf: PDFDocumentPro
     <div ref={ref} className="original-canvas"/>
     {error && <p role="alert">이 페이지를 표시하지 못했어요. 위 ‘크게 보기’에서 확인해주세요.</p>}
   </div>;
+}
+
+function PageSelection({enabled,onSelect,children}:{enabled:boolean;onSelect:(v:Pick<SourceSelection,'rect'|'image'>)=>void;children:React.ReactNode}){
+ const host=useRef<HTMLDivElement>(null),start=useRef<{x:number;y:number}|null>(null);
+ const [box,setBox]=useState<{x:number;y:number;width:number;height:number}|null>(null),[error,setError]=useState('');
+ function point(e:React.PointerEvent){const b=host.current!.getBoundingClientRect();return {x:Math.max(0,Math.min(1,(e.clientX-b.left)/b.width)),y:Math.max(0,Math.min(1,(e.clientY-b.top)/b.height))};}
+ function capture(rect:{x:number;y:number;width:number;height:number}){
+  const source=host.current?.querySelector<HTMLCanvasElement|HTMLImageElement>('canvas,img');if(!source){setError('페이지가 표시된 뒤 선택해주세요.');return;}
+  const w=source instanceof HTMLImageElement?source.naturalWidth:source.width,h=source instanceof HTMLImageElement?source.naturalHeight:source.height;if(!w||!h)return;
+  const out=document.createElement('canvas'),scale=Math.min(1,1000/Math.max(w*rect.width,h*rect.height));out.width=Math.max(1,Math.round(w*rect.width*scale));out.height=Math.max(1,Math.round(h*rect.height*scale));const ctx=out.getContext('2d')!;ctx.fillStyle='#fff';ctx.fillRect(0,0,out.width,out.height);ctx.drawImage(source,rect.x*w,rect.y*h,rect.width*w,rect.height*h,0,0,out.width,out.height);
+  const image=out.toDataURL('image/jpeg',.75);if(image.length>500000){setError('더 작은 영역을 선택해주세요.');return;}setError('');onSelect({rect,image});
+ }
+ return <div className="original-selectable" ref={host}>{children}{enabled&&<div className="original-selection-layer" role="group" aria-label="질문할 원본 영역 선택" onPointerDown={e=>{if((e.target as HTMLElement).closest('button'))return;start.current=point(e);setBox(null);e.currentTarget.setPointerCapture(e.pointerId);}} onPointerMove={e=>{const a=start.current;if(!a)return;const b=point(e);setBox({x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(a.x-b.x),height:Math.abs(a.y-b.y)});}} onPointerUp={e=>{const a=start.current;start.current=null;if(!a)return;const b=point(e),rect={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.abs(a.x-b.x),height:Math.abs(a.y-b.y)};setBox(null);if(rect.width>.02&&rect.height>.02)capture(rect);}} onPointerCancel={()=>{start.current=null;setBox(null);}}>
+ <button type="button" onClick={()=>capture({x:0,y:0,width:1,height:1})}>이 페이지 전체 질문</button>{box&&<span className="original-selection-box" style={{left:box.x*100+'%',top:box.y*100+'%',width:box.width*100+'%',height:box.height*100+'%'}}/>}</div>}{error&&<p role="alert">{error}</p>}</div>;
 }
