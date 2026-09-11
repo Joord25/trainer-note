@@ -63,3 +63,23 @@
 - One checklist combines ambiguous records and unparsed source text. Each item opens the source page and inline correction. A footer adds an exercise linked to that page. Resolving unparsed text atomically adds the record and removes the checklist entry, including after later year changes.
 - Analysis options provide text scaling (100–200%), clipboard copy, PDF through the browser print dialog, and explicit regeneration. Regeneration uses a new cache generation under the analysis namespace and the existing quota checks; it never rereads the source or overwrites a saved trainer lesson plan.
 - Proposed next data-model change, not enabled yet: represent unilateral repetitions as left/right counts on one set, e.g. `좌 10 / 우 10`, with the load basis recorded separately. Keep one exercise and one bilateral round rather than silently converting to 20 reps or two exercises. Compute comparisons only with compatible side/load conventions. Ambiguous `LR 10` remains a review item until the trainer confirms whether it means each side or total.
+
+## Visual source navigator and record cards (2026-09-12)
+
+The source toolbar opens a thumbnail rail instead of an operating-system file-name select. Image files have one thumbnail; PDFs have one per physical page. Thumbnails reuse the viewer's loaded Blob/PDF document and render nearby canvases only. Selecting one moves to the matching original and record page. The rail can be collapsed to restore reading width.
+
+A record paper includes its original file name in the heading and opens that original from any non-interactive card area (or Enter/Space on the focused card). Inputs and correction buttons keep their own actions. The repeated member-name/count strip is removed; the exercise count appears beside the exercise-list heading.
+
+## Proposed distance/time records and trainer explanations
+
+This proposal is not an implemented record-schema change. The current kg/reps schema cannot represent a SkiErg 200 m interval completed in 32 s. More prompting alone cannot fix this constraint.
+
+1. Introduce a versioned, discriminated measurement kind: repetitions, distance/time, duration, distance, and eventually calories. For distance/time, store each interval's distanceMeters and durationSeconds separately, plus optional restSeconds and equipment/resistance notes. Preserve the original strings and source page. Never turn 200 m into 200 kg or 32 s into 32 reps.
+2. Let the trainer confirm `sky erg` as `SkiErg` for their own workspace. Ask when ambiguous: fixed distance or fixed time, units, interval/rest structure, machine/drag factor, and the intended training task. Do not infer these from a machine name alone.
+3. From an unparsed item, provide an explanation action in the assistant, linked to that exact source page. The assistant proposes a structured correction; the trainer checks the values before saving. Save an approved interpretation rule separately from free-form chat, with trainer scope, original evidence, revision, and an edit/remove action. Do not automatically turn every chat sentence into a permanent rule.
+4. Supply relevant saved explanations to subsequent extraction and report requests. This is saved context/retrieval, not automatic retraining of Gemini weights. Apply a one-session intent to that session; apply a trainer-wide abbreviation only when that scope was explicitly selected. A later source value overrides an old default.
+5. Compare like-for-like intervals: same equipment, distance, resistance and rest conditions. Show time, pace and completion separately from weighted volume. Missing comparison conditions trigger a follow-up question; neither faster completion nor the machine name alone establishes physiological improvement.
+
+Reference: Concept2 PM5 documentation describes fixed distance/time workouts and results/splits: https://www.concept2.com/support/monitors/pm5/how-to-use
+
+For popup authentication the app returns `Cross-Origin-Opener-Policy: same-origin-allow-popups`. A Google/Firebase popup's own report-only diagnostics can still appear independently of whether login completes. Do not silence console errors or disable Auth/App Check to address a transport failure. Verify the actual callable URL and its preflight response before describing AI connectivity as working.

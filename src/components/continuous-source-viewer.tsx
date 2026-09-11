@@ -6,13 +6,21 @@ import type {PDFDocumentProxy, PDFDocumentLoadingTask, RenderTask} from 'pdfjs-d
 import {readMemberFile, fileError, type MemberFile} from '../lib/member-files';
 
 type Viewport = RefObject<HTMLDivElement | null>;
+type PreviewAsset = {url:string;pdf:PDFDocumentProxy|null;error:string};
 type Position = {fileId: string; page: number; total: number};
 
 /** Originals stay separate in Storage; only the browser presentation is continuous. */
-export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePage = 1, selectionMode=false, onSelection, jumpRequest=0, onPageClick}: {
-  memberId: string; files: MemberFile[]; selectedFile: string; sourcePage?: number; selectionMode?:boolean; onSelection?:(s:SourceSelection)=>void; jumpRequest?:number; onPageClick?:(fileId:string,page:number)=>void;
+export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePage = 1, selectionMode=false, onSelection, jumpRequest=0, onPageClick, thumbnailsOpen=false, onNavigate}: {
+  memberId: string; files: MemberFile[]; selectedFile: string; sourcePage?: number; selectionMode?:boolean; onSelection?:(s:SourceSelection)=>void; jumpRequest?:number; onPageClick?:(fileId:string,page:number)=>void; thumbnailsOpen?:boolean; onNavigate?:(fileId:string,page:number)=>void|boolean;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
+  const thumbnailViewport=useRef<HTMLDivElement>(null);
+  const [assets,setAssets]=useState<Record<string,PreviewAsset>>({}),[requestedPreviews,setRequestedPreviews]=useState(new Set<string>()),[localTarget,setLocalTarget]=useState<{id:string;page:number;request:number}|null>(null);
+  const assetReady=useCallback((id:string,value:PreviewAsset|null)=>setAssets(old=>{const next={...old};if(value)next[id]=value;else delete next[id];return next;}),[]);
+  const requestPreview=useCallback((id:string)=>setRequestedPreviews(old=>old.has(id)?old:new Set([...old,id])),[]);
+  useEffect(()=>setLocalTarget(null),[selectedFile,sourcePage,jumpRequest]);
+  function navigate(id:string,page:number){if(onNavigate?.(id,page)===false)return;setLocalTarget(v=>({id,page,request:(v?.request||0)+1}));}
+  const targetFile=localTarget?.id||selectedFile,targetPage=localTarget?.page||sourcePage;
   const [width, setWidth] = useState(320);
   const [zoom, setZoom] = useState(100);
   const [position, setPosition] = useState<Position | null>(null);
@@ -36,14 +44,16 @@ export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePag
         <button aria-label="원본 확대" disabled={zoom >= 200} onClick={() => setZoom(v => v + 25)}>+</button>
       </div>
     </div>
+    <div className="original-viewer-body">
+    {thumbnailsOpen&&<div className="original-thumbnails" ref={thumbnailViewport} aria-label="원본 페이지 미리보기">{files.map((file,i)=><ThumbnailDocument key={file.id} file={file} index={i+1} asset={assets[file.id]} viewport={thumbnailViewport} onRequest={requestPreview} current={position} onNavigate={navigate}/>)}</div>}
     <div className="original-scroll" ref={viewport} tabIndex={0} aria-label="모든 원본 연속 보기">
       <div className="original-stream" style={{width: Math.round(width * zoom / 100)}}>
         {files.map((file, i) => <SourceDocument key={`${memberId}/${file.id}`} memberId={memberId} file={file}
           index={i + 1} viewport={viewport} width={Math.round(width * zoom / 100)}
-          selected={selectedFile === file.id} sourcePage={sourcePage} onPosition={setPosition} selectionMode={selectionMode} onSelection={onSelection} jumpRequest={jumpRequest} onPageClick={onPageClick}/>) }
+          selected={targetFile === file.id} sourcePage={targetPage} onPosition={setPosition} selectionMode={selectionMode} onSelection={onSelection} jumpRequest={jumpRequest+(localTarget?.request||0)} onPageClick={onPageClick} onAsset={assetReady} forceLoad={requestedPreviews.has(file.id)}/>) }
         <p className="original-end">원본 {files.length}개 · 마지막 파일이에요</p>
       </div>
-    </div>
+    </div></div>
   </div>;
 }
 
@@ -63,9 +73,16 @@ function useNearby(ref: RefObject<HTMLElement | null>, viewport: Viewport, margi
   return near;
 }
 
-function SourceDocument({memberId, file, index, viewport, width, selected, sourcePage, onPosition, selectionMode, onSelection, jumpRequest, onPageClick}: {
+function ThumbnailDocument({file,index,asset,viewport,onRequest,current,onNavigate}:{file:MemberFile;index:number;asset?:PreviewAsset;viewport:Viewport;onRequest:(id:string)=>void;current:Position|null;onNavigate:(id:string,page:number)=>void}){
+ const ref=useRef<HTMLDivElement>(null),near=useNearby(ref,viewport,'200px',true);
+ useEffect(()=>{if(near)onRequest(file.id);},[near,file.id,onRequest]);
+ const total=asset?.pdf?.numPages||1;
+ return <div ref={ref} className="thumbnail-document"><span className="thumbnail-file-name" title={file.name}>{String(index).padStart(2,'0')} · {file.name}</span>{Array.from({length:total},(_,i)=><button key={i} className="original-thumbnail" aria-label={`${file.name} ${i+1}쪽 미리보기`} aria-current={current?.fileId===file.id&&current.page===i+1?'page':undefined} onClick={()=>onNavigate(file.id,i+1)}>{asset?.pdf?<PdfCanvas pdf={asset.pdf} number={i+1} width={112} viewport={viewport}/>:asset?.url&&file.contentType!=='application/pdf'?<img src={asset.url} alt="" loading="lazy"/>:<span className="thumbnail-placeholder">{asset?.error?'미리보기 오류':file.status!=='ready'?'저장 중':'불러오는 중'}</span>}<small>{i+1} / {total}</small></button>)}</div>;
+}
+
+function SourceDocument({memberId, file, index, viewport, width, selected, sourcePage, onPosition, selectionMode, onSelection, jumpRequest, onPageClick, onAsset, forceLoad}: {
   memberId: string; file: MemberFile; index: number; viewport: Viewport; width: number;
-  selected: boolean; sourcePage: number; onPosition: (p: Position) => void; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; jumpRequest:number; onPageClick?:(fileId:string,page:number)=>void;
+  selected: boolean; sourcePage: number; onPosition: (p: Position) => void; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; jumpRequest:number; onAsset:(id:string,asset:PreviewAsset|null)=>void; forceLoad:boolean; onPageClick?:(fileId:string,page:number)=>void;
 }) {
   const container = useRef<HTMLElement>(null);
   const near = useNearby(container, viewport, '600px', true);
@@ -75,7 +92,7 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
   const [error, setError] = useState('');
   const [requested, setRequested] = useState(false);
   const [imageError, setImageError] = useState(false);
-  useEffect(() => {if (near || selected) setRequested(true);}, [near, selected]);
+  useEffect(() => {if (near || selected || forceLoad) setRequested(true);}, [near, selected, forceLoad]);
   useEffect(() => {
     if (!requested || file.status !== 'ready') return;
     let live = true, objectUrl = '', task: PDFDocumentLoadingTask | undefined;
@@ -108,6 +125,7 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
     })();
     return () => {live = false; if (objectUrl) URL.revokeObjectURL(objectUrl); void task?.destroy();};
   }, [requested, memberId, file.id, file.contentType, file.status, attempt]);
+  useEffect(()=>{if(url||error)onAsset(file.id,{url,pdf:document,error});return()=>onAsset(file.id,null);},[file.id,url,document,error,onAsset]);
   const total = document?.numPages ?? 1;
   const page = Math.min(total, Math.max(1, sourcePage));
   const pendingJump = useRef(false);
