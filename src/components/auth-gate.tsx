@@ -105,14 +105,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
   </main>;
 }
 
-export function AccountControl() {
+export function AccountControl({onSettings,beforeLogout}:{onSettings?:()=>void;beforeLogout?:()=>boolean}={}) {
   const user = useTrainer();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const pending = useRef(false);
   const name = user.displayName || user.email?.split("@")[0] || "트레이너";
   async function logout() {
-    if (pending.current) return;
+    if (pending.current || (beforeLogout && !beforeLogout())) return;
     pending.current = true;
     setBusy(true);
     setError("");
@@ -121,13 +121,13 @@ export function AccountControl() {
     finally { pending.current = false; setBusy(false); }
   }
   return <section className="trainer-account" aria-label="내 계정">
-    <div className="workspace-profile" title={user.email || name}>
+    {onSettings?<button className="workspace-profile account-settings-trigger" title="설정" aria-label="계정 설정 열기" onClick={onSettings}><span className="avatar" aria-hidden="true">{name.slice(0,1).toUpperCase()}</span><span className="account-copy"><strong>{name}</strong><small>{user.email||"Google 계정"}</small></span><span className="account-settings-dots" aria-hidden="true">···</span></button>:<div className="workspace-profile" title={user.email || name}>
       <span className="avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
       <div className="account-copy"><strong>{name}</strong><small>{user.email || "Google 계정"}</small></div>
-    </div>
-    <button className="account-signout" onClick={() => void logout()} disabled={busy} aria-label={busy ? "로그아웃 중" : "로그아웃"} title="로그아웃">
+    </div>}
+    {!onSettings&&<button className="account-signout" onClick={() => void logout()} disabled={busy} aria-label={busy ? "로그아웃 중" : "로그아웃"} title="로그아웃">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5H5v14h4M13 8l4 4-4 4M9 12h12"/></svg><span>{busy ? "로그아웃 중…" : "로그아웃"}</span>
-    </button>
+    </button>}
     {error && <p className="account-error" role="alert">{error}</p>}
   </section>;
 }

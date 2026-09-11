@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AccountControl, useTrainer } from "./auth-gate";
 import { Icon } from "./icons";
+import {SettingsDialog} from "./settings-dialog";
+import {useDisplayPreferences} from "../lib/display-preferences";
 import {MemberDirectory} from "./member-directory";
 import {LiveAnalysisWorkspace} from "./live-analysis-workspace";
 
@@ -12,6 +14,8 @@ type Editor = { kind: "create" } | { kind: "edit"; member: Member } | { kind: "d
 
 export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const trainer = useTrainer();
+  const {preferences,update:updatePreferences,error:preferenceError}=useDisplayPreferences(trainer.uid);
+  const [settings,setSettings]=useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [home,setHome]=useState(true);
@@ -61,19 +65,20 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
       {!showHome&&selected&&<details className="sidebar-member-actions" key={selected.id}><summary><span>{selected.name} 회원 관리</span><Icon name="more" size={17}/></summary><div><button disabled={!available} onClick={()=>setEditor({kind:"edit",member:selected})}>회원 정보 수정</button><button disabled={!online} onClick={()=>setUploadRequest(v=>v+1)}>일지 추가</button><button className="member-delete-button" disabled={!available||selected.pending||selected.fileCount>0||selected.recordCount>0} title={selected.fileCount>0||selected.recordCount>0?"연결된 파일과 운동 기록을 먼저 삭제해주세요.":undefined} onClick={()=>setEditor({kind:"delete",member:selected})}>회원 삭제</button></div></details>}
       <span className="sidebar-sync" role="status">{!online ? "오프라인" : cached ? "서버 연결 중" : "연결됨"}</span>
       <button className="member-demo-button" onClick={()=>{if(!unsaved.current||window.confirm('저장하지 않은 수정 내용을 버리고 예시로 이동할까요?'))onDemo();}} title="예시 둘러보기"><Icon name="chart" size={17}/><span>예시 둘러보기</span></button>
-      <AccountControl/>
+      <AccountControl onSettings={()=>setSettings(true)}/>
     </aside>
     <main className="main-workspace real-main">
 
       <div className="real-content">
         {!online && <div className="member-notice" role="status">인터넷 연결을 확인해주세요. 다시 연결되면 회원 목록을 불러옵니다.</div>}
         {error ? <div className="member-error" role="alert"><h2>회원 목록을 불러오지 못했어요</h2><p>{error}</p><button onClick={() => setAttempt(v => v + 1)}>다시 시도</button></div> : loading ? <div className="empty-state" aria-busy="true"><span className="auth-spinner"/><p>{online ? "회원 정보를 불러오고 있어요." : "인터넷 연결을 기다리고 있어요."}</p></div> : <>
-          {showHome&&<MemberDirectory members={members} search={search} onSearch={setSearch} onOpen={openMember} onCreate={()=>setEditor({kind:"create"})} canCreate={available}/>}
-          {selected&&<div className="member-session" hidden={showHome}>{selected.createdAt ? <LiveAnalysisWorkspace key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest} onUnsavedChange={v=>{unsaved.current=v;}}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}</div>}
+          {showHome&&<MemberDirectory preferences={preferences} onPreferences={updatePreferences} members={members} search={search} onSearch={setSearch} onOpen={openMember} onCreate={()=>setEditor({kind:"create"})} canCreate={available}/>}
+          {selected&&<div className="member-session" hidden={showHome}>{selected.createdAt ? <LiveAnalysisWorkspace initialViewMode={preferences.viewMode} key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest} onUnsavedChange={v=>{unsaved.current=v;}}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}</div>}
         </>}
 
       </div>
     </main>
+    <SettingsDialog open={settings} onClose={()=>setSettings(false)} preferences={preferences} onChange={updatePreferences} saveError={preferenceError} beforeLogout={()=>!unsaved.current||window.confirm('저장하지 않은 수정 내용이 있어요. 로그아웃할까요?')}/>
     {editor && <MemberDialog editor={editor} online={online} onClose={() => setEditor(null)} onSaved={(id, message) => {if (id) {openMember(id); setSearch("");} else if(editor.kind==='delete'){setSelectedId('');setHome(true);unsaved.current=false;} setEditor(null); setToast(message);}}/>}
     {toast && <div className="toast" role="status"><Icon name="check" size={17}/>{toast}</div>}
   </div>;
