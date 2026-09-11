@@ -120,3 +120,28 @@
  .review-titlebar .review-back{width:40px;min-height:40px;justify-content:center;padding:8px}
  .review-titlebar .review-back span{display:none}
 }
+
+/* Keep member navigation and its actions in one sidebar item. */
+.member-shell .sidebar-member-item{margin-bottom:6px;min-width:0}
+.member-shell .sidebar-member-row{display:flex;align-items:center;min-width:0;border-radius:10px}
+.member-shell .sidebar-member-item.is-active .sidebar-member-row{background:#eaf0e9}
+.member-shell .sidebar-member-row .member{min-width:0;flex:1;margin:0;background:transparent}
+.member-shell .sidebar-member-row .member-copy{min-width:0}
+.member-shell .sidebar .member-more{flex-shrink:0;width:30px;height:36px;min-height:36px;padding:0;margin-right:5px;border:0;background:transparent;border-radius:8px;color:#647969}
+.member-shell .member-action-menu{display:grid;padding:5px;margin:5px 0 8px;border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 5px 14px #253e2e08}
+.member-shell .member-action-menu button{justify-content:flex-start;gap:9px;min-height:38px;font-size:12px;padding:9px 10px;border:0;background:transparent;white-space:nowrap}
+.member-shell .member-action-menu .member-delete-button{border-top:1px solid var(--line);border-radius:0;margin-top:4px;color:#985e50}
+.member-shell.sidebar-compact .sidebar-member-item.is-active .sidebar-member-row{flex-direction:column}
+.member-shell.sidebar-compact .sidebar .member-more{width:36px;height:28px;min-height:28px;margin:0 0 4px}
+.member-shell.sidebar-compact .member-action-menu{display:none}
+/* Focus belongs to the search field container, including its icon and clear control. */
+.member-shell .directory-search{transition:border-color 140ms ease,box-shadow 140ms ease}
+.member-shell .directory-search:focus-within{border-color:#769780;box-shadow:0 0 0 2px #76978055}
+.member-shell .directory-search input:focus-visible{outline:none;box-shadow:none}
+.member-shell .directory-search input{min-width:0}
+/* Lift only the card surface; layout and neighboring cards stay in place. */
+.member-shell .directory-card{transition:transform 180ms cubic-bezier(.2,.8,.2,1),box-shadow 180ms ease,border-color 180ms ease}
+@media(hover:hover){.member-shell .directory-card:hover{transform:translateY(-4px);box-shadow:0 10px 24px #32452c14;border-color:#b3c5a6}}
+.member-shell .directory-card:focus-visible{transform:translateY(-4px);box-shadow:0 10px 24px #32452c14}
+.member-shell .directory-card:active{transform:translateY(-1px)}
+@media(prefers-reduced-motion:reduce){.member-shell .directory-card:is(:hover,:focus-visible,:active){transform:none}}

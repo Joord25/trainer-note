@@ -16,13 +16,22 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const trainer = useTrainer();
   const {preferences,update:updatePreferences,error:preferenceError}=useDisplayPreferences(trainer.uid);
   const [settings,setSettings]=useState(false);
+  const [memberMenuOpen,setMemberMenuOpen]=useState(false);
+  const memberMenuRef=useRef<HTMLDivElement>(null),memberMenuButton=useRef<HTMLButtonElement>(null);
+  useEffect(()=>{
+    if(!memberMenuOpen)return;
+    function outside(e:PointerEvent){if(!memberMenuRef.current?.contains(e.target as Node))setMemberMenuOpen(false);}
+    function escape(e:KeyboardEvent){if(e.key==='Escape'&&!document.querySelector('dialog[open]')){e.preventDefault();e.stopPropagation();setMemberMenuOpen(false);memberMenuButton.current?.focus();}}
+    document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape,true);
+    return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape,true);};
+  },[memberMenuOpen]);
   const [narrow,setNarrow]=useState(false),[mobileSidebarOpen,setMobileSidebarOpen]=useState(false);
   const sidebarRef=useRef<HTMLElement>(null),sidebarToggleRef=useRef<HTMLButtonElement>(null);
   const compact=narrow?!mobileSidebarOpen:preferences.sidebarCollapsed;
-  function closeMobileSidebar(){setMobileSidebarOpen(false);}
-  function dismissSidebar(){setMobileSidebarOpen(false);sidebarToggleRef.current?.focus();}
-  function toggleSidebar(){if(narrow)setMobileSidebarOpen(v=>!v);else updatePreferences({sidebarCollapsed:!preferences.sidebarCollapsed});}
-  useEffect(()=>{const query=window.matchMedia('(max-width: 850px)');const sync=()=>{setNarrow(query.matches);setMobileSidebarOpen(false);};sync();query.addEventListener('change',sync);return()=>query.removeEventListener('change',sync);},[]);
+  function closeMobileSidebar(){setMemberMenuOpen(false);setMobileSidebarOpen(false);}
+  function dismissSidebar(){setMemberMenuOpen(false);setMobileSidebarOpen(false);sidebarToggleRef.current?.focus();}
+  function toggleSidebar(){setMemberMenuOpen(false);if(narrow)setMobileSidebarOpen(v=>!v);else updatePreferences({sidebarCollapsed:!preferences.sidebarCollapsed});}
+  useEffect(()=>{const query=window.matchMedia('(max-width: 850px)');const sync=()=>{setMemberMenuOpen(false);setNarrow(query.matches);setMobileSidebarOpen(false);};sync();query.addEventListener('change',sync);return()=>query.removeEventListener('change',sync);},[]);
   useEffect(()=>{
     if(!mobileSidebarOpen||!narrow)return;
     sidebarToggleRef.current?.focus();
@@ -52,8 +61,8 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const [uploadRequest,setUploadRequest]=useState(0);
   const selected = members.find(m => m.id === selectedId);
   const showHome=home||!selected;
-  function openMember(id:string){if(selectedId!==id&&unsaved.current&&!window.confirm('저장하지 않은 수정 내용이 있어요. 버리고 다른 회원으로 이동할까요?'))return;if(selectedId!==id){unsaved.current=false;setUploadRequest(0);}setSelectedId(id);setHome(false);closeMobileSidebar();}
-  function goHome(){setHome(true);setSearch('');closeMobileSidebar();}
+  function openMember(id:string){setMemberMenuOpen(false);if(selectedId!==id&&unsaved.current&&!window.confirm('저장하지 않은 수정 내용이 있어요. 버리고 다른 회원으로 이동할까요?'))return;if(selectedId!==id){unsaved.current=false;setUploadRequest(0);}setSelectedId(id);setHome(false);closeMobileSidebar();}
+  function goHome(){setMemberMenuOpen(false);setHome(true);setSearch('');closeMobileSidebar();}
 
   useEffect(() => {
     setLoading(true); setError("");
@@ -76,10 +85,19 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
     <aside id="member-sidebar" ref={sidebarRef} className="sidebar" aria-label="주 메뉴" role={narrow&&mobileSidebarOpen?"dialog":undefined} aria-modal={narrow&&mobileSidebarOpen?true:undefined}>
       <div className="brand-row"><button className="brand" aria-label="회원 홈으로" title="회원 홈" onClick={goHome}><span className="brand-full">trainer<span>note</span><i/></span></button><button ref={sidebarToggleRef} className="sidebar-toggle icon-button" aria-label={compact?"사이드바 펼치기":"사이드바 접기"} title={compact?"사이드바 펼치기":"사이드바 접기"} aria-expanded={!compact} aria-controls="member-sidebar" onClick={toggleSidebar}><span className="toggle-monogram" aria-hidden="true">tn<i/></span><Icon name="panel" size={21}/></button></div>
       <button className="member-home-nav" aria-current={showHome?"page":undefined} onClick={goHome} title="회원 목록" aria-label="회원 목록"><Icon name="users" size={18}/><span>회원 목록</span></button>
-      <nav className="real-member-list" aria-label="회원 목록">{members.map((m, i) => <button key={m.id} className={"member " + (!showHome && selected?.id === m.id ? "active" : "")} onClick={() => openMember(m.id)} aria-label={m.name + " 회원 보기"} aria-current={!showHome && selected?.id === m.id ? "true" : undefined} title={m.name}>
-        <span className={"avatar tone-" + i % 3}>{m.name.slice(0,1)}</span><span className="member-copy"><strong>{m.name}</strong><small>{m.pending ? "저장 중…" : m.goal || "목표를 설정해주세요"}</small></span>
-      </button>)}</nav>
-      {!showHome&&selected&&<details className="sidebar-member-actions" key={selected.id}><summary title={`${selected.name} 회원 관리`} aria-label={`${selected.name} 회원 관리`} onClick={()=>{if(compact){if(narrow)setMobileSidebarOpen(true);else updatePreferences({sidebarCollapsed:false});}}}><span>{selected.name} 회원 관리</span><Icon name="more" size={17}/></summary><div><button disabled={!available} onClick={()=>{closeMobileSidebar();setEditor({kind:"edit",member:selected});}}>회원 정보 수정</button><button disabled={!online} onClick={()=>{closeMobileSidebar();setUploadRequest(v=>v+1);}}>일지 추가</button><button className="member-delete-button" disabled={!available||selected.pending||selected.fileCount>0||selected.recordCount>0} title={selected.fileCount>0||selected.recordCount>0?"연결된 파일과 운동 기록을 먼저 삭제해주세요.":undefined} onClick={()=>{closeMobileSidebar();setEditor({kind:"delete",member:selected});}}>회원 삭제</button></div></details>}
+      <nav className="real-member-list" aria-label="회원 목록">{members.map((m, i) => {
+        const active=!showHome&&selected?.id===m.id;
+        return <div key={m.id} ref={active?memberMenuRef:undefined} className={'sidebar-member-item '+(active?'is-active':'')}>
+          <div className="sidebar-member-row"><button className={"member "+(active?"active":"")} onClick={()=>openMember(m.id)} aria-label={m.name+" 회원 보기"} aria-current={active?"true":undefined} title={m.name}>
+            <span className={"avatar tone-"+i%3}>{m.name.slice(0,1)}</span><span className="member-copy"><strong>{m.name}</strong><small>{m.pending?"저장 중…":m.goal||"목표 미설정"}</small></span>
+          </button>{active&&<button ref={memberMenuButton} className="member-more" aria-label={`${m.name} 회원 관리`} title="회원 관리" aria-expanded={memberMenuOpen} aria-controls="active-member-actions" onClick={()=>{if(compact){if(narrow)setMobileSidebarOpen(true);else updatePreferences({sidebarCollapsed:false});}setMemberMenuOpen(v=>!v);}}><Icon name="more" size={18}/></button>}</div>
+          {active&&memberMenuOpen&&<div id="active-member-actions" className="member-action-menu" role="group" aria-label={`${m.name} 회원 관리 메뉴`}>
+            <button disabled={!available} onClick={()=>{memberMenuButton.current?.focus();setMemberMenuOpen(false);closeMobileSidebar();setEditor({kind:"edit",member:m});}}><Icon name="edit" size={15}/>회원 정보 수정</button>
+            <button disabled={!online} onClick={()=>{memberMenuButton.current?.focus();setMemberMenuOpen(false);closeMobileSidebar();setUploadRequest(v=>v+1);}}><Icon name="plus" size={16}/>일지 추가</button>
+            <button className="member-delete-button" disabled={!available||m.pending||m.fileCount>0||m.recordCount>0} title={m.fileCount>0||m.recordCount>0?"연결된 파일과 운동 기록을 먼저 삭제해주세요.":undefined} onClick={()=>{memberMenuButton.current?.focus();setMemberMenuOpen(false);closeMobileSidebar();setEditor({kind:"delete",member:m});}}>회원 삭제</button>
+          </div>}
+        </div>;
+      })}</nav>
       <button className="member-demo-button" onClick={()=>{if(!unsaved.current||window.confirm('저장하지 않은 수정 내용을 버리고 예시로 이동할까요?'))onDemo();}} title="예시 둘러보기" aria-label="예시 둘러보기"><Icon name="chart" size={17}/><span>예시 둘러보기</span></button>
       <AccountControl onSettings={()=>{closeMobileSidebar();setSettings(true);}}/>
     </aside>
