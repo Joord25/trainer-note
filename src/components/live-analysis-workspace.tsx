@@ -5,6 +5,7 @@ import {Icon} from './icons';
 import {BodyMap} from './body-map';
 import {ActualTrend,bodyStats,SavedLessonPlan} from './member-analysis';
 import {ContinuousSourceViewer} from './continuous-source-viewer';
+import {ResizableReviewColumns} from './resizable-review-columns';
 import {AssistantChat,type SourceSelection} from './assistant-chat';
 import {AnalysisSource,sourceRows} from './analysis-source';
 import {MemberFiles} from './member-files';
@@ -42,7 +43,7 @@ export function LiveAnalysisWorkspace({memberId,memberName,goal,online,uploadReq
  return <div className={'live-workspace review-workspace '+(mode===3?'with-assistant ':'')+(sourceHidden?'source-collapsed ':'')+'working-'+pane} aria-label="업로드 기반 분석 작업실">
 
  {uploadNotice&&<p className="file-error" role="status">{uploadNotice}</p>}
- <div className="review-columns">
+ <ResizableReviewColumns mode={mode} sourceHidden={sourceHidden}>
  <section className="review-original" aria-label="원본 일지" hidden={sourceHidden}>
   <div className="review-source-tools"><select aria-label="원본 파일 이동" value={originalFile||selectedFile} onChange={e=>original(e.target.value,1)}><option value="all">전체 원본 이어 보기</option>{files.map(f=><option value={f.id} key={f.id}>{f.name}</option>)}</select><button aria-pressed={selectionMode} title="원본을 드래그해 질문할 영역을 선택하세요" onClick={()=>selectionMode?setSelectionMode(false):selectArea()}><Icon name="select-area" size={16}/>{selectionMode?'선택 취소':'영역 선택'}</button><button aria-label="일지 추가" title="일지 추가" onClick={()=>setUpload(true)} disabled={!online}><Icon name="plus" size={18}/></button><button aria-label="원본 접기" title="원본 접기" onClick={()=>{setSourceHidden(true);setSelectionMode(false);}}><Icon name="back" size={17}/></button></div>
   {selectionMode&&<p className="selection-hint">질문할 부분을 드래그하세요. <button onClick={()=>setSelectionMode(false)}>취소</button></p>}
@@ -67,7 +68,7 @@ export function LiveAnalysisWorkspace({memberId,memberName,goal,online,uploadReq
  <p className="record-help">자동 판독은 잠정 기록입니다. 확인이 필요한 값은 집계에서 제외해요. AI 의견은 최근 {analysis?.scopeLimit??120}개 운동 항목, 그래프·부위 분포는 저장된 전체 기록 기준이에요.</p>{serverAiEnabled&&<details className="ai-usage"><summary>AI 이용량 · 저장된 결과는 재사용해요</summary><p>이번 달 입력 {(usage.inputTokens??0).toLocaleString()} · 출력 {(usage.outputTokens??0).toLocaleString()} 토큰</p><p>예상 모델 원가 ${((usage.usedMicros??0)/1e6).toFixed(4)} / ${((usage.monthlyLimitMicros??1000000)/1e6).toFixed(2)} · 하루 요청 30회 제한</p><p>원본 수정은 재판독하지 않아요. 의견이 달라지는 수정만 모아 재분석하며, 서버·저장소 비용은 별도입니다.</p></details>}{error&&<p className="file-error" role="alert">{error}</p>}
  </div></section></div>
  <div className="review-content" hidden={pane!=='plan'}><section className="live-pane live-plan" aria-label="다음 수업 준비"><div className="pane-body"><span className="pill">{plan?'트레이너가 저장한 계획':'AI 초안 · 트레이너 검토 전'}</span><h2 className="prep-title">종합 의견에서,<br/>오늘의 프로그램으로.</h2><div className="goal-mini"><Icon name="target"/><span>{goal||'목표를 함께 확인해주세요'}</span></div>{!!report?.questions.length&&<div className="quiet-card"><h3>먼저 확인할 것</h3>{report.questions.map((q,i)=><p key={i}>{q}</p>)}</div>}<SavedLessonPlan memberId={memberId} plan={plan} draft={report?.program??[]} fingerprint={analysis?.fingerprint??''} online={online} onEvidence={openRow}/>{!!report?.quests.length&&<div className="quiet-card"><h3>선택 실천 과제</h3><ul>{report.quests.map((q,i)=><li key={i}>{q}</li>)}</ul></div>}</div></section></div></div>
- <div className="review-assistant" hidden={mode!==3}><AssistantChat memberId={memberId} online={online} selection={selection} onClearSelection={()=>setSelection(null)} onSelectArea={selectArea} onClose={()=>setMode(2)} onEvidence={openRow} onOriginal={original}/></div></div>
+ <div className="review-assistant" hidden={mode!==3}><AssistantChat memberId={memberId} online={online} selection={selection} onClearSelection={()=>setSelection(null)} onSelectArea={selectArea} onClose={()=>setMode(2)} onEvidence={openRow} onOriginal={original}/></div></ResizableReviewColumns>
  {upload&&<UploadDialog onClose={()=>setUpload(false)}><MemberFiles memberId={memberId} memberName={memberName} online={online} onUploaded={(id,result)=>{setUploadNotice(result.failed?`${result.uploaded}개 업로드 완료 · ${result.failed}개 실패. 일지 추가에서 실패한 파일을 다시 올려주세요.`:'');setSelectedFile(id);setOriginalFile(id);setSelectedRow('');setSourcePage(1);setSourceHidden(false);setJumpRequest(v=>v+1);setOriginalRequest(v=>v+1);setPane('analysis');setTab('summary');setUpload(false);}}/></UploadDialog>}
  </div>;
 }
