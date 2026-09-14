@@ -17,3 +17,6 @@ public/pdfjs/
 
 # Local design exploration (not part of the deployed app)
 prototypes/
+
+# Firebase Hosting upload cache
+.firebase/
