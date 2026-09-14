@@ -61,6 +61,7 @@ html[data-theme="dark"] .review-workspace .records-only .live-record-select { ba
 html[data-theme="dark"] .review-workspace .records-only .live-record-select:hover { background:var(--field); }
 html[data-theme="dark"] .member-shell .workspace-profile { background:var(--field); color:var(--ink); }
 html[data-theme="dark"] .member-shell .workspace-profile:hover { background:#292929; }
+html[data-theme="dark"] .member-shell .compact-member-initial { background:#2a3a2d; color:#c8ddca; border:1px solid #526d57; }
 html[data-theme="dark"] .review-workspace .analysis-toolbar-row { background:var(--surface); }
 html[data-theme="dark"] .review-workspace :is(.gv-status,.ps-goal>span) { color:var(--green); }
 html[data-theme="dark"] .review-workspace :is(.gv-goal-detail p,.pa-common-period>span,.chart-axis-date,.ps-legend,.ps-legend span,.ps-help) { color:var(--muted); }
