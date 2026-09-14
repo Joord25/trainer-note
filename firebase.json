@@ -61,6 +61,7 @@
       "**/node_modules/**"
     ],
     "predeploy": [
+      "node scripts/check-hosting-config.mjs",
       "npm run build"
     ],
     "headers": [

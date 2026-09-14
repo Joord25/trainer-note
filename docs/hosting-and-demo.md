@@ -30,3 +30,17 @@
 - 브라우저 예시: 기록 중량 수정 후 4,414 → 4,474 kg·회 반영, 원본 유지, 그래프→원본 이동, 목표 평가·다음 수업·도우미·390px 화면 확인.
 - 운영 HTML·favicon HTTP 200, 로그인 팝업 확인. Auth와 reCAPTCHA에 운영 도메인 등록 확인. 운영 계정 선택 후 회원 조회는 사용자 로그인 후 확인 필요.
 - 배포 파일에서 App Check 디버그 토큰·환경변수 파일·소스맵 제외 확인.
+
+## Storage 다운로드 CORS (2026-09-14 수정)
+
+Hosting 도메인은 Auth/reCAPTCHA뿐 아니라 **Storage 버킷의 CORS**에도 등록해야 한다. 초기 배포에서 이 항목이 localhost 전용으로 남아 원본 다운로드 요청이 반복 실패했다. 운영 버킷에 `storage.cors.json`을 적용했다. 기존 로그인 및 Storage Rules는 변경하지 않았다.
+
+`firebase deploy --only hosting` 또는 `--only storage`는 버킷 CORS를 적용하지 않는다. CORS 파일 변경 시 별도로 실행한다:
+
+```sh
+gcloud storage buckets update gs://trainer-note-a9dd7.firebasestorage.app --cors-file=storage.cors.json --project=trainer-note-a9dd7
+```
+
+Hosting predeploy는 Auth·Storage 파일의 도메인 일치 여부를 검사한다. 실제 원격 버킷 반영은 위 명령 후 조회 또는 CORS 응답으로 확인한다.
+
+원본을 읽지 않는 OPTIONS 검증에서 운영 두 주소와 localhost GET 허용, 허용 목록 밖 주소 미허용을 확인했다. Google 로그인 중 `window.closed` COOP 경고는 원본 CORS 오류와 별개이며 로그인 성공 시에도 보고될 수 있다. Hosting은 `same-origin-allow-popups` 헤더를 유지한다. [Firebase SDK 관련 보고](https://github.com/firebase/firebase-js-sdk/issues/8541), [Firebase 다운로드 CORS 문서](https://firebase.google.com/docs/storage/web/download-files#cors_configuration).
