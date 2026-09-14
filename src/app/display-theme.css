@@ -1,0 +1,90 @@
+/* Display settings share the same type and color tokens across all five panes. */
+:root { --display-scale:1; --surface:#fff; --canvas:#f5f7f3; --field:#f8faf6; --workspace-title:calc(16px * var(--display-scale)); --workspace-section:calc(14px * var(--display-scale)); --workspace-body:calc(13px * var(--display-scale)); --workspace-control:calc(12px * var(--display-scale)); --workspace-meta:calc(11px * var(--display-scale)); color-scheme:light; }
+:root[data-font="system"] { --workspace-font:system-ui,-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif; }
+body,.settings-dialog,button,input,textarea,select { font-family:var(--workspace-font); }
+.settings-ratios { border:0; border-bottom:1px solid var(--line); margin:0; padding:20px 0; }
+.settings-ratios legend { padding-top:18px; font-weight:600; }
+.settings-ratios input { width:100%; padding:0; accent-color:var(--green); }
+.settings-ratios label { display:grid; grid-template-columns:40px 1fr; align-items:center; gap:12px; margin-top:8px; }
+.settings-ratios p,.settings-note { font-size:12px; }
+.settings-delete { margin-top:32px; border-top:1px solid var(--line); padding-top:20px; }
+.settings-delete h4 { margin:0 0 10px; }.settings-delete p { margin-bottom:14px; }
+button.danger { color:#a44332; border-color:#dbb0a6; }.settings-content .settings-row { gap:12px; flex-wrap:wrap; }
+:root[data-theme="dark"] { color-scheme:dark; --ink:#ededed; --muted:#b0b0b0; --line:#343434; --green:#b1d4b3; --soft:#222222; --surface:#111111; --canvas:#090909; --field:#1b1b1b; --workspace-selected:#29372c; --workspace-selected-border:#627c65; --workspace-field:var(--field); --workspace-focus:#a2c6a8; --workspace-shadow:0 8px 28px #0008; }
+html[data-theme="dark"] body { background:var(--canvas); color:var(--ink); }
+html[data-theme="dark"] :is(.app-shell,.sidebar,.main-workspace,.topbar,.member-directory,.member-card,.settings-dialog,.settings-header,.settings-nav,.settings-content,.record-editor,.record-form,.review-workspace,.review-columns,.review-analysis,.review-assistant,.review-source,.analysis-panel,.assistant-panel,.assistant-chat,.assistant-compose,.review-mode-tabs,.right-panel-tabs,.analysis-tabs,.source-controls,.source-switch,.source-pane .pane-heading,.pdf-toolbar,.pane-heading,.lesson-dock-host,.assistant-dock-host,.goal-dialog,.training-goal-dialog,.workout-select-menu,.analysis-actions-popover,.field-help-popover,dialog) { background:var(--surface); color:var(--ink); border-color:var(--line); }
+html[data-theme="dark"] :is(input,textarea,select,button,.settings-info,.settings-usage,.assistant-selection,.assistant-followup,.goal-field-help-popover) { background:var(--field); color:var(--ink); border-color:var(--line); }
+html[data-theme="dark"] :is(small,label,summary,.settings-note,.caption,.breadcrumb,.account-copy small,.record-meta,.assistant-answer p,.assistant-answer li) { color:var(--muted); }
+html[data-theme="dark"] :is(h1,h2,h3,h4,strong,.breadcrumb strong,.record-name,.member-copy strong) { color:var(--ink); }
+html[data-theme="dark"] :is(.assistant-question,.segmented,.record-set,.record-set-chip,.interval-summary,.interval-phase,.avatar,.goal-selection.selected) { background:var(--soft); color:var(--ink); }
+html[data-theme="dark"] :is(button:hover,button.selected,button[aria-selected="true"],button[aria-pressed="true"],.member.active,.is-active>.sidebar-member-row) { background:var(--workspace-selected); color:var(--ink); }
+html[data-theme="dark"] :is(.primary,button.primary) { background:#497853; color:#fff; border-color:#678e6d; }
+html[data-theme="dark"] .file-error { background:#412c23; color:#f1b29b; }
+html[data-theme="dark"] :is(.source-viewer,.paper-stage,.continuous-source-viewer,.source-scroll) { background:var(--canvas); }
+html[data-theme="dark"] button.danger { color:#f0b3a2; border-color:#8a594d; }
+html[data-theme="dark"] .settings-nav button[aria-current="page"] { background:var(--workspace-selected);color:var(--green); }
+/* Original uploaded images/PDF canvases and chart data colors are never inverted. */
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.01ms!important; transition-duration:.01ms!important; } }
+.settings-content,.settings-content button,.settings-content select { font-size:calc(13px * var(--display-scale)); }
+.settings-content :is(p,label,small) { font-size:calc(12px * var(--display-scale)); }
+html[data-theme="dark"] .paired-body-atlas { background:#eef2ec; border-radius:12px; }
+html[data-theme="dark"] :is(.member-home-nav,.directory-size button.selected) { background:var(--workspace-selected);color:var(--ink); }
+html[data-theme="dark"] :is(.review-titlebar,.review-source-tools,.original-controls,.review-work,.live-pane,.analysis-toolbar-row,.muscle-distribution,.review-work-tools,.lesson-program,.goal-evaluation,.summary-panel) { background:var(--surface);color:var(--ink); }
+html[data-theme="dark"] :is(.review-original,.original-scroll,.original-placeholder) { background:var(--canvas);color:var(--muted); }
+html[data-theme="dark"] .sidebar-member-item.is-active .sidebar-member-row { background:var(--workspace-selected); }
+html[data-theme="dark"] :is(.chart-record-targets button,.icon-button,.original-document button,.analysis-tabs button,.review-resize-handle) { background:transparent; }
+html[data-theme="dark"] .analysis-tabs button[aria-selected="true"] { color:var(--green); }
+
+/* Neutral dark surfaces: keep accent color for decisions, not entire panes. */
+html[data-theme="dark"] :is(.review-tabs,.review-work-heading,.assistant-conversation-tools,.lesson-heading,.live-plan .lesson-workspace-body,.docked-panel-content,.analysis-options,.original-thumbnails,.member-dropdown,.member-action-menu,.directory-card,.auth-page,.auth-card,.auth-loading,.goal-loading-dialog,.record-form .dialog-footer,.records-only .live-record-heading,.records-only .live-source-scroll,.records-only .linked-record-paper,.records-only .live-record-row,.records-only .live-record-row.is-selected,.review-workspace .cl-loading-screen) { background:var(--surface); color:var(--ink); border-color:var(--line); }
+html[data-theme="dark"] :is(.cl-before,.cl-program-values li,.cl-basis,.cl-segments,.cl-editor,.cl-protocol,.cl-action,.ta-questions,.ta-record-fields span,.ar-form,.tg-field-explanation,.chart-session-note,.gv-verdict,.gv-card-status,.judgment-question,.judgment-criteria,.record-metrics>div,.record-parts>span,.record-empty,.record-source,.record-pick,.record-status,.member-notice,.member-record-empty,.member-next-steps span,.directory-search,.directory-create,.settings-info,.file-drop,.file-service-note,.file-selection-bar,.ai-source-card,.record-tool-notice,.ge-status,.chart-note-marker,.review-checklist) { background:var(--field); color:var(--ink); border-color:var(--line); }
+html[data-theme="dark"] :is(.review-workspace .review-tab-item,.review-workspace .right-lesson-tab,.review-workspace .right-panel-tabs>[role=tab]) { background:transparent; border-color:var(--line); }
+html[data-theme="dark"] :is(.review-workspace .review-tab-item[data-active=true],.review-workspace .right-lesson-tab[data-active=true],.review-workspace .right-panel-tabs>[aria-selected=true]) { background:var(--workspace-selected); border-color:var(--workspace-selected-border); }
+html[data-theme="dark"] :is(.cl-before ul,.assistant-answer p,.assistant-answer li,.cl-basis-top p,.cl-row-detail p,.judgment-card p,.settings-content p) { color:var(--ink); }
+html[data-theme="dark"] :is(.cl-before h3,.cl-before h4,.cl-program-basis p,.cl-program-basis button,.cl-row-detail footer button,.cl-row-toggle,.cl-row-reason,.cl-context,.cl-history summary,.judgment-card p>strong,.source-paper-header a,.original-document a) { color:var(--green); }
+html[data-theme="dark"] :is(.cl-program-row>header>small,.cl-program-values li small,.cl-past-session small,.cl-history summary span,.cl-index,.assistant-selection small,.ai-source-card small,.ai-reading p,.ai-result-heading p,.judgment-card small) { color:var(--muted); }
+html[data-theme="dark"] :is(input,textarea)::placeholder { color:#969696; opacity:1; }
+html[data-theme="dark"] :is(.inline-correction textarea,.cl-note textarea,.page-session-note textarea,.gv-reason textarea):focus::placeholder { color:transparent; }
+html[data-theme="dark"] :is(.review-workspace .analysis-font-sizes button[aria-pressed=true],.analysis-font-sizes button[aria-pressed=true]) { color:#111; background:var(--green); }
+html[data-theme="dark"] .ps-chart svg :is(path,circle)[stroke="#355d43"] { stroke:var(--green); }
+html[data-theme="dark"] .ps-chart svg [stroke="#e2e8de"] { stroke:var(--line); }
+html[data-theme="dark"] .ps-chart svg text { fill:var(--muted); }
+html[data-theme="dark"] :is(.ps-chart,.pa-chart) svg circle[fill="white"],html[data-theme="dark"] .ps-chart svg circle[fill="#fff"] { fill:var(--surface); }
+html[data-theme="dark"] .paired-body-atlas { background:transparent; }
+html[data-theme="dark"] :is(.file-error,.auth-error,.ai-review-issues,.gv-verdict[data-status=review],.gv-card-status[data-status=review]) { background:#30221e; color:#f2b8a0; border-color:#735043; }
+html[data-theme="dark"] :is(.file-error,.auth-error,.ai-review-issues) :is(p,strong,small,button) { color:#f2b8a0; }
+html[data-theme="dark"] ::selection { background:#4b6551; color:#fff; }
+html[data-theme="dark"] .review-workspace .original-controls { background:var(--surface); color:var(--muted); }
+html[data-theme="dark"] :is(.review-resize-handle span,.original-page-number) { background:#343434; color:var(--ink); border-color:#535353; }
+html[data-theme="dark"] .review-workspace :is(.record-set-chip b,.record-set-chip small,.live-record-heading,.live-record-note,.live-record-meta,.paper-count,.paper-number) { color:var(--ink); }
+html[data-theme="dark"] .review-workspace .records-only .live-record-select { background:transparent; }
+html[data-theme="dark"] .review-workspace .records-only .live-record-select:hover { background:var(--field); }
+html[data-theme="dark"] .member-shell .workspace-profile { background:var(--field); color:var(--ink); }
+html[data-theme="dark"] .member-shell .workspace-profile:hover { background:#292929; }
+html[data-theme="dark"] .review-workspace .analysis-toolbar-row { background:var(--surface); }
+html[data-theme="dark"] .review-workspace :is(.gv-status,.ps-goal>span) { color:var(--green); }
+html[data-theme="dark"] .review-workspace :is(.gv-goal-detail p,.pa-common-period>span,.chart-axis-date,.ps-legend,.ps-legend span,.ps-help) { color:var(--muted); }
+html[data-theme="dark"] .review-workspace :is(.cl-program-pattern,.interval-pattern,.interval-pattern-caption,.interval-pattern-steps,.interval-pattern-step) { color:var(--ink); }
+html[data-theme="dark"] .original-file-number { background:var(--field);color:var(--muted);border-color:var(--line); }
+html[data-theme="dark"] .review-workspace .chart-record-targets>button:is(:hover,:active,:focus),html[data-theme="dark"] .review-workspace .chart-record-targets>button { background:transparent; }
+html[data-theme="dark"] .chart-record-tooltip { background:#252525; border-color:#555; color:var(--ink); }
+html[data-theme="dark"] .pa-chart :is(path,circle)[stroke="#355d43"] { stroke:var(--green); }
+html[data-theme="dark"] .pa-chart [stroke="#e2e8de"] { stroke:var(--line); }
+html[data-theme="dark"] .pa-chart text { fill:var(--muted); }
+html[data-theme="dark"] .pa-chart circle[fill="white"] { fill:var(--surface); }
+html[data-theme="dark"] :is(.pa-comment,.pa-link,.pa-record-date,.pa-exercise>summary>span:last-child,.pa-evaluation-row>span:last-child) { color:var(--green); }
+html[data-theme="dark"] :is(.pa-kpis div>span,.pa-kpis small,.pa-heading>span,.pa-note,.pa-exercise small,.pa-evaluation-row small) { color:var(--muted); }
+html[data-theme="dark"] .training-goal-dialog input:not([type=checkbox]):not([type=range]),html[data-theme="dark"] .training-goal-dialog :is(textarea,select),html[data-theme="dark"] .review-workspace .records-only .inline-correction :is(input,textarea,select) { background:var(--field); color:var(--ink); border-color:var(--line); }
+html[data-theme="dark"] .tg-progress span { background:var(--line); }
+html[data-theme="dark"] .tg-progress span.done { background:var(--green); }
+html[data-theme="dark"] dialog::backdrop { background:#0009; }
+/* The full-card hit target must never paint over the member information. */
+html[data-theme="dark"] .member-directory .directory-card-open,
+html[data-theme="dark"] .member-directory .directory-card-open:is(:hover,:active,:focus-visible) { background:transparent; }
+html[data-theme="dark"] .member-directory .directory-cover { background:#252d28; color:#c3d5c6; }
+html[data-theme="dark"] .member-directory .directory-cover.tone-1 { background:#302b24; color:#dcc8a7; }
+html[data-theme="dark"] .member-directory .directory-cover.tone-2 { background:#242d32; color:#bacfda; }
+html[data-theme="dark"] .member-directory .directory-paper { background:#ffffff0a; border-color:#ffffff26; box-shadow:-10px 6px 0 #ffffff08; }
+html[data-theme="dark"] .member-directory .directory-card-copy { color:var(--ink); }
+html[data-theme="dark"] .member-directory :is(.directory-card-copy>p,.directory-card-meta,.directory-card-copy>small) { color:var(--muted); }
+html[data-theme="dark"] .member-directory .directory-card-title .card-member-trigger:hover { background:var(--workspace-selected); }

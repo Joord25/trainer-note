@@ -1,9 +1,10 @@
 // Executable interpretation of EXPERT_JUDGMENT_PLAN.md. Draft knowledge, not validated clinical rules.
+import {exerciseNameKey} from './generated/workout-measurements.mjs';
 import {createHash} from 'node:crypto';
 export const KNOWLEDGE_VERSION='expert-judgment-2026-09-v1';
 export const judgmentDate=ms=>new Date(ms+9*3600000).toISOString().slice(0,10);
 const digest=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
-export const recordSignature=r=>digest({id:r.id,date:r.date,exerciseName:r.exerciseName,loadType:r.loadType,sets:r.sets,notes:r.notes});
+export const recordSignature=r=>digest({id:r.id,date:r.date,exerciseName:r.exerciseName,loadType:r.loadType,sets:r.sets,notes:r.notes,trainerNote:r.trainerNote??''});
 const definitions=[
  ['comparison','비교 가능성',['exerciseName','equipment','loadBasis','side','setPurpose','confirmedRecordSignatures'],'동일 조건으로 확인한 기록끼리만 비교','기구·자세·좌우·세트 목적이 달라졌을 수 있음','같은 기구와 수행 조건인가요?','비교 조건 확인','같은 조건의 다음 기록'],
  ['progress','진행 유지 후보',['comparison','targetReps','loadKg'],'같은 중량의 최고 반복 횟수와 트레이너 목표를 비교','반복수 증가가 전체 목표 달성이나 원인 증명은 아님','지금 목표 지표가 회원의 목표를 대표하나요?','목표에 도달한 기록과 유지 여부 검토','같은 중량의 최고 반복 횟수'],
@@ -17,7 +18,7 @@ export function validateCriteria(input,records,goal,plan){
  if(!input||input.scope!=='general-adult'||input.conditionsConfirmed!==true)throw Error('적용 대상과 동일 수행 조건을 확인해주세요.');
  const exerciseName=text(input.exerciseName,100),equipment=text(input.equipment,100),loadBasis=text(input.loadBasis,100),side=text(input.side,100),setPurpose=text(input.setPurpose,100);
  if(!exerciseName||!equipment||!loadBasis||!side||!setPurpose)throw Error('비교할 운동·기구·중량·좌우·세트 목적을 입력해주세요.');
- const group=records.filter(r=>r.exerciseName===exerciseName&&r.loadType==='weighted');if(!group.length)throw Error('비교할 중량 운동 기록이 없어요.');
+ const group=records.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(exerciseName)&&r.loadType==='weighted');if(!group.length)throw Error('비교할 중량 운동 기록이 없어요.');
  const {loadKg,targetReps,minSessions,windowDays}=input;
  if(!Number.isFinite(loadKg)||loadKg<=0||loadKg>2000||!Number.isInteger(targetReps)||targetReps<1||targetReps>1000||!Number.isInteger(minSessions)||minSessions<2||minSessions>30||!Number.isInteger(windowDays)||windowDays<1||windowDays>365)throw Error('목표 중량·횟수와 관찰 기간을 확인해주세요.');
  const planDate=input.planDate?text(input.planDate,10):'';if(planDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(planDate)||new Date(planDate+'T00:00:00Z').toISOString().slice(0,10)!==planDate))throw Error('계획 대조 날짜를 확인해주세요.');
@@ -25,30 +26,31 @@ export function validateCriteria(input,records,goal,plan){
 }
 const millis=v=>typeof v==='number'?v:v?.toMillis?.()??0;
 export function selectCases(decisions,outcomes,records,asOf){
- const names=new Set(records.map(r=>r.exerciseName));
- return decisions.filter(d=>millis(d.createdAt)>0&&millis(d.createdAt)<=asOf&&(d.snapshot?.records?.some(r=>names.has(r.exerciseName))||d.snapshot?.records?.length===0))
+ const names=new Set(records.map(r=>exerciseNameKey(r.exerciseName)));
+ return decisions.filter(d=>millis(d.createdAt)>0&&millis(d.createdAt)<=asOf&&(d.snapshot?.records?.some(r=>names.has(exerciseNameKey(r.exerciseName)))||d.snapshot?.records?.length===0))
  .sort((a,b)=>millis(b.createdAt)-millis(a.createdAt)||a.id.localeCompare(b.id)).slice(0,5).map(d=>({id:d.id,cardId:d.cardId,cardVersion:d.cardVersion??'',goal:d.snapshot.goal??'',comparison:d.snapshot.criteria?{exerciseName:d.snapshot.criteria.exerciseName,equipment:d.snapshot.criteria.equipment,loadBasis:d.snapshot.criteria.loadBasis,side:d.snapshot.criteria.side,setPurpose:d.snapshot.criteria.setPurpose}:null,action:d.action,reason:d.reason,alternative:d.alternative,changeCondition:d.changeCondition,followUpMetric:d.followUpMetric,followUpDate:d.followUpDate,expertStatus:'trainer-reported',records:d.snapshot.records.map(r=>({date:r.date,exerciseName:r.exerciseName,sets:r.sets})),outcomes:outcomes.filter(o=>o.decisionId===d.id&&millis(o.createdAt)<=asOf&&millis(o.createdAt)>0&&o.observedDate<=judgmentDate(asOf)).sort((a,b)=>millis(b.createdAt)-millis(a.createdAt)).slice(0,2).map(o=>({id:o.id,result:o.result,note:o.note,observedDate:o.observedDate,evidence:o.records}))}));
 }
 export function evaluateJudgment({records,goal='',criteria=null,cases=[]}){
  const matching=criteria?.memberGoal===goal&&criteria?.scope==='general-adult';
- const group=matching?records.filter(r=>r.exerciseName===criteria.exerciseName&&r.loadType==='weighted'):[];
+ const group=matching?records.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(criteria.exerciseName)&&r.loadType==='weighted'):[];
  const confirmed=group.filter(r=>criteria.confirmedRecordSignatures.some(v=>v.id===r.id&&v.signature===recordSignature(r)));
- const comparable=group.length>0&&group.length===confirmed.length;
- const daily=new Map();for(const r of comparable?confirmed:[]){const reps=r.sets.filter(s=>s.kg===criteria.loadKg).map(s=>s.reps);if(reps.length){const prev=daily.get(r.date);daily.set(r.date,{date:r.date,bestReps:Math.max(prev?.bestReps??0,...reps),ids:[...(prev?.ids??[]),r.id]});}}
+ const sideModes=new Set(group.flatMap(r=>r.sets.map(s=>s.leftReps!==undefined?'sides':'total')));
+ const comparable=group.length>0&&group.length===confirmed.length&&sideModes.size===1;
+ const daily=new Map();for(const r of comparable?confirmed:[]){const reps=r.sets.filter(s=>s.kg===criteria.loadKg).map(s=>s.leftReps!==undefined?Math.min(s.leftReps,s.rightReps):s.reps);if(reps.length){const prev=daily.get(r.date);daily.set(r.date,{date:r.date,bestReps:Math.max(prev?.bestReps??0,...reps),ids:[...(prev?.ids??[]),r.id]});}}
  const series=[...daily.values()].sort((a,b)=>a.date.localeCompare(b.date)),last=series.at(-1),first=series[0];
  const scopeIds=confirmed.map(r=>r.id);
  const cards=JUDGMENT_CARDS.map(card=>({...card,status:'needs_information',missingFields:[],evidenceIds:[],metrics:{},reason:''}));
  const set=(id,values)=>Object.assign(cards.find(c=>c.id===id),values);
  set('comparison',{status:comparable?'candidate':'needs_information',missingFields:comparable?[]:['트레이너의 동일 수행 조건 확인 또는 변경된 기록 재확인'],evidenceIds:scopeIds,reason:comparable?'확인된 기록 범위에서 비교 가능':'운동 이름만으로 동일 조건을 추정하지 않음'});
  const sufficient=comparable&&series.length>=2;
- set('progress',{status:!sufficient?'needs_information':last.bestReps>=first.bestReps&&(last.bestReps>first.bestReps||last.bestReps>=criteria.targetReps)?'candidate':'not_applicable',evidenceIds:sufficient?[...first.ids,...last.ids]:[],missingFields:sufficient?[]:['같은 중량으로 기록한 서로 다른 날짜의 수행 2회'],metrics:sufficient?{loadKg:criteria.loadKg,firstReps:first.bestReps,latestReps:last.bestReps,delta:last.bestReps-first.bestReps,targetReps:criteria.targetReps,reachedTarget:last.bestReps>=criteria.targetReps}: {},reason:'동일 중량 최고 반복 횟수라는 한 지표의 변화만 해석'});
+ set('progress',{status:!sufficient?'needs_information':last.bestReps>=first.bestReps&&(last.bestReps>first.bestReps||last.bestReps>=criteria.targetReps)?'candidate':'not_applicable',evidenceIds:sufficient?[...first.ids,...last.ids]:[],missingFields:sufficient?[]:['같은 중량으로 기록한 서로 다른 날짜의 수행 2회'],metrics:sufficient?{loadKg:criteria.loadKg,firstReps:first.bestReps,latestReps:last.bestReps,delta:last.bestReps-first.bestReps,targetReps:criteria.targetReps,reachedTarget:last.bestReps>=criteria.targetReps}: {},reason:sideModes.has('sides')?'좌우 중 낮은 횟수로 동일 중량의 수행을 비교':'동일 중량 최고 반복 횟수라는 한 지표의 변화만 해석'});
  const window=last?series.filter(v=>(Date.parse(last.date)-Date.parse(v.date))/86400000<criteria.windowDays):[];
  const enough=sufficient&&window.length>=criteria.minSessions;
  const flat=enough&&window.every(v=>v.bestReps===window[0].bestReps)&&last.bestReps<criteria.targetReps;
  set('plateau',{status:!enough?'needs_information':flat?'candidate':'not_applicable',evidenceIds:enough?window.flatMap(v=>v.ids):[],missingFields:enough?[]:['트레이너가 정한 관찰 기간 내 비교 가능한 수업 횟수'],metrics:enough?{sessions:window.length,windowDays:criteria.windowDays,minSessions:criteria.minSessions,unchanged:flat}: {},reason:flat?'설정한 관찰 범위에서 반복수 변화 없음. 원인과 변경 필요성은 확인 필요':'정체 임계값을 AI가 임의로 만들지 않음'});
  const plan=criteria?.planSnapshot,date=criteria?.planDate,actual=date?records.filter(r=>r.date===date):[];
  const validPlan=matching&&plan?.program?.length&&date&&plan.savedAt>0&&judgmentDate(plan.savedAt)<date&&actual.length;
- const differences=validPlan?plan.program.map(p=>({exerciseName:p.exerciseName,plannedSets:p.sets,recordedSets:actual.filter(r=>r.exerciseName===p.exerciseName).reduce((n,r)=>n+r.sets.length,0)})):[];
+ const differences=validPlan?plan.program.map(p=>({exerciseName:p.exerciseName,plannedSets:p.sets,recordedSets:actual.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(p.exerciseName)).reduce((n,r)=>n+r.sets.length,0)})):[];
  set('plan',{status:validPlan?'candidate':'needs_information',missingFields:validPlan?[]:['해당 수업 전에 저장한 계획과 대조 날짜의 실제 기록'],evidenceIds:validPlan?actual.map(r=>r.id):[],metrics:validPlan?{date,differences}: {},reason:'기록된 세트 차이만 확인하며 누락을 미수행으로 단정하지 않음'});
  set('goal-data',{status:goal&&sufficient?'not_applicable':'needs_information',missingFields:[...(!goal?['회원 목표']:[]),...(!matching?['목표에 연결된 판단 기준']:[]),...(!sufficient?['비교 가능한 목표 측정 기록']:[])],evidenceIds:[],reason:goal&&sufficient?'지정 운동·중량의 반복수 지표만 평가 가능':'자료 부족은 목표 실패가 아님'});
  return {version:KNOWLEDGE_VERSION,scope:'일반 성인 PT 기록 검토',cards,cases,criteria,disclaimer:'초안 판단 기준 · 전문가 검토 및 실제 성과 검증 전'};

@@ -4,7 +4,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     match /trainers/{uid}/members/{memberId}/files/{fileId}/{objectName} {
-      function owner() { return request.auth != null && request.auth.uid == uid; }
+      function owner() { return request.auth != null && request.auth.uid == uid && !firestore.exists(/databases/(default)/documents/accountDeletions/$(uid)); }
       function manifest() { return firestore.get(/databases/(default)/documents/trainers/$(uid)/members/$(memberId)/files/$(fileId)); }
       function supportedName() {return objectName in ['source.pdf','source.png','source.jpg'];}
       function matchingType(type) {return (objectName == 'source.pdf' && type == 'application/pdf')

@@ -1,0 +1,7 @@
+import type {MeasurementType,WorkoutSet} from './workout-measurements';
+export type LessonItem={id:string;recordId:string;exerciseName:string;bodyPart:string;measurementType:MeasurementType|'assessment';loadType:string;segments:WorkoutSet[];rounds:number|null;recoveryNote:string;protocol:string;assessmentFields:{label:string;unit:string}[];action:'keep'|'review'|'assess';reason:string;guide:string;check:string;goal:string;referenceDate:string;reference:string;evidence:{tab:'goal'|'trend'|'distribution'|'summary';key:string;label:string}[]};
+export type LessonDraft={basis:string;evidenceKey:string;inputKey:string;period:string;from:string;to:string;source:'ai'|'records';before?:string[];programSummary?:string;programDates?:string[];title:string;items:LessonItem[];checks:string[]};
+export type LessonContext={basis:string;evidenceKey:string;inputKey:string;period:string;from:string;to:string;goalHeadline:string;decision:{choice:string;reason:string}|null;draft:LessonDraft;candidates:LessonItem[];status:'ready'|'reference'|'processing'|'error';generationError?:string;history?:ProgramHistory};
+
+export type ProgramSession={date:string;exerciseCount:number;strengthSets:number;cardioSegments:number;blocks:{sourceName:string;page:number;orderKnown:boolean;exercises:{recordId:string;candidateId:string;name:string;bodyPart:string;segments:number;kind:string}[]}[]};
+export type ProgramHistory={sessions:ProgramSession[];patterns:{sessionCount:number;exerciseCountRange:number[];averageStrengthSets:number;recurringPairs:{exercises:string[];sessions:number}[]}};

@@ -2,6 +2,10 @@
 
 기준 개발 폴더: `/Users/joord/Desktop/Joord/trainer-note`
 
+## Hosting과 예시
+
+Firebase Hosting 배포 및 새 예시 양식 추가는 [관리 문서](docs/hosting-and-demo.md)를 참고하세요.
+
 ## 실행
 
 이 폴더에서 `npm run dev` 후 http://localhost:3001 을 엽니다.
@@ -11,7 +15,7 @@
 
 - Firebase Google 로그인, 로그인 상태 유지, 계정 표시 및 로그아웃
 - 실제 회원 등록·수정·삭제, 목표·메모 저장, 검색, 계정별 Firestore 실시간 목록
-- 예시 둘러보기: 파일 미리보기 및 2뷰·3뷰 작업 화면
+- 예시 둘러보기: 현재 작업실과 같은 탭·공통 그래프, 가상 기록 수정 및 다음 수업·도우미 체험
 - Kenko 전신 그래픽: 앞·뒤 전환, 부위별 비율, 이두·삼두 구분, 클릭·호버 강조
 - 세트·볼륨 선 그래프와 원본 기록 연결
 - 종합 의견 및 다음 수업 프로그램 초안 UI

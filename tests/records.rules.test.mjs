@@ -66,10 +66,70 @@ test('client cannot forge auto acceptance but owner can confirm server provision
  await assertFails(updateDoc(doc(d,rp),{revision:2,updatedAt:serverTimestamp()}));
  await assertSucceeds(updateDoc(doc(d,rp),{status:'confirmed',revision:2,notes:'중량 확인',updatedAt:serverTimestamp()}));
 });
-for(const kind of ['imports','analysis','reports','plans','chats','corrections','judgmentSettings','judgmentDecisions','judgmentOutcomes'])test(`${kind} owner reads but no client may write AI-owned state`,async()=>{
+for(const kind of ['goalProposals','assessmentResults','assessmentResultHistory','assessmentReviews','assessmentDecisions','trainingGoals','trainingGoalHistory','imports','analysis','reports','plans','chats','chatAttachments','chatState','chatSessions','corrections','judgmentSettings','judgmentDecisions','judgmentOutcomes'])test(`${kind} owner reads but no client may write AI-owned state`,async()=>{
  const target=path+'/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{status:'ready'}));
  await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(setDoc(doc(db('trainer-a'),target),{status:'ready'}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
 });
 for(const kind of ['aiUsage','aiDaily','aiCalls'])test(`${kind} cannot be reset or forged by client`,async()=>{
  const target='trainers/trainer-a/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{calls:5}));await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(updateDoc(doc(db('trainer-a'),target),{calls:0}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
+});
+
+for(const kind of ['distance_time','duration','distance'])test(`${kind} supports eight intervals and owner revisions`,async()=>{
+ const d=db('trainer-a'),sets=Array.from({length:8},()=>({kg:null,reps:0,...(kind!=='duration'?{distanceMeters:200}:{}),...(kind!=='distance'?{durationSeconds:32}:{})}));
+ await assertSucceeds(create(d,{loadType:'unknown',measurementType:kind,sets}));
+ await assertSucceeds(updateDoc(doc(d,rp),{sets:sets.map(s=>({...s,...(kind!=='distance'?{durationSeconds:34}:{distanceMeters:250})})),revision:2,updatedAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(d,rp),{sets:[{...sets[0],kg:200,reps:32}],revision:3,updatedAt:serverTimestamp()}));
+});
+for(const kind of ['interpretations','trainingPrinciples'])test(`${kind} rules are owner-readable and server-write-only`,async()=>{
+ const ref=`trainers/trainer-a/${kind}/`+'b'.repeat(64);
+ await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),ref),{alias:'sky erg',explanation:'200m 초',revision:1}));
+ await assertSucceeds(getDoc(doc(db('trainer-a'),ref)));await assertFails(getDoc(doc(db('trainer-b'),ref)));
+ await assertFails(setDoc(doc(db('trainer-a'),ref),{alias:'override'}));await assertFails(deleteDoc(doc(db('trainer-a'),ref)));
+});
+
+test('L/R sets persist both sides and their total without doubling the set count',async()=>{const d=db('trainer-a');await assertSucceeds(create(d,{sets:[{kg:20,reps:18,leftReps:10,rightReps:8}]}));assert.deepEqual((await getDoc(doc(d,rp))).data().sets,[{kg:20,reps:18,leftReps:10,rightReps:8}]);await assertSucceeds(updateDoc(doc(d,rp),{sets:[{kg:20,reps:20,leftReps:10,rightReps:10}],revision:2,updatedAt:serverTimestamp()}));});
+for(const [name,set]of [['wrong total',{kg:20,reps:10,leftReps:10,rightReps:8}],['missing right',{kg:20,reps:10,leftReps:10}],['fractional side',{kg:20,reps:10,leftReps:4.5,rightReps:5.5}],['empty side',{kg:20,reps:10,leftReps:0,rightReps:10}],['overflow side',{kg:20,reps:2010,leftReps:2000,rightReps:10}]])test(`reject L/R ${name}`,async()=>{await assertFails(create(db('trainer-a'),{sets:[set]}));});
+
+test('all eight distinct unilateral sets pass the rule evaluation budget',async()=>{const d=db('trainer-a');await assertSucceeds(create(d,{sets:Array.from({length:8},(_,i)=>({kg:20+i,reps:20+i,leftReps:10,rightReps:10+i}))}));});
+
+for(const set of [{kg:20,reps:108,leftReps:'10',rightReps:'8'},{kg:20,reps:18,leftReps:'10',rightReps:8},{kg:20,reps:1510,leftReps:1500,rightReps:10},{kg:20,reps:18,leftReps:10,rightReps:8,extra:true}])test(`reject malformed unilateral ${JSON.stringify(set)}`,async()=>{await assertFails(create(db('trainer-a'),{sets:[set]}));});
+
+test('eight sourced L/R sets can be created and revised at maximum repetitions',async()=>{const d=db('trainer-a'),sets=Array.from({length:8},(_,i)=>({kg:20+i,reps:2000-i,leftReps:1000,rightReps:1000-i}));await assertSucceeds(create(d,{origin:'ai-reviewed',sourceHash:'a'.repeat(64),sourceName:'한발 운동.pdf',sourcePage:3,trainerNote:'통증 없음\n'+ 'x'.repeat(990),sets}));await assertSucceeds(updateDoc(doc(d,rp),{sets:sets.map(s=>({...s,kg:s.kg+1})),revision:2,updatedAt:serverTimestamp()}));});
+
+
+test('incline speed time accepts all eight intervals and only owner updates with correct units',async()=>{
+ const d=db('trainer-a'),sets=Array.from({length:8},(_,i)=>({kg:null,reps:0,inclinePercent:i%2?-5:20,speedKph:i%2?3:5,durationSeconds:60+i}));
+ await assertSucceeds(create(d,{measurementType:'incline_speed_time',trainerNote:'컨디션 확인\n수업 조정',loadType:'unknown',sets}));
+ assert.deepEqual((await getDoc(doc(d,rp))).data().sets,sets);
+ await assertSucceeds(updateDoc(doc(d,rp),{sets:sets.map(s=>({...s,speedKph:0})),revision:2,updatedAt:serverTimestamp()}));
+ for(const patch of [{inclinePercent:null},{inclinePercent:101},{speedKph:-1},{durationSeconds:0},{kg:20},{reps:10},{distanceMeters:100}])await assertFails(updateDoc(doc(d,rp),{sets:[{...sets[0],...patch}],revision:3,updatedAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(db('trainer-b'),rp),{sets,revision:3,updatedAt:serverTimestamp()}));
+});
+test('trainer note is optional, owner editable, bounded and survives clearing',async()=>{
+ const d=db('trainer-a');await assertSucceeds(create(d,{trainerNote:'무릎 통증 없음'}));
+ await assertFails(updateDoc(doc(db('trainer-b'),rp),{trainerNote:'변조',revision:2,updatedAt:serverTimestamp()}));
+ for(const trainerNote of [null,5,true,[],{},'x'.repeat(1001)])await assertFails(updateDoc(doc(d,rp),{trainerNote,revision:2,updatedAt:serverTimestamp()}));
+ await assertSucceeds(updateDoc(doc(d,rp),{trainerNote:'',revision:2,updatedAt:serverTimestamp()}));assert.equal((await getDoc(doc(d,rp))).data().trainerNote,'');
+});
+
+
+test('session notes are owner-readable and all client writes are denied',async()=>{
+ const notePath=path+'/sessionNotes/2026-06-09';
+ await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),notePath),{date:'2026-06-09',text:'수업 메모',revision:1}));
+ await assertSucceeds(getDoc(doc(db('trainer-a'),notePath)));
+ await assertSucceeds(getDocs(collection(db('trainer-a'),path+'/sessionNotes')));
+ await assertFails(getDoc(doc(db('trainer-b'),notePath)));await assertFails(getDoc(doc(db(),notePath)));
+ await assertFails(updateDoc(doc(db('trainer-a'),notePath),{text:'우회'}));
+ await assertFails(deleteDoc(doc(db('trainer-a'),notePath)));
+ await assertFails(setDoc(doc(db('trainer-a'),path+'/sessionNotes/2026-06-10'),{date:'2026-06-10',text:'우회',revision:1}));
+});
+
+test('goal visual reports and decisions are private server-owned documents',async()=>{for(const kind of ['goalVisuals','goalVisualDecisions','lessonProposals']){const p=path+'/'+kind+'/test';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),p),{status:'ready'}));await assertSucceeds(getDoc(doc(db('trainer-a'),p)));await assertFails(getDoc(doc(db('trainer-b'),p)));await assertFails(getDoc(doc(db(),p)));await assertFails(setDoc(doc(db('trainer-a'),p),{status:'forged'}));}});
+
+test('owner can save cardio body part without weakening ownership or measurement validation',async()=>{
+ const cardio={exerciseName:'마이마운틴',bodyPart:'유산소',measurementType:'incline_speed_time',loadType:'unknown',sets:[{kg:null,reps:0,inclinePercent:20,speedKph:5,durationSeconds:60}]};
+ await assertSucceeds(create(db('trainer-a'),cardio));
+ await assertFails(updateDoc(doc(db('trainer-b'),rp),{bodyPart:'코어',revision:2,updatedAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(db('trainer-a'),rp),{sets:[{kg:null,reps:0,inclinePercent:20,speedKph:5,durationSeconds:-1}],revision:2,updatedAt:serverTimestamp()}));
+ await assertSucceeds(updateDoc(doc(db('trainer-a'),rp),{bodyPart:'코어',revision:2,updatedAt:serverTimestamp()}));
 });

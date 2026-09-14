@@ -1,0 +1,297 @@
+/* Shared visual contract for source, records, analysis, lessons and assistant.
+   Keep pane-specific layout and data graphics in their component styles. */
+:root {
+  --workspace-font: 'Questrial', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --workspace-title: 16px;
+  --workspace-section: 14px;
+  --workspace-body: 13px;
+  --workspace-control: 12px;
+  --workspace-meta: 11px;
+  --workspace-radius: 8px;
+  --workspace-popover-radius: 12px;
+  --workspace-gutter: 22px;
+  --workspace-selected: #edf3e7;
+  --workspace-selected-border: #b9cdb0;
+  --workspace-field: #f8faf6;
+  --workspace-focus: #83a48b;
+  --workspace-shadow: 0 8px 28px #26332c14;
+}
+.review-workspace {
+  --review-pane-header-height: 54px;
+  --review-pane-control-height: 36px;
+  font-family: var(--workspace-font);
+  font-size: var(--workspace-body);
+  line-height: 1.65;
+  color: var(--ink);
+}
+.review-workspace :is(button, input, select, textarea) { font-family: var(--workspace-font); }
+.review-workspace :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--workspace-focus);
+  outline-offset: 2px;
+}
+
+/* The same tab surface, active state and icon size on both sides of the dock. */
+.review-workspace :is(.review-tab-item, .right-lesson-tab, .right-panel-tabs > [role=tab]) {
+  border: 1px solid var(--line);
+  border-radius: var(--workspace-radius);
+  background: #fff;
+  box-shadow: none;
+}
+.review-workspace :is(.review-tab-item[data-active=true], .right-lesson-tab[data-active=true], .right-panel-tabs > [aria-selected=true]) {
+  border-color: var(--workspace-selected-border);
+  background: var(--workspace-selected);
+  color: var(--green);
+}
+.review-workspace :is(.review-tab-item > button, .right-lesson-tab > button, .right-panel-tabs > [role=tab]) {
+  font-size: var(--workspace-control);
+  line-height: 1.4;
+  padding-inline: 10px;
+  gap: 6px;
+  color: var(--muted);
+}
+.review-workspace :is(.review-tab-item > [aria-current=page], .right-lesson-tab > [aria-selected=true], .right-panel-tabs > [aria-selected=true]) {
+  color: var(--green);
+  font-weight: 600;
+}
+.review-workspace :is(.review-tab-item, .right-lesson-tab) > button > svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+.review-workspace :is(.review-tab-item, .right-lesson-tab) > .lesson-tab-move { padding-inline: 6px; }
+.review-workspace .review-tab-item > .review-pending-count { padding-inline: 6px; font-size: var(--workspace-meta); }
+.review-workspace :is(.review-tabs, .right-panel-tabs) { gap: 8px; }
+.review-workspace :is(.review-source-tools, .review-work-heading, .right-panel-tabs) { padding: 8px 12px; }
+.review-workspace .review-source-tools > .source-current-name { font-size: var(--workspace-control); }
+.review-workspace :is(.review-source-tools > button, .review-open-assistant, .review-show-original, .right-panel-tabs > button:last-child) {
+  border-radius: var(--workspace-radius);
+  color: var(--muted);
+  font-size: var(--workspace-control);
+}
+
+/* Secondary toolbars share one baseline. No underline beneath an individual menu. */
+.review-workspace :is(.original-controls, .records-only .pdf-toolbar, .analysis-toolbar-row, .assistant-conversation-tools) {
+  height: 48px;
+  min-height: 48px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  font-size: var(--workspace-control);
+}
+.review-workspace :is(.original-controls, .records-only .pdf-toolbar, .assistant-conversation-tools) { padding: 6px 12px; }
+.review-workspace .analysis-actions { border: 0; }
+.review-workspace .analysis-toolbar-row .analysis-actions { min-height: 47px; }
+.review-workspace .live-analysis .analysis-tabs button {
+  min-height: 47px;
+  padding: 10px 4px;
+  font-size: var(--workspace-control);
+  line-height: 1.4;
+}
+.review-workspace :is(.analysis-actions > .icon-button, .right-panel-tabs > button:last-child) {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--workspace-radius);
+  box-shadow: none;
+}
+
+.review-workspace .lesson-heading {
+  margin: -16px calc(-1 * var(--workspace-gutter)) 16px;
+  height: 48px;
+  min-height: 48px;
+  padding: 5px 12px;
+  gap: 8px;
+}
+.review-workspace .lesson-heading .analysis-actions { padding: 0; min-height: 32px; gap: 0; }
+.review-workspace .lesson-heading .lesson-generate { min-height: 32px; padding: 5px 10px; }
+.review-workspace .assistant-panel { background: #fff; }
+
+.review-workspace .original-controls button {
+  height: 32px;
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: var(--workspace-control);
+  line-height: 1.5;
+  border-radius: var(--workspace-radius);
+}
+
+/* Common content rhythm; zoom remains owned by the existing text-size controls. */
+.review-workspace .records-only .live-source-scroll,
+.review-workspace .live-analysis .pane-body {
+  padding: 16px var(--workspace-gutter);
+}
+.review-workspace .live-plan .lesson-workspace-body { padding: 16px var(--workspace-gutter) !important; }
+.review-workspace .assistant-messages { padding: 16px var(--workspace-gutter); }
+.review-workspace :is(.lesson-heading h2, .assistant-welcome h3, .gv-heading h3, .gv-verdict h2, .gv-empty h3) {
+  font-size: var(--workspace-title);
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--ink);
+}
+.review-workspace :is(.record-card-heading h2, .original-file-heading strong, .records-only .live-record-heading, .records-only .record-exercise-info strong, .cl-section-title h3, .cl-program-row > header h3, .assistant-answer-body h4, .pa-heading h3, .pa-heading h4, .gv-card h3, .gv-next h3, .cl-before h3, .cl-checks h3, .page-session-note-heading label, .cl-note) {
+  font-size: var(--workspace-section);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.review-workspace :is(.original-file-heading small, .record-card-meta, .record-card-meta span, .cl-program-row > header small, .cl-index, .assistant-capture-card small) {
+  font-size: var(--workspace-meta);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.review-workspace :is(.cl-before, .cl-checks, .cl-row-detail, .assistant-answer-body, .assistant-question p) {
+  font-size: var(--workspace-body);
+  line-height: 1.75;
+  color: var(--ink);
+}
+.review-workspace :is(.cl-before p, .cl-checks p, .cl-row-detail p, .assistant-answer-body p) { font-size: inherit; line-height: inherit; }
+.review-workspace .assistant-answer-body p { margin-bottom: 12px; }
+.review-workspace .assistant-answer-body h4 { margin: 20px 0 8px; }
+.review-workspace .assistant-welcome { padding-bottom: 16px; }
+.review-workspace .pa-common-period { font-size: var(--workspace-body); margin-bottom: 16px; }
+
+/* One control and field treatment, without changing graph markers or set grids. */
+.review-workspace :is(.lesson-generate, .cl-actions button, .cl-add > button, .page-session-note-actions button, .gv-heading > button, .gv-decision button, .gv-reason > button, .assistant-suggestions button, .pa-common-period .ps-filter button) {
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: var(--workspace-control);
+  line-height: 1.5;
+  border-radius: var(--workspace-radius);
+}
+.review-workspace :is(.lesson-generate, .assistant-suggestions button) {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--green);
+  box-shadow: none;
+}
+.review-workspace :is(.lesson-generate, .assistant-suggestions button):hover:not(:disabled) { background: var(--soft); }
+.review-workspace .pa-common-period .ps-filter button[aria-pressed=true] {
+  color: var(--green);
+  background: var(--workspace-selected);
+  border-color: var(--workspace-selected-border);
+}
+.review-workspace :is(.inline-correction input:not([type=checkbox]):not([type=radio]), .inline-correction select, .inline-correction textarea, .inline-correction .workout-select-trigger, .cl-editor input, .cl-editor select, .cl-editor textarea, .cl-note textarea, .page-session-note textarea, .gv-reason textarea) {
+  font-family: var(--workspace-font);
+  font-size: var(--workspace-body);
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--workspace-radius);
+  background: var(--workspace-field);
+  padding: 8px 10px;
+}
+.review-workspace :is(.inline-correction textarea, .cl-note textarea, .page-session-note textarea, .gv-reason textarea):focus::placeholder { color: transparent; }
+.review-workspace :is(.assistant-compose, .assistant-capture-card) {
+  margin-inline: var(--workspace-gutter);
+  border: 1px solid var(--line);
+  border-radius: var(--workspace-radius);
+  box-shadow: none;
+}
+.review-workspace .assistant-compose { margin-bottom: 16px; }
+.review-workspace .assistant-compose textarea { font-size: var(--workspace-body); line-height: 1.65; }
+.review-workspace .assistant-compose textarea:focus-visible { outline: none; }
+.review-workspace .assistant-compose:focus-within { border-color: var(--workspace-focus); box-shadow: 0 0 0 2px #83a48b26; }
+.review-workspace .assistant-compose-actions button { border-radius: var(--workspace-radius); }
+.review-workspace .assistant-capture-card strong { font-size: var(--workspace-control); }
+
+/* Settings and history menus share type, corner radius and elevation. */
+.review-workspace :is(.analysis-options, .assistant-history > div) {
+  border: 1px solid var(--line);
+  border-radius: var(--workspace-popover-radius);
+  background: #fff;
+  color: var(--ink);
+  box-shadow: var(--workspace-shadow);
+  font-family: var(--workspace-font);
+  font-size: var(--workspace-control);
+}
+.review-workspace :is(.analysis-options > button, .assistant-history button) {
+  font-size: var(--workspace-body);
+  line-height: 1.5;
+  border-radius: var(--workspace-radius);
+}
+.review-workspace .analysis-options > strong { font-size: var(--workspace-control); color: var(--muted); }
+.review-workspace .analysis-font-sizes button { font-size: var(--workspace-control); border-radius: var(--workspace-radius); }
+
+.review-workspace :is(.gv-decision button[aria-pressed=true]) {
+  background: var(--workspace-selected);
+  border-color: var(--workspace-selected-border);
+  color: var(--green);
+}
+.review-workspace :is(.gv-card, .gv-verdict, .cl-before, .cl-preview, .cl-editor) { border-radius: var(--workspace-radius); }
+.review-workspace :is(.gv-card, .gv-verdict) { padding: 16px; }
+
+@container (max-width: 440px) {
+  .review-workspace :is(.live-source-scroll, .live-analysis .pane-body, .lesson-workspace-body, .assistant-messages, .assistant-compose, .assistant-capture-card) { --workspace-gutter: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .review-workspace :is(.review-tab-item, .right-lesson-tab, .assistant-suggestions button) { transition: none; }
+}
+
+/* Portalled select menus live under body, so use the same tokens explicitly. */
+.workout-select-menu {
+  border-color: var(--line);
+  border-radius: var(--workspace-popover-radius);
+  box-shadow: var(--workspace-shadow);
+  color: var(--ink);
+}
+.workout-select-menu > [role=option] { border-radius: var(--workspace-radius); }
+.workout-select-menu > [role=option][aria-selected=true] { background: var(--workspace-selected); color: var(--green); }
+.review-workspace .workout-select-trigger {
+  border: 1px solid var(--line);
+  border-radius: var(--workspace-radius);
+  background: var(--workspace-field);
+  color: var(--ink);
+  font-size: var(--workspace-body);
+}
+.review-workspace .workout-select-trigger[aria-expanded=true] { outline: 2px solid var(--workspace-focus); outline-offset: 2px; }
+.review-workspace .pdf-toolbar > .workout-select-trigger {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 32px;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  font-size: var(--workspace-control);
+}
+.review-workspace .ps-day-select { display: flex; align-items: center; gap: 8px; }
+.review-workspace .ps-day-select .workout-select-trigger { width: 136px; height: 36px; min-height: 36px; font-size: var(--workspace-control); }
+.review-workspace .analysis-font-sizes button[aria-pressed=true] { background: var(--green); border-color: var(--green); color: #fff; }
+
+/* Exact interval cycles are a presentation of the unchanged segment data. */
+.review-workspace .interval-pattern { display: block; min-width: 0; text-align: left; }
+.review-workspace .interval-pattern-caption { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.review-workspace .interval-pattern-caption strong { font-size: var(--workspace-control); font-weight: 600; color: var(--green); }
+.review-workspace .interval-pattern-caption small { font-size: var(--workspace-meta); font-weight: 400; color: var(--muted); }
+.review-workspace .interval-pattern-steps { display: grid; gap: 4px; }
+.review-workspace .interval-pattern-step { display: flex; align-items: baseline; gap: 10px; padding: 4px 8px; border-radius: 5px; background: var(--soft); }
+.review-workspace .interval-pattern-step small { font-size: var(--workspace-meta); color: var(--muted); }
+.review-workspace .interval-pattern-step b { font-size: var(--workspace-control); font-weight: 400; color: var(--ink); overflow-wrap: anywhere; }
+.review-workspace .record-interval-summary { justify-content: flex-start; }
+.review-workspace .cl-program-pattern { display: block; margin: 8px 0 0 22px; min-width: 0; }
+.review-workspace .cl-origin { font-size: var(--workspace-meta); color: var(--muted); margin: 0 0 12px; }
+.review-workspace .cl-basis-top { padding: 14px; margin: 0 0 16px; background: var(--soft); border-radius: var(--workspace-radius); }
+.review-workspace .cl-basis-top h3 { font-size: var(--workspace-section); margin: 0 0 6px; }
+.review-workspace .cl-basis-top p { font-size: var(--workspace-body); line-height: 1.75; color: var(--ink); }
+.review-workspace .cl-basis-top > div { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+.review-workspace .cl-basis-top button { font-size: var(--workspace-meta); }
+.review-workspace .lesson-workspace-body { position: relative; }
+.review-workspace .lesson-workspace-body:has(.cl-loading-screen) { overflow: hidden; }
+.review-workspace :is(.lesson-heading, .connected-lesson)[hidden] { display: none; }
+.review-workspace .cl-loading-screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 24px; gap: 12px; text-align: center; background: #fff; }
+.review-workspace .cl-loading-screen h3 { font-size: var(--workspace-title); }
+.review-workspace .cl-loading-screen p { font-size: var(--workspace-control); color: var(--muted); }
+.review-workspace .cl-loading-spinner { width: 32px; height: 32px; border: 2px solid var(--line); border-top-color: var(--green); border-radius: 50%; animation: lesson-loading-spin 1s linear infinite; margin-bottom: 8px; }
+@keyframes lesson-loading-spin { to { transform: rotate(360deg); } }
+@container (min-width: 650px) { .review-workspace .cl-program-pattern { margin: 0; } }
+@media (prefers-reduced-motion: reduce) { .review-workspace .cl-loading-spinner { animation: none; } }
+
+/* Keep the retry message and action together, separate from the period controls. */
+.analysis-retry-notice{display:flex;align-items:center;flex-wrap:nowrap;gap:16px;margin:0 0 18px;padding:12px 16px;min-width:0;overflow-x:auto;}
+.analysis-retry-notice p{margin:0;white-space:nowrap;flex:1 1 auto;min-width:0;overflow-x:auto;font-size:var(--ws-body-size,13px);}
+.analysis-retry-notice button{flex:0 0 auto;white-space:nowrap;margin:0;min-height:36px;}

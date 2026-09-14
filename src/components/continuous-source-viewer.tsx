@@ -128,23 +128,30 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
   useEffect(()=>{if(url||error)onAsset(file.id,{url,pdf:document,error});return()=>onAsset(file.id,null);},[file.id,url,document,error,onAsset]);
   const total = document?.numPages ?? 1;
   const page = Math.min(total, Math.max(1, sourcePage));
-  const pendingJump = useRef(false);
+  const pendingJump = useRef(false),animationFrame=useRef(0);
+  const stopMotion=useCallback(()=>{cancelAnimationFrame(animationFrame.current);animationFrame.current=0;},[]);
   const jump = useCallback(() => {
     const el = page === 1 ? container.current : container.current?.querySelector<HTMLElement>(`[data-source-page="${page}"]`);
     const root = viewport.current;
-    if (el && root) root.scrollTop += el.getBoundingClientRect().top - root.getBoundingClientRect().top - 16;
-  }, [page, viewport]);
+    if (!el || !root) return;
+    stopMotion();
+    const destination=()=>Math.max(0,Math.min(root.scrollHeight-root.clientHeight,root.scrollTop+el.getBoundingClientRect().top-root.getBoundingClientRect().top-16));
+    if(!jumpRequest||window.matchMedia('(prefers-reduced-motion: reduce)').matches){root.scrollTop=destination();return;}
+    const start=root.scrollTop,started=performance.now(),duration=460;
+    const frame=(now:number)=>{const progress=Math.min(1,(now-started)/duration),ease=1-Math.pow(1-progress,3);root.scrollTop=start+(destination()-start)*ease;if(progress<1)animationFrame.current=requestAnimationFrame(frame);else animationFrame.current=0;};
+    animationFrame.current=requestAnimationFrame(frame);
+  }, [page, viewport,jumpRequest,stopMotion]);
   useEffect(() => {
     if (!selected) {pendingJump.current = false; return;}
     pendingJump.current = true;
     jump();
     // If the trainer starts scrolling while a PDF loads, keep their position.
     const root = viewport.current;
-    const cancel = () => {pendingJump.current = false;};
+    const cancel = () => {pendingJump.current = false;stopMotion();};
     root?.addEventListener('wheel', cancel, {passive: true});
     root?.addEventListener('touchstart', cancel, {passive: true});
     root?.addEventListener('keydown', cancel);
-    return () => {root?.removeEventListener('wheel', cancel); root?.removeEventListener('touchstart', cancel); root?.removeEventListener('keydown', cancel);};
+    return () => {stopMotion();root?.removeEventListener('wheel', cancel); root?.removeEventListener('touchstart', cancel); root?.removeEventListener('keydown', cancel);};
   }, [selected, document, jump, viewport, jumpRequest]);
   const pageReady = useCallback(() => {
     if (!pendingJump.current) return;

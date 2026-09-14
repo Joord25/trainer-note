@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AccountControl, useTrainer } from "./auth-gate";
 import { Icon } from "./icons";
 import {SettingsDialog} from "./settings-dialog";
-import {useDisplayPreferences} from "../lib/display-preferences";
+import {useDisplayPreferences,DisplayPreferenceContext} from "../lib/display-preferences";
 import {MemberActions} from "./member-actions";
 import {MemberDirectory} from "./member-directory";
 import {LiveAnalysisWorkspace} from "./live-analysis-workspace";
@@ -51,9 +51,10 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const [toast, setToast] = useState("");
   const [online, setOnline] = useState(true);
   const [uploadRequest,setUploadRequest]=useState(0);
+  const [goalRequest,setGoalRequest]=useState(0);
   const selected = members.find(m => m.id === selectedId);
   const showHome=home||!selected;
-  function openMember(id:string){if(selectedId!==id&&unsaved.current&&!window.confirm('저장하지 않은 수정 내용이 있어요. 버리고 다른 회원으로 이동할까요?'))return false;if(selectedId!==id){unsaved.current=false;setUploadRequest(0);}setSelectedId(id);setHome(false);closeMobileSidebar();return true;}
+  function openMember(id:string){if(selectedId!==id&&unsaved.current&&!window.confirm('저장하지 않은 수정 내용이 있어요. 버리고 다른 회원으로 이동할까요?'))return false;if(selectedId!==id){unsaved.current=false;setUploadRequest(0);setGoalRequest(0);}setSelectedId(id);setHome(false);closeMobileSidebar();return true;}
   function goHome(){setHome(true);setSearch('');closeMobileSidebar();}
 
   useEffect(() => {
@@ -72,7 +73,7 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   useEffect(() => {if (!toast) return; const timer = setTimeout(() => setToast(""), 4000); return () => clearTimeout(timer);}, [toast]);
   const available = !loading && !error && online && !cached;
 
-  return <div className={"app-shell member-shell "+(!showHome?"live-member-shell ":"")+(compact?"sidebar-compact ":"sidebar-expanded ")+(mobileSidebarOpen?"sidebar-mobile-open":"")}>
+  return <DisplayPreferenceContext.Provider value={{preferences,update:updatePreferences}}><div className={"app-shell member-shell "+(!showHome?"live-member-shell ":"")+(compact?"sidebar-compact ":"sidebar-expanded ")+(mobileSidebarOpen?"sidebar-mobile-open":"")}>
     {narrow&&mobileSidebarOpen&&<button className="sidebar-backdrop" tabIndex={-1} aria-label="사이드바 닫기" onClick={dismissSidebar}/>}
     <aside id="member-sidebar" ref={sidebarRef} className="sidebar" aria-label="주 메뉴" role={narrow&&mobileSidebarOpen?"dialog":undefined} aria-modal={narrow&&mobileSidebarOpen?true:undefined}>
       <div className="brand-row"><button className="brand" aria-label="회원 홈으로" title="회원 홈" onClick={goHome}><span className="brand-full">trainer<span>note</span><i/></span></button><button ref={sidebarToggleRef} className="sidebar-toggle icon-button" aria-label={compact?"사이드바 펼치기":"사이드바 접기"} title={compact?"사이드바 펼치기":"사이드바 접기"} aria-expanded={!compact} aria-controls="member-sidebar" onClick={toggleSidebar}><span className="toggle-monogram" aria-hidden="true">tn<i/></span><Icon name="panel" size={21}/></button></div>
@@ -87,15 +88,15 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
         {!online && <div className="member-notice" role="status">인터넷 연결을 확인해주세요. 다시 연결되면 회원 목록을 불러옵니다.</div>}
         {error ? <div className="member-error" role="alert"><h2>회원 목록을 불러오지 못했어요</h2><p>{error}</p><button onClick={() => setAttempt(v => v + 1)}>다시 시도</button></div> : loading ? <div className="empty-state" aria-busy="true"><span className="auth-spinner"/><p>{online ? "회원 정보를 불러오고 있어요." : "인터넷 연결을 기다리고 있어요."}</p></div> : <>
           {showHome&&<MemberDirectory onEdit={m=>setEditor({kind:'edit',member:m})} onDelete={m=>setEditor({kind:'delete',member:m})} onUpload={m=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} online={online} preferences={preferences} onPreferences={updatePreferences} members={members} search={search} onSearch={setSearch} onOpen={openMember} onCreate={()=>setEditor({kind:"create"})} canCreate={available}/>}
-          {selected&&<div className="member-session" hidden={showHome}>{selected.createdAt ? <LiveAnalysisWorkspace onBack={goHome} initialViewMode={preferences.viewMode} key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest} onUnsavedChange={v=>{unsaved.current=v;}}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}</div>}
+          {selected&&<div className="member-session" hidden={showHome}>{selected.createdAt ? <LiveAnalysisWorkspace onBack={goHome} initialViewMode={preferences.viewMode} key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest} goalRequest={goalRequest} onUnsavedChange={v=>{unsaved.current=v;}}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}</div>}
         </>}
 
       </div>
     </main>
     <SettingsDialog open={settings} onClose={()=>setSettings(false)} preferences={preferences} onChange={updatePreferences} saveError={preferenceError} beforeLogout={()=>!unsaved.current||window.confirm('저장하지 않은 수정 내용이 있어요. 로그아웃할까요?')}/>
-    {editor && <MemberDialog editor={editor} online={online} onClose={() => setEditor(null)} onSaved={(id, message) => {if (id) {openMember(id); setSearch("");} else if(editor.kind==='delete'&&selectedId===editor.member.id){setSelectedId('');setHome(true);unsaved.current=false;} setEditor(null); setToast(message);}}/>}
+    {editor && <MemberDialog editor={editor} online={online} onClose={() => setEditor(null)} onSaved={(id, message) => {if (id) {openMember(id); setSearch("");if(editor.kind==='create')setGoalRequest(v=>v+1);} else if(editor.kind==='delete'&&selectedId===editor.member.id){setSelectedId('');setHome(true);unsaved.current=false;} setEditor(null); setToast(message);}}/>}
     {toast && <div className="toast" role="status"><Icon name="check" size={17}/>{toast}</div>}
-  </div>;
+  </div></DisplayPreferenceContext.Provider>;
 }
 
 function MemberDialog({editor, online, onClose, onSaved}: {editor: Editor; online: boolean; onClose: () => void; onSaved: (id: string | null, message: string) => void}) {

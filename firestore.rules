@@ -6,18 +6,25 @@ rules_version = '2';
 // UID in the path owns the whole document; trainer parent is a namespace only.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isOwner(uid) { return request.auth != null && request.auth.uid == uid; }
+    function isOwner(uid) { return request.auth != null && request.auth.uid == uid && !exists(/databases/$(database)/documents/accountDeletions/$(uid)); }
     function isValidMember(data) {
+      let fileCount=data.get('fileCount',0);
+      let recordCount=data.get('recordCount',0);
+      let fileId=data.get('lastFileId','');
+      let recordId=data.get('lastRecordId','');
+      let name=data.name;
+      let goal=data.goal;
+      let notes=data.notes;
       return data.keys().hasAll(['name','goal','notes','createdAt','updatedAt'])
         && data.keys().hasOnly(['name','goal','notes','createdAt','updatedAt','fileCount','lastFileId','recordCount','lastRecordId'])
-        && data.get('fileCount',0) is int && data.get('fileCount',0) >= 0 && data.get('fileCount',0) <= 500
-        && data.get('lastFileId','') is string && data.get('lastFileId','').size() <= 64
-        && data.get('recordCount',0) is int && data.get('recordCount',0) >= 0 && data.get('recordCount',0) <= 5000
-        && data.get('lastRecordId','') is string && data.get('lastRecordId','').size() <= 20
-        && data.name is string && data.name.size() > 0 && data.name.size() <= 60
-        && data.name.matches('.*[^ ].*')
-        && data.goal is string && data.goal.size() <= 300
-        && data.notes is string && data.notes.size() <= 1000
+        && fileCount is int && fileCount >= 0 && fileCount <= 500
+        && fileId is string && fileId.size() <= 64
+        && recordCount is int && recordCount >= 0 && recordCount <= 5000
+        && recordId is string && recordId.size() <= 20
+        && name is string && name.size() > 0 && name.size() <= 60
+        && name.matches('.*[^ ].*')
+        && goal is string && goal.size() <= 300
+        && notes.matches('(?s).{0,1000}')
         && data.createdAt is timestamp && data.updatedAt is timestamp;
     }
     function validFileCountChange(uid, memberId) {
@@ -63,57 +70,144 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow delete: if isOwner(uid) && resource.data.get('fileCount',0) == 0 && resource.data.get('recordCount',0) == 0;
       match /{kind}/{id} {
-        allow read: if kind in ['imports','analysis','reports','plans','chats','corrections','judgmentSettings','judgmentDecisions','judgmentOutcomes'] && isOwner(uid)
+        allow read: if kind in ['lessonProposals','goalVisuals','goalVisualDecisions','sessionNotes','goalProposals','assessmentResults','assessmentResultHistory','assessmentReviews','assessmentDecisions','trainingGoals','trainingGoalHistory','imports','analysis','reports','plans','chats','chatState','chatSessions','chatAttachments','corrections','judgmentSettings','judgmentDecisions','judgmentOutcomes'] && isOwner(uid)
           && exists(/databases/$(database)/documents/trainers/$(uid)/members/$(memberId));
         allow write: if false;
       }
       match /records/{recordId} {
         function parent() {return /databases/$(database)/documents/trainers/$(uid)/members/$(memberId);}
-        function counted(delta) {return exists(parent()) && existsAfter(parent())
-          && getAfter(parent()).data.recordCount == get(parent()).data.get('recordCount',0) + delta
-          && getAfter(parent()).data.lastRecordId == recordId;}
-        function validSingleSet(value,kind) {
-          let reps = value.reps;
+        function counted(delta) {
+          let before = get(parent()).data;
+          let after = getAfter(parent()).data;
+          return after.recordCount == before.get('recordCount',0) + delta && after.lastRecordId == recordId;
+        }
+        // Decimal range checks keep eight L/R sets within the 1000-expression budget.
+        // Integer total and numeric addition reject string-valued sides before the regex.
+        function validSides(value) {
+          let left = value.leftReps;
+          let right = value.rightReps;
+          return value.size() == 4
+            && value.reps is int && value.reps == left + right
+            && string(left).matches('([1-9][0-9]{0,2}|1000)')
+            && string(right).matches('([1-9][0-9]{0,2}|1000)');
+        }
+        function validSingleSet(value,weighted) {
           let kg = value.kg;
-          return value.keys().hasOnly(['kg','reps'])
-            && reps is int && reps >= 1 && reps <= 1000
-            && (kind == 'weighted' ? kg is number && kg > 0 && kg <= 2000 : kg == null);
+          return (weighted ? kg is number && kg > 0 && kg <= 2000 : kg == null)
+            && (value.size() == 2
+              ? value.reps is int && value.reps > 0 && value.reps <= 1000 : validSides(value));
+        }
+        function validDuration(value) {
+          let seconds = value.durationSeconds;
+          return value == {'kg':null,'reps':0,'durationSeconds':seconds} && seconds is number && seconds > 0 && seconds <= 86400;
+        }
+        function validDistance(value) {
+          let meters = value.distanceMeters;
+          return value == {'kg':null,'reps':0,'distanceMeters':meters} && meters is number && meters > 0 && meters <= 1000000;
         }
         function validSets(sets,kind) {
           let size = sets.size();
-          return sets is list && size > 0 && size <= 8
-            && (size <= 0 || validSingleSet(sets[0],kind))
-            && (size <= 1 || validSingleSet(sets[1],kind))
-            && (size <= 2 || validSingleSet(sets[2],kind))
-            && (size <= 3 || validSingleSet(sets[3],kind))
-            && (size <= 4 || validSingleSet(sets[4],kind))
-            && (size <= 5 || validSingleSet(sets[5],kind))
-            && (size <= 6 || validSingleSet(sets[6],kind))
-            && (size <= 7 || validSingleSet(sets[7],kind))
-          ;
+          let weighted = kind == 'weighted';
+          return sets is list && size <= 8
+            && validSingleSet(sets[0],weighted)
+            && (size <= 1 || validSingleSet(sets[1],weighted))
+            && (size <= 2 || validSingleSet(sets[2],weighted))
+            && (size <= 3 || validSingleSet(sets[3],weighted))
+            && (size <= 4 || validSingleSet(sets[4],weighted))
+            && (size <= 5 || validSingleSet(sets[5],weighted))
+            && (size <= 6 || validSingleSet(sets[6],weighted))
+            && (size <= 7 || validSingleSet(sets[7],weighted));
         }
-        function valid(data) {return recordId.matches('[a-zA-Z0-9]{20}')
-          && data.keys().hasAll(['performedAt','rawName','exerciseName','bodyPart','loadType','sets','sourceName','sourceHash','sourcePage','notes','status','origin','revision','createdAt','updatedAt'])
-          && data.keys().hasOnly(['performedAt','rawName','exerciseName','bodyPart','loadType','sets','sourceName','sourceHash','sourcePage','notes','status','origin','revision','createdAt','updatedAt'])
-          && data.performedAt is timestamp && data.performedAt >= timestamp.date(1900,1,1) && data.performedAt < timestamp.date(2101,1,1)
-          && data.rawName is string && data.rawName.size() <= 100
-          && data.exerciseName is string && data.exerciseName.size() > 0 && data.exerciseName.size() <= 100 && data.exerciseName.matches('.*[^ ].*')
-          && data.bodyPart in ['가슴','등','어깨','이두','삼두','하체','코어','전신','미분류']
+        function validDistanceTime(value) {
+          let meters = value.distanceMeters;
+          let seconds = value.durationSeconds;
+          return value == {'kg':null,'reps':0,'distanceMeters':meters,'durationSeconds':seconds}
+            && meters is number && meters > 0 && meters <= 1000000
+            && seconds is number && seconds > 0 && seconds <= 86400;
+        }
+        function validInclineSpeedTime(value) {
+          let incline = value.inclinePercent;
+          let speed = value.speedKph;
+          let seconds = value.durationSeconds;
+          return value == {'kg':null,'reps':0,'inclinePercent':incline,'speedKph':speed,'durationSeconds':seconds}
+            && incline is number && incline >= -100 && incline <= 100
+            && speed is number && speed >= 0 && speed <= 100
+            && seconds is number && seconds > 0 && seconds <= 86400;
+        }
+        function validIntervals(sets,kind) {
+          let size = sets.size();
+          return sets is list && size > 0 && size <= 8 && (kind == 'incline_speed_time' ? (
+                validInclineSpeedTime(sets[0])
+              && (size <= 1 || validInclineSpeedTime(sets[1]))
+              && (size <= 2 || validInclineSpeedTime(sets[2]))
+              && (size <= 3 || validInclineSpeedTime(sets[3]))
+              && (size <= 4 || validInclineSpeedTime(sets[4]))
+              && (size <= 5 || validInclineSpeedTime(sets[5]))
+              && (size <= 6 || validInclineSpeedTime(sets[6]))
+              && (size <= 7 || validInclineSpeedTime(sets[7]))
+          ) : kind == 'distance_time' ? (
+              (size <= 0 || validDistanceTime(sets[0]))
+              && (size <= 1 || validDistanceTime(sets[1]))
+              && (size <= 2 || validDistanceTime(sets[2]))
+              && (size <= 3 || validDistanceTime(sets[3]))
+              && (size <= 4 || validDistanceTime(sets[4]))
+              && (size <= 5 || validDistanceTime(sets[5]))
+              && (size <= 6 || validDistanceTime(sets[6]))
+              && (size <= 7 || validDistanceTime(sets[7]))
+          ) : kind == 'duration' ? (
+              (size <= 0 || validDuration(sets[0]))
+              && (size <= 1 || validDuration(sets[1]))
+              && (size <= 2 || validDuration(sets[2]))
+              && (size <= 3 || validDuration(sets[3]))
+              && (size <= 4 || validDuration(sets[4]))
+              && (size <= 5 || validDuration(sets[5]))
+              && (size <= 6 || validDuration(sets[6]))
+              && (size <= 7 || validDuration(sets[7]))
+          ) : (
+              (size <= 0 || validDistance(sets[0]))
+              && (size <= 1 || validDistance(sets[1]))
+              && (size <= 2 || validDistance(sets[2]))
+              && (size <= 3 || validDistance(sets[3]))
+              && (size <= 4 || validDistance(sets[4]))
+              && (size <= 5 || validDistance(sets[5]))
+              && (size <= 6 || validDistance(sets[6]))
+              && (size <= 7 || validDistance(sets[7]))
+          ));
+        }
+        function valid(data) {
+          let raw=data.rawName;
+          let name=data.exerciseName;
+          let source=data.sourceName;
+          let sourceHash=data.sourceHash;
+          let page=data.sourcePage;
+          let notes=data.notes;
+          let revision=data.revision;
+          let performed=data.performedAt;
+          let kind=data.get('measurementType','repetitions');
+          return recordId.matches('[a-zA-Z0-9]{20}')
+          && data.keys().hasOnly(['measurementType','performedAt','rawName','exerciseName','bodyPart','loadType','sets','sourceName','sourceHash','sourcePage','notes','trainerNote','status','origin','revision','createdAt','updatedAt'])
+          && performed is timestamp && performed >= timestamp.date(1900,1,1) && performed < timestamp.date(2101,1,1)
+          && raw.matches('(?s).{0,100}')
+          && name.size() <= 100 && name.matches('.*[^ ].*')
+          && data.bodyPart in ['가슴','등','어깨','이두','삼두','하체','코어','유산소','전신','미분류']
           && data.loadType in ['weighted','bodyweight','unknown']
-          && validSets(data.sets,data.loadType)
-          && data.sourceName is string && data.sourceName.size() <= 200 && data.sourceHash is string && data.sourcePage is int
-          && (data.sourceHash == '' ? data.sourceName == '' && data.sourcePage == 0 : data.sourceHash.matches('[a-f0-9]{64}') && data.sourceName.size() > 0 && data.sourcePage >= 1 && data.sourcePage <= 10000)
-          && data.notes is string && data.notes.size() <= 1000 && data.status == 'confirmed' && data.origin in ['manual','ai-reviewed','ai-auto'] && (data.origin == 'manual' || data.sourceHash != '')
-          && data.revision is int && data.revision > 0 && data.createdAt is timestamp && data.updatedAt == request.time;}
+          && kind in ['repetitions','distance_time','duration','distance','incline_speed_time']
+          && (kind == 'repetitions' ? validSets(data.sets,data.loadType) : data.loadType == 'unknown' && validIntervals(data.sets,data.measurementType))
+          && source.matches('(?s).{0,200}') && page is int
+          && (sourceHash == '' ? source == '' && page == 0 : sourceHash.matches('[a-f0-9]{64}') && source.size() > 0 && page >= 1 && page <= 10000)
+          && data.get('trainerNote','').matches('(?s).{0,1000}')
+          && notes.matches('(?s).{0,1000}') && data.status == 'confirmed' && data.origin in ['manual','ai-reviewed','ai-auto'] && (data.origin == 'manual' || sourceHash != '')
+          && revision is int && revision > 0 && data.createdAt is timestamp && data.updatedAt == request.time;}
         allow read: if isOwner(uid) && exists(parent());
         allow create: if isOwner(uid) && valid(request.resource.data) && counted(1)
           && request.resource.data.origin in ['manual','ai-reviewed']
           && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time;
-        allow update: if isOwner(uid) && exists(parent()) && valid(request.resource.data)
+        allow update: if isOwner(uid) && exists(parent())
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.origin == resource.data.origin
           && request.resource.data.revision == resource.data.revision + 1
-          && request.resource.data.sourceHash == resource.data.sourceHash && request.resource.data.sourceName == resource.data.sourceName;
+          && request.resource.data.sourceHash == resource.data.sourceHash && request.resource.data.sourceName == resource.data.sourceName
+          && valid(request.resource.data);
         allow delete: if isOwner(uid) && counted(-1);
       }
       match /files/{fileId} {
@@ -135,7 +229,7 @@ service cloud.firestore {
       }
     }
     match /trainers/{uid}/{kind}/{id} {
-      allow read: if kind in ['aiUsage','aiDaily','aiCalls'] && isOwner(uid);
+      allow read: if kind in ['aiUsage','aiDaily','aiCalls','interpretations','trainingPrinciples'] && isOwner(uid);
       allow write: if false;
     }
     match /{document=**} { allow read, write: if false; }

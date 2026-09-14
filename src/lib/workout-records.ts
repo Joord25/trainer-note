@@ -1,9 +1,11 @@
 "use client";
 import {collection,doc,getFirestore,getDocsFromServer,where,onSnapshot,orderBy,query,runTransaction,serverTimestamp,Timestamp} from "firebase/firestore";
 import {getClientAuth} from "./firebase-client";
-export const BODY_PARTS = ["가슴","등","어깨","이두","삼두","하체","코어","전신","미분류"] as const;
-export type WorkoutSet = {kg:number|null; reps:number};
-export type WorkoutInput = {date:string;rawName:string;exerciseName:string;bodyPart:string;loadType:"weighted"|"bodyweight"|"unknown";sets:WorkoutSet[];sourceName:string;sourceHash:string;sourcePage:number;notes:string};
+export const BODY_PARTS = ["가슴","등","어깨","이두","삼두","하체","코어","유산소","전신","미분류"] as const;
+import {validMeasurement} from './workout-measurements';
+import type {MeasurementType,WorkoutSet} from './workout-measurements';
+export type {WorkoutSet} from './workout-measurements';
+export type WorkoutInput = {measurementType?:MeasurementType;date:string;rawName:string;exerciseName:string;bodyPart:string;loadType:"weighted"|"bodyweight"|"unknown";sets:WorkoutSet[];sourceName:string;sourceHash:string;sourcePage:number;notes:string;trainerNote?:string};
 export type WorkoutRecord = WorkoutInput & {id:string;revision:number;pending:boolean;origin:"manual"|"ai-reviewed"|"ai-auto";status:"confirmed"|"provisional"};
 export function validateWorkout(input:WorkoutInput) {
   const v={...input,rawName:input.rawName.trim(),exerciseName:input.exerciseName.trim(),notes:input.notes.trim()};
@@ -11,7 +13,8 @@ export function validateWorkout(input:WorkoutInput) {
   if(!/^\d{4}-\d{2}-\d{2}$/.test(v.date)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==v.date||v.date<'1900-01-01'||v.date>'2100-12-31')throw new Error("연도를 포함한 올바른 운동 날짜를 입력해주세요.");
   if(!v.exerciseName||v.exerciseName.length>100||v.rawName.length>100)throw new Error("운동 이름은 1~100자로 입력해주세요.");
   if(!(BODY_PARTS as readonly string[]).includes(v.bodyPart)||!["weighted","bodyweight","unknown"].includes(v.loadType))throw new Error("운동 부위와 중량 기준을 확인해주세요.");
-  if(v.sets.length<1||v.sets.length>8||v.sets.some(s=>!Number.isInteger(s.reps)||s.reps<1||s.reps>1000||(v.loadType==='weighted'?typeof s.kg!=='number'||!Number.isFinite(s.kg)||s.kg<=0||s.kg>2000:s.kg!==null)))throw new Error("1~8세트, 세트당 횟수 1~1,000회와 중량을 확인해주세요. 불명확한 중량은 ‘중량 미상’을 선택하세요.");
+  if(!validMeasurement(v))throw new Error("세트의 기록 방식과 단위를 확인해주세요. 거리(m)·시간(초)은 양수로 입력하세요.");
+  if(v.trainerNote!==undefined&&(typeof v.trainerNote!=='string'||v.trainerNote.length>1000))throw new Error("운동 메모는 1,000자까지 입력해주세요.");
   if(v.notes.length>1000)throw new Error("메모는 1,000자까지 입력해주세요.");
   if(v.sourceHash?(!/^[a-f0-9]{64}$/.test(v.sourceHash)||!v.sourceName||v.sourceName.length>200||!Number.isInteger(v.sourcePage)||v.sourcePage<1||v.sourcePage>10000):(v.sourceName!==''||v.sourcePage!==0))throw new Error("PDF 원본과 페이지 정보를 확인해주세요.");
   return v;

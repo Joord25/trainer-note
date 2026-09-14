@@ -14,3 +14,6 @@ functions/.secret.local
 
 # PDF.js runtime assets copied from the pinned npm package
 public/pdfjs/
+
+# Local design exploration (not part of the deployed app)
+prototypes/
