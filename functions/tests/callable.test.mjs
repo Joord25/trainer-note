@@ -10,3 +10,7 @@ test('callable retains authentication and rejects invalid file IDs for source op
  await assert.rejects(trainerAi.run({data}),e=>e.code==='unauthenticated');
  for(const patch of [{fileId:'../foreign'},{fileId:123},{fileId:null},{action:'read'},{action:'review'},{action:'report'}])await assert.rejects(run(patch),e=>e.code==='invalid-argument');
 });
+
+test('callable rejects oversized payloads before any database lookup',async()=>{
+ await assert.rejects(run({extra:'x'.repeat(1024*1024)}),e=>e.code==='invalid-argument');
+});

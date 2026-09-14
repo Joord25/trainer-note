@@ -32,7 +32,7 @@ test('unlimited policy ignores previous caps but preserves usage accounting',asy
  const u=(await usage.get()).data();assert.equal(calls.length,1);assert.equal((await daily.get()).data().calls,31);
  assert.equal(u.calls,67);assert.equal(u.usedMicros,2_000_000+costMicros(2000,600));assert.equal(u.reservedMicros,0);
  assert.equal(u.monthlyLimitMicros,null);assert.equal(u.dailyLimit,null);assert.equal(u.inputTokens,2000);
- assert.equal((await global.get()).data().usedMicros,25_000_000+costMicros(2000,600));
+ assert.equal((await global.get()).data().usedMicros,25_000_000);const shards=await global.collection('shards').get();assert.equal(shards.docs.reduce((n,d)=>n+(d.data().usedMicros||0),0),costMicros(2000,600));assert.equal(shards.docs.reduce((n,d)=>n+(d.data().reservedMicros||0),0),0);
 });
 test('concurrent paid requests cannot race beyond daily allowance',async()=>{service=make({...LIMITS,dailyCalls:1});const result=await Promise.allSettled([service.paid(uid,'test',{parts:[{},{}]},100),service.paid(uid,'test',{parts:[{},{}]},100)]);assert.equal(result.filter(v=>v.status==='fulfilled').length,1);assert.equal(calls.length,1);});
 for(const cap of ['monthlyMicros','globalMonthlyMicros'])test(`${cap} reserves before provider call`,async()=>{service=make({...LIMITS,[cap]:1});await assert.rejects(service.paid(uid,'test',{parts:[{},{}]},100),/AI_USAGE_LIMIT/);assert.equal(calls.length,0);});
@@ -610,4 +610,18 @@ test('search capability question answers accurately without model or public sear
  await service.chat(uid,mid,chatInput({fileId:'',question:'웹에서 검색할수가 없는거야?'}));
  const v=(await db.doc(base+'/chats/'+chatInput().requestId).get()).data();
  assert.equal(calls.length,0);assert.equal(v.status,'ready');assert.equal(v.searchDecision,'none');assert.equal(v.searchNotice,'');assert.deepEqual(v.webSources,[]);assert.deepEqual(v.references,[]);assert.match(v.answer,/웹 검색을 사용할 수 있어요/);assert.equal(v.usage,null);
+});
+
+// Future caps must include both pre-sharding totals and current reservations.
+test('global allowance counts legacy totals and shards, even when accounts race',async()=>{
+ const reserve=costMicros(LIMITS.maxInputTokens,100);
+ await db.doc('aiGlobalUsage/2026-09').set({usedMicros:100,reservedMicros:0});
+ await db.doc('aiGlobalUsage/2026-09/shards/00').set({usedMicros:200,reservedMicros:0});
+ service=make({...LIMITS,globalMonthlyMicros:reserve+300});
+ provider=async()=>({value:{},usage:{inputTokens:LIMITS.maxInputTokens,outputTokens:100}});
+ const result=await Promise.allSettled(['cap-a','cap-b'].map(id=>service.paid(id,'test',{},100)));
+ assert.equal(result.filter(r=>r.status==='fulfilled').length,1);assert.equal(calls.length,1);
+ const shards=await db.collection('aiGlobalUsage/2026-09/shards').get();
+ assert.equal(shards.docs.reduce((sum,d)=>sum+(d.data().usedMicros||0),0),reserve+200);
+ assert.equal(shards.docs.reduce((sum,d)=>sum+(d.data().reservedMicros||0),0),0);
 });

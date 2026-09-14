@@ -41,19 +41,22 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   const callStarted=now();
   request=withTrainingGuidance(kind,request);
   const maxInputTokens=kind==='assistant-chat'?(limits.chatInputTokens??CHAT_MAX_INPUT_TOKENS):limits.maxInputTokens;
-  const key=randomUUID(),dates=dateKeys(now()),usage=db.doc(`trainers/${uid}/aiUsage/${dates.month}`),daily=db.doc(`trainers/${uid}/aiDaily/${dates.day}`),global=db.doc(`aiGlobalUsage/${dates.month}`),call=db.doc(`trainers/${uid}/aiCalls/${key}`),searchReserve=request.searchQuery!==undefined?SEARCH_QUERY_MICROS*SEARCH_RESERVE_QUERIES:0,reserve=costMicros(maxInputTokens,maxOutputTokens)+searchReserve;
+  const key=randomUUID(),dates=dateKeys(now()),usage=db.doc(`trainers/${uid}/aiUsage/${dates.month}`),daily=db.doc(`trainers/${uid}/aiDaily/${dates.day}`),global=db.doc(`aiGlobalUsage/${dates.month}`),globalShard=global.collection('shards').doc(String(parseInt(key.slice(0,8),16)%64).padStart(2,'0')),call=db.doc(`trainers/${uid}/aiCalls/${key}`),searchReserve=request.searchQuery!==undefined?SEARCH_QUERY_MICROS*SEARCH_RESERVE_QUERIES:0,reserve=costMicros(maxInputTokens,maxOutputTokens)+searchReserve;
   await db.runTransaction(async tx=>{
-   const [u,d,g]=await tx.getAll(usage,daily,global),uv=u.data()||{},dv=d.data()||{},gv=g.data()||{};
+   const [u,d]=await tx.getAll(usage,daily),uv=u.data()||{},dv=d.data()||{};
+   // Uncapped traffic never reads or writes the shared monthly document.
+   // A future global cap includes the legacy total and every shard atomically.
+   let gv={};if(limits.globalMonthlyMicros!=null){const snapshots=await tx.getAll(global,...Array.from({length:64},(_,i)=>global.collection('shards').doc(String(i).padStart(2,'0'))));gv=snapshots.reduce((sum,s)=>({usedMicros:sum.usedMicros+(s.data()?.usedMicros||0),reservedMicros:sum.reservedMicros+(s.data()?.reservedMicros||0)}),{usedMicros:0,reservedMicros:0});}
    if((limits.monthlyMicros!=null&&(uv.usedMicros||0)+(uv.reservedMicros||0)+reserve>limits.monthlyMicros)||(limits.dailyCalls!=null&&(dv.calls||0)>=limits.dailyCalls)||(limits.globalMonthlyMicros!=null&&(gv.usedMicros||0)+(gv.reservedMicros||0)+reserve>limits.globalMonthlyMicros))throw Error('AI_USAGE_LIMIT:무료 베타 AI 이용 한도에 도달했어요. 저장된 결과는 계속 볼 수 있어요.');
    tx.set(usage,{reservedMicros:(uv.reservedMicros||0)+reserve,calls:(uv.calls||0)+1,monthlyLimitMicros:limits.monthlyMicros,dailyLimit:limits.dailyCalls,priceVersion:PRICE_VERSION,updatedAt:stamp()},{merge:true});
-   tx.set(daily,{calls:(dv.calls||0)+1,updatedAt:stamp()},{merge:true});tx.set(global,{reservedMicros:(gv.reservedMicros||0)+reserve,updatedAt:stamp()},{merge:true});
-   tx.create(call,{kind,maxInputTokens,guidanceVersion:trainingGuidanceVersion(kind),model:MODEL,status:'reserved',reservedMicros:reserve,month:dates.month,createdAt:stamp(),priceVersion:PRICE_VERSION});
+   tx.set(daily,{calls:(dv.calls||0)+1,updatedAt:stamp()},{merge:true});tx.set(globalShard,{reservedMicros:FieldValue.increment(reserve),updatedAt:stamp()},{merge:true});
+   tx.create(call,{kind,maxInputTokens,guidanceVersion:trainingGuidanceVersion(kind),model:MODEL,status:'reserved',reservedMicros:reserve,month:dates.month,globalShard:globalShard.id,createdAt:stamp(),priceVersion:PRICE_VERSION});
   });
   let result,error;try{result=await model({...request,maxOutputTokens,maxInputTokens});}catch(e){error=e;}
   const usageData=result?.usage??error?.usage,known=Number.isInteger(usageData?.inputTokens)&&Number.isInteger(usageData?.outputTokens)&&usageData.inputTokens>=0&&usageData.outputTokens>=0,searchQueries=Number.isInteger(usageData?.searchQueries)&&usageData.searchQueries>=0?usageData.searchQueries:null,actual=error?.notBillable?0:known?costMicros(usageData.inputTokens,usageData.outputTokens)+(searchReserve?(searchQueries===null?searchReserve:searchQueries*SEARCH_QUERY_MICROS):0):reserve;
-  await db.runTransaction(async tx=>{const [c,u,g]=await tx.getAll(call,usage,global);if(c.data()?.status!=='reserved')return;const uv=u.data()||{},gv=g.data()||{};
+  await db.runTransaction(async tx=>{const [c,u]=await tx.getAll(call,usage);if(c.data()?.status!=='reserved')return;const uv=u.data()||{};
    tx.update(usage,{measuredCalls:(uv.measuredCalls??0)+1,completedCalls:(uv.completedCalls??0)+(error?0:1),failedCalls:(uv.failedCalls??0)+(error?1:0),totalDurationMs:(uv.totalDurationMs??0)+Math.max(0,now()-callStarted),reservedMicros:Math.max(0,(uv.reservedMicros||0)-reserve),usedMicros:(uv.usedMicros||0)+actual,inputTokens:(uv.inputTokens||0)+(usageData?.inputTokens||0),outputTokens:(uv.outputTokens||0)+(usageData?.outputTokens||0),updatedAt:stamp()});
-   tx.update(global,{reservedMicros:Math.max(0,(gv.reservedMicros||0)-reserve),usedMicros:(gv.usedMicros||0)+actual,updatedAt:stamp()});
+   tx.update(globalShard,{reservedMicros:FieldValue.increment(-reserve),usedMicros:FieldValue.increment(actual),updatedAt:stamp()});
    tx.update(call,{durationMs:Math.max(0,now()-callStarted),status:error?'failed':'complete',inputTokens:usageData?.inputTokens??null,outputTokens:usageData?.outputTokens??null,estimatedMicros:actual,searchQueries,searchEstimatedMicros:searchReserve?(error?.notBillable?0:searchQueries===null?searchReserve:searchQueries*SEARCH_QUERY_MICROS):0,usageUncertain:(!known||!!searchReserve&&searchQueries===null)&&!error?.notBillable,finishedAt:stamp()});
   });
   if(error)throw error;return {...result,usage:{...usageData,estimatedMicros:actual,callId:key,priceVersion:PRICE_VERSION}};

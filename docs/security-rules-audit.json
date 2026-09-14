@@ -1,0 +1,12 @@
+{
+  "score": 4,
+  "summary": "2026-09-14 Firestore/Storage rules audit: UID-based isolation, immutable source metadata, server-owned AI state and deletion locks are enforced. No cross-account bypass found in inspected rules and emulator regressions. Score applies to rules only, not IAM, App Check or overall production readiness.",
+  "findings": [
+    {
+      "check": "Storage Abuse",
+      "severity": "minor",
+      "issue": "Per-member file and record bounds exist, but an authenticated account can create arbitrarily many members and accumulate files. Per-account aggregate storage and creation-rate controls are absent.",
+      "recommendation": "Add account-level resource accounting and monitored abuse controls before public launch; preserve the separately configured unlimited daily/monthly AI policy."
+    }
+  ]
+}

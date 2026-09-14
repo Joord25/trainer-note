@@ -1,3 +1,4 @@
+import {createRequestGuard} from './request-guard.mjs';
 import {getAuth} from 'firebase-admin/auth';
 import {createAccountService} from './account-service.mjs';
 import {createGemini} from './gemini.mjs';
@@ -16,6 +17,7 @@ initializeApp();
 const db=getFirestore(),secret=defineSecret('TRAINER_NOTE_GEMINI_API_KEY');
 const region='us-central1',options={region,maxInstances:3,minInstances:0,concurrency:4,memory:'512MiB',timeoutSeconds:180,secrets:[secret]};
 const accountService=createAccountService({db,auth:getAuth(),bucket:getStorage().bucket(`${process.env.GCLOUD_PROJECT}.firebasestorage.app`),enqueue:async(data,delay,id)=>{try{await getFunctions().taskQueue(`locations/${region}/functions/purgeTrainerAccount`).enqueue(data,{id,scheduleDelaySeconds:delay,dispatchDeadlineSeconds:540});}catch(e){if(e.code!=='functions/task-already-exists')throw e;}}});
+const requestGuard=createRequestGuard({db});
 const deletionPending=async uid=>(await db.doc(`accountDeletions/${uid}`).get()).exists;
 const gemini=createGemini({apiKey:()=>secret.value()});
 
@@ -26,11 +28,12 @@ const service=createService({db,model:gemini,readSource:async(uid,mid,file)=>{
  const [bytes]=await object.download();if(hash(bytes)!==file.id)throw Error('원본 파일 식별자가 일치하지 않아요.');
  return bytes.toString('base64');
 },enqueue:async(data,id)=>{try{await getFunctions().taskQueue(`locations/${region}/functions/buildMemberReport`).enqueue(data,{id:'tn-'+id,scheduleDelaySeconds:30,dispatchDeadlineSeconds:180});}catch(e){if(e.code!=='functions/task-already-exists')throw e;}}});
-function input(data){if(!data||typeof data!=='object'||typeof data.memberId!=='string'||!/^[-_a-zA-Z0-9]{1,100}$/.test(data.memberId))throw new HttpsError('invalid-argument','회원 정보를 확인해주세요.');if(data.fileId!==undefined&&!(data.action==='chat'&&data.fileId==='')&&(typeof data.fileId!=='string'||!/^[a-f0-9]{64}$/.test(data.fileId)))throw new HttpsError('invalid-argument','원본 파일을 확인해주세요.');return data;}
+function input(data){if(!data||typeof data!=='object'||Array.isArray(data)||Buffer.byteLength(JSON.stringify(data))>1024*1024||typeof data.memberId!=='string'||!/^[-_a-zA-Z0-9]{1,100}$/.test(data.memberId))throw new HttpsError('invalid-argument','회원 정보를 확인해주세요.');if(data.fileId!==undefined&&!(data.action==='chat'&&data.fileId==='')&&(typeof data.fileId!=='string'||!/^[a-f0-9]{64}$/.test(data.fileId)))throw new HttpsError('invalid-argument','원본 파일을 확인해주세요.');return data;}
 export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
  if(!request.auth)throw new HttpsError('unauthenticated','로그인이 필요해요.');const uid=request.auth.uid,data=input(request.data);
  if(await deletionPending(uid))throw new HttpsError('permission-denied','회원탈퇴 처리 중이에요.');
  if(!(await db.doc(`trainers/${uid}/members/${data.memberId}`).get()).exists)throw new HttpsError('not-found','회원 정보를 찾을 수 없어요.');
+ const release=await requestGuard.acquire(uid);
  try{
   if(['draftGoal','listTrainingPrinciples','removeTrainingPrinciple','saveAssessmentResult','assessmentReview','saveAssessmentDecision'].includes(data.action))return await service[data.action](uid,data.memberId,data);
   if(data.action==='draftAssessment')return await service.draftAssessment(uid,data.memberId,data);
@@ -50,6 +53,7 @@ export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
   if(data.action==='savePlan'){await service.savePlan(uid,data.memberId,data);return {ok:true};}
   throw Error('지원하지 않는 요청이에요.');
  }catch(e){throw new HttpsError('failed-precondition',safeError(e));}
+ finally{try{await release();}catch{console.error('trainerAi request lease release failed; lease will expire');}}
 });
 export const readUploadedWorkout=onDocumentWritten({...options,document:'trainers/{uid}/members/{memberId}/files/{fileId}',retry:false},async event=>{
  if(await deletionPending(event.params.uid))return;
