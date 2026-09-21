@@ -45,3 +45,30 @@ test('failed storage cleanup remains retryable and never prematurely removes dat
 test('large deletion spans batches without removing another source',async()=>{
  const writer=db.bulkWriter();for(let n=0;n<510;n++)writer.set(db.doc(base+'/records/extra'+n),{sourceHash:fileId,status:'confirmed'});await writer.close();await db.doc(base).update({recordCount:513});await req('delete');assert.equal((await db.collection(base+'/records').get()).size,1);assert.equal((await db.doc(base).get()).data().recordCount,1);
 });
+
+test('clearing interpretations preserves existing original bytes but removes linked records and unparsed notes',async()=>{
+ await db.doc(base+'/imports/'+fileId).update({unparsed:[{text:'확인 필요'}]});
+ await req('clearRecords',{revision:1});
+ assert.equal(removed.length,0);
+ assert.equal((await db.doc(base+'/files/'+fileId).get()).data().status,'ready');
+ const i=(await db.doc(base+'/imports/'+fileId).get()).data();
+ assert.equal(i.recordsDeleted,true);assert.deepEqual(i.unparsed,[]);assert.ok(i.rows.every(r=>r.review==='ignored'));
+ assert.equal((await db.collection(base+'/records').get()).size,1);
+ assert.equal((await db.doc(base).get()).data().recordCount,1);
+});
+test('clearing archived source removes its manifest and interpretation without touching another source',async()=>{
+ await req('archive');await req('clearRecords',{revision:1});
+ assert.equal((await db.doc(base+'/files/'+fileId).get()).exists,false);
+ assert.equal((await db.doc(base+'/imports/'+fileId).get()).exists,false);
+ assert.equal((await db.doc(base+'/records/other').get()).exists,true);
+ assert.equal((await db.doc(base).get()).data().fileCount,1);
+ assert.equal(removed.length,1);
+});
+test('clearing interpretation works with missing original manifest and rejects stale revisions',async()=>{
+ await db.doc(base+'/files/'+fileId).delete();
+ await assert.rejects(req('clearRecords',{revision:0}),/변경/);
+ await req('clearRecords',{revision:1});
+ assert.equal((await db.doc(base+'/imports/'+fileId).get()).exists,false);
+ assert.equal((await db.collection(base+'/records').get()).size,1);
+ assert.equal(removed.length,0);
+});

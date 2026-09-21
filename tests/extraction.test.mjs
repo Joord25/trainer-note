@@ -40,7 +40,36 @@ test('one page retains separate date sessions, sections, notes and stable identi
 });
 test('missing sets are flagged rather than invented and unknown dates remain separate sessions',async()=>{
  const result=await parseExtraction({records:[{...row(),sessionIndex:1,year:null,month:null,day:null,sets:[]},{...row(),sessionIndex:2,year:null,month:null,day:null,sets:[]}],unparsed:[]},source,'회원 A');
- assert.equal(result.records[0].input.date,'');assert.equal(result.records[0].input.sets[0].reps,0);
+ assert.equal(result.records[0].input.date,'');assert.deepEqual(result.records[0].input.sets,[]);
  assert.notEqual(result.records[0].id,result.records[1].id);
  assert.ok(result.records[0].issues.some(v=>v.includes('세트')));
+});
+
+
+test('coverage keeps unprocessed dates independently of returned exercises and checks claimed completeness',async()=>{
+ const coverage=[{page:1,sessionIndex:1,dateText:'1/13',rawText:'BB squat',status:'processed',reason:'',expectedExercises:2},{page:1,sessionIndex:2,dateText:'1/21',rawText:'Lat pull down',status:'processed',reason:'',expectedExercises:1},{page:1,sessionIndex:3,dateText:'2/?',rawText:'',status:'unreadable',reason:'날짜와 글자가 잘림',expectedExercises:0}];
+ const result=await parseExtraction({records:[{...row(),sessionIndex:1}],unparsed:[],coverage},source,'회원 A');
+ assert.equal(result.coverage.length,3);assert.equal(result.coverage[0].status,'partial');assert.equal(result.coverage[0].extractedExercises,1);assert.equal(result.coverage[1].status,'unprocessed');assert.equal(result.coverage[2].status,'unreadable');
+ assert.equal(result.coverage[1].rawText,'Lat pull down');
+ await assert.rejects(parseExtraction({records:[{...row(),sessionIndex:4}],unparsed:[],coverage},source,'회원 A'),/연결되지/);
+ await assert.rejects(parseExtraction({records:[],unparsed:[],coverage:[coverage[0],coverage[0]]},source,'회원 A'),/중복/);
+ assert.equal((await parseExtraction({records:[row()],unparsed:[]},source,'회원 A')).coverage,undefined);
+});
+
+test('uncertain time units cannot remain a confirmed duration',async()=>{
+ const r=(await parse({rawName:'SLR',measurementType:'duration',loadType:'unknown',sets:[{kg:null,reps:null,durationSeconds:5400}],notes:"원문 SLR 90'",issues:["90'이 시간 단위인지 확인 필요"]})).records[0];
+ assert.equal(r.input.sets[0].durationSeconds,null);assert.match(r.input.notes,/90/);
+});
+test('explicit set count retains unknown repetitions without inventing a dose',async()=>{
+ const r=(await parse({rawName:'split squat 5set',sets:[],reportedSetCount:5,loadType:'unknown'})).records[0];
+ assert.equal(r.input.sets.length,5);assert.ok(r.input.sets.every(s=>s.kg===null&&s.reps===0));
+});
+test('explicit duration remains valid and unrecorded sets remain absent',async()=>{
+ const r=(await parse({measurementType:'duration',loadType:'unknown',sets:[{kg:null,reps:null,durationSeconds:90}],notes:'90초',issues:[]})).records[0];assert.equal(r.input.sets[0].durationSeconds,90);
+ assert.equal((await parse({sets:[],reportedSetCount:null})).records[0].input.sets.length,0);
+});
+test('compound without doses counts constituent exercises consistently',async()=>{
+ const c=compound();c.sessionIndex=1;c.components.forEach(x=>{x.sets=[];x.loadType='unknown';});
+ const result=await parseExtraction({records:[{...row(),...c}],unparsed:[],coverage:[{page:1,sessionIndex:1,dateText:'6/9',rawText:c.rawName,status:'processed',reason:'',expectedExercises:2}]},source,'회원 A');
+ assert.equal(result.records.length,2);assert.equal(result.coverage[0].status,'processed');assert.ok(result.records.every(r=>r.input.sets.length===0));
 });

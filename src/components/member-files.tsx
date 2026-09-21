@@ -21,7 +21,7 @@ export function MemberFiles({memberId,memberName,online,onUploaded}:{memberId:st
   useEffect(()=>{
     if(!storageEnabled)return;
     setLoading(true);setError("");
-    try{return listenMemberFiles(memberId,(data,fromCache)=>{setFiles(data);setCached(fromCache);if(!fromCache||data.length)setLoading(false);},e=>{setError(fileError(e));setLoading(false);setCached(true);setFiles([]);});}
+    try{return listenMemberFiles(memberId,(data,fromCache)=>{setFiles(data.filter(file=>!file.originalRemoved));setCached(fromCache);if(!fromCache||data.length)setLoading(false);},e=>{setError(fileError(e));setLoading(false);setCached(true);setFiles([]);});}
     catch(e){setError(fileError(e));setLoading(false);}
   },[memberId,retry]);
   useEffect(()=>{setSelected(previous=>new Set([...previous].filter(id=>files.some(f=>f.id===id))));},[files]);

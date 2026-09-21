@@ -19,7 +19,7 @@ export function createRecordDeletion({db,scheduleReport}) {
      if(target.fileId&&record.exists&&record.data().sourceHash!==target.fileId)throw Error('원본 연결이 변경됐어요. 다시 선택해주세요.');
      const row=data?.rows?.find(r=>r.id===target.id);
      if(!record.exists&&(!row||row.review==='ignored'))continue;
-     if((record.data()?.revision??0)!==target.recordRevision||(target.fileId&&(!row||row.revision!==target.rowRevision)))throw Error('선택한 기록이 변경됐어요. 최신 내용을 확인하고 다시 선택해주세요.');
+     if((record.data()?.revision??0)!==target.recordRevision||(target.fileId&&row&&row.revision!==target.rowRevision))throw Error('선택한 기록이 변경됐어요. 최신 내용을 확인하고 다시 선택해주세요.');
      if(record.exists){tx.delete(record.ref);count++;}
      if(row){const rows=changes.get(hash)||data.rows;changes.set(hash,rows.map(r=>r.id===target.id?{...r,review:'ignored',issues:[],revision:(r.revision??0)+1}:r));}
     }

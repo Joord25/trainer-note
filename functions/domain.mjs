@@ -25,10 +25,10 @@ export function validInput(v){
 }
 export function classify(row,history=[],options={}){
  let issues=row.issues.filter(s=>!(options.yearConfirmed&&s.includes('지정한'))&&!(options.memberConfirmed&&(s.includes('회원 이름')||s.includes('원본 이름'))));
- try{validInput(row.input);}catch(e){issues.push(e.message);}
- if(measurementType(row.input)==='repetitions'&&row.input.loadType==='unknown')issues.push('중량의 표기 기준을 확인해주세요.');
+ try{validInput(row.input);}catch(e){if(row.input.sets.length||e.message!=='세트의 거리·시간 또는 중량·횟수를 확인해주세요.')issues.push(e.message);else if(!issues.some(s=>s.includes('미기록')))issues.push('세트·횟수·중량 미기록: 원본에서 확인되는 값만 추가해주세요.');}
+ if(row.input.sets.length&&measurementType(row.input)==='repetitions'&&row.input.loadType==='unknown')issues.push('중량의 표기 기준을 확인해주세요.');
  const peers=history.filter(r=>exerciseIdentity(r)===exerciseIdentity(row.input)&&r.loadType==='weighted'&&r.date<row.input.date).sort((a,b)=>b.date.localeCompare(a.date));
- if(peers[0]&&row.input.loadType==='weighted'){
+ if(peers[0]&&row.input.sets.length&&row.input.loadType==='weighted'){
   const last=Math.max(...peers[0].sets.map(s=>s.kg??0)),now=Math.max(...row.input.sets.map(s=>s.kg??0));
   if(last>0&&(now>last*1.75||now<last*.4))issues.push('같은 운동의 지난 중량과 차이가 커요. 실제 변화인지 확인해주세요.');
  }

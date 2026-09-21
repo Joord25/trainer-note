@@ -51,7 +51,7 @@ export function ContinuousSourceViewer({memberId, files:sourceFiles, selectedFil
       <button aria-label="원본 축소" disabled={zoom<=75} onClick={()=>setZoom(v=>v-25)}>−</button>
       <button className="original-toolbar-fit" aria-label="원본 너비 맞춤" title="너비 맞춤" onClick={()=>setZoom(100)}>{zoom}%</button>
       <button aria-label="원본 확대" disabled={zoom>=200} onClick={()=>setZoom(v=>v+25)}>+</button>
-      {bulk.selectedCount>0&&<button className="original-trash" aria-label={`선택한 원본 ${bulk.selectedCount}개 삭제 · 운동 기록 유지`} title="선택한 원본만 즉시 삭제 · 운동 기록 유지" disabled={!online||bulk.busy} onClick={bulk.deleteSelectedImmediately}><Icon name="trash" size={18}/></button>}
+      {bulk.selectedCount>0&&<button className="original-trash" aria-label={`선택한 원본 ${bulk.selectedCount}개 삭제 범위 선택`} title="원본만 삭제 또는 판독·기록 함께 삭제" disabled={!online||bulk.busy} onClick={bulk.requestDeleteSelected}><Icon name="trash" size={18}/></button>}
       <SourceActions memberId={memberId} file={active} online={online} externalBusy={bulk.busy} onBeforeAction={beforeDelete} onNotice={onNotice} onEdit={()=>{if(active)onPageClick?.(active.id,position?.fileId===active.id?position.page:1);}}/>
       {onUpload&&<button aria-label="일지 추가" title="일지 추가" disabled={!online||bulk.busy} onClick={onUpload}><Icon name="plus" size={17}/></button>}
       {onCollapse&&<button aria-label="원본 접기" title="원본 접기" onClick={onCollapse}><Icon name="back" size={17}/></button>}

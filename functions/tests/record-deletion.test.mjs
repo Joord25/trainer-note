@@ -34,3 +34,11 @@ test('multiple chunks preserve partial failure and newer, unselected records',as
  const batch=db.batch();for(let n=5;n<=55;n++)batch.set(db.doc(base+'/records/'+id(n)),{revision:1,sourceHash:''});batch.update(db.doc(base),{recordCount:54});await batch.commit();
  const targets=Array.from({length:51},(_,i)=>({id:id(i+5),recordRevision:i===50?2:1}));const result=await remove('bulk-test','member',{targets});assert.equal(result.deletedIds.length,50);assert.equal(result.failed.length,1);assert.equal((await db.doc(base).get()).data().recordCount,4);assert.equal((await db.doc(base+'/records/'+id(55)).get()).exists,true);
 });
+
+test('saved records remain deletable after original and interpretation are gone',async()=>{
+ await db.doc(base+'/files/'+fileId).delete();await db.doc(base+'/imports/'+fileId).delete();
+ assert.deepEqual((await remove('bulk-test','member',{targets:[target(1)]})).failed,[]);
+ assert.equal((await db.doc(base+'/records/'+id(1)).get()).exists,false);
+ assert.equal((await db.doc(base).get()).data().recordCount,2);
+ assert.equal((await db.doc(base+'/records/'+id(2)).get()).exists,true);
+});

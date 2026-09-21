@@ -35,3 +35,27 @@ test('incline extraction retains zero grade and flags missing units without inve
  raw.records[0].sets[0].inclinePercent=null;
  const pending=await parseExtraction(raw,source,'회원');assert.ok(pending.records[0].issues.some(v=>v.includes('경사(%)')));assert.equal(classify(pending.records[0]).review,'needs-review');
 });
+
+test('reading guidance is bounded, optional for old results, and cannot discard readable exercises',async()=>{
+ const source={id:input.sourceHash,name:input.sourceName,contentType:'image/png'};
+ const raw={records:[{page:1,memberName:'회원',year:null,month:1,day:13,sessionIndex:1,rawName:'TRX squat',exerciseName:'TRX 스쿼트',bodyPart:'하체',loadType:'unknown',sets:[],notes:'',issues:['횟수 미기록']}],unparsed:[],guidance:{summary:'손글씨의 날짜별 운동을 읽었습니다.',checks:['연도를 확인해주세요.','1/13 중량 표기를 확인해주세요.',4,'약어 확인','추가 질문'],uploadAdvice:'',action:'deleteAll'}};
+ const result=await parseExtraction(raw,source,'회원');
+ assert.equal(result.records.length,1);assert.equal(result.records[0].input.date,'');
+ assert.equal(result.guidance.checks.length,3);assert.equal(result.guidance.action,undefined);
+ delete raw.guidance;assert.equal((await parseExtraction(raw,source,'회원')).guidance,undefined);
+ raw.guidance={summary:4};assert.equal((await parseExtraction(raw,source,'회원')).records.length,1);
+});
+
+
+test('undosed exercises retain independent sessions without invented sets or duplicate measurement warnings',async()=>{
+ const source={id:input.sourceHash,name:input.sourceName,contentType:'image/png'};
+ const records=[13,21,26].map((day,i)=>({page:1,memberName:'회원',year:2026,month:1,day,sessionIndex:i+1,rawName:'TRX squat',exerciseName:'TRX 스쿼트',bodyPart:'하체',loadType:'unknown',sets:[],notes:'',issues:[]}));
+ const parsed=await parseExtraction({records,unparsed:[]},source,'회원');
+ assert.deepEqual(parsed.records.map(r=>r.input.date),['2026-01-13','2026-01-21','2026-01-26']);
+ assert.equal(new Set(parsed.records.map(r=>r.id)).size,3);
+ for(const row of parsed.records){assert.deepEqual(row.input.sets,[]);const checked=classify(row);assert.equal(checked.review,'needs-review');assert.equal(checked.issues.length,1);assert.match(checked.issues[0],/미기록/);assert.throws(()=>validInput(row.input));}
+ assert.equal(summarize(parsed.records.map(r=>r.input)).sets,0);
+ records[0].loadType='weighted';records[0].sets=[{kg:25,reps:null}];
+ const partial=await parseExtraction({records,unparsed:[]},source,'회원');
+ assert.equal(partial.records[0].input.sets[0].kg,25);assert.equal(classify(partial.records[0]).review,'needs-review');
+});

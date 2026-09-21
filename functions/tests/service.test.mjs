@@ -42,7 +42,7 @@ test('malformed response usage is charged once and retry is explicit',async()=>{
 test('generation changed during model call cannot publish stale report',async()=>{await service.startImport(uid,mid,fileId);provider=async request=>{const facts=JSON.parse(request.parts[0].text),r=facts.records[0];await db.doc(base).update({goal:'수정된 목표'});return {value:{judgments:judgments(facts),headline:'오래된 분석',overview:'',findings:[],limitations:[],questions:[],program:[],quests:[]},usage:{inputTokens:100,outputTokens:100}};};const r=await service.buildReport(uid,mid);assert.equal(r.stale,true);assert.notEqual((await db.doc(base+'/analysis/current').get()).data().report?.headline,'오래된 분석');assert.equal((await db.doc(base+'/analysis/current').get()).data().status,'queued');});
 test('large file gives visible error without paying provider',async()=>{await db.doc(base+'/files/'+fileId).update({size:11*1024*1024});await service.startImport(uid,mid,fileId);assert.equal(calls.length,0);assert.match((await imported()).error,/10MB/);});
 test('deleted member never generates or saves results',async()=>{await db.doc(base).delete();await assert.rejects(service.startImport(uid,mid,fileId));await service.buildReport(uid,mid);assert.equal(calls.length,0);assert.equal((await db.doc(base+'/analysis/current').get()).exists,false);});
-test('queue combines edits before worker starts but permits follow-up while processing',async()=>{await service.scheduleReport(uid,mid);await service.scheduleReport(uid,mid);assert.equal(queued.length,1);await db.doc(base+'/analysis/current').update({status:'processing'});await service.scheduleReport(uid,mid);assert.equal(queued.length,2);assert.notEqual(queued[0][1],queued[1][1]);});
+test('queue combines edits before worker starts but permits follow-up while processing',async()=>{await service.startImport(uid,mid,fileId);await service.scheduleReport(uid,mid);await service.scheduleReport(uid,mid);assert.equal(queued.length,1);await db.doc(base+'/analysis/current').update({status:'processing'});await service.scheduleReport(uid,mid);assert.equal(queued.length,2);assert.notEqual(queued[0][1],queued[1][1]);});
 
 test('record corrections reuse extraction; unchanged analysis fields reuse report',async()=>{await service.startImport(uid,mid,fileId);await service.buildReport(uid,mid);const r=(await records())[0];await db.doc(base+'/records/'+r.id).update({revision:2,rawName:'cosmetic original text fix'});await service.buildReport(uid,mid);assert.equal(calls.length,2);await db.doc(base+'/records/'+r.id).update({revision:3,sets:[{kg:40,reps:12},{kg:70,reps:10}]});await service.buildReport(uid,mid);assert.equal(calls.length,3);assert.equal(calls.filter(c=>c.parts[1]).length,1);assert.equal((await db.doc(base+'/analysis/current').get()).data().summary.volume,1180);});
 
@@ -68,7 +68,7 @@ test('chat uses current owned records, persists answer and reuses same request w
 test('chat cannot read another trainer, member source or foreign conversation',async()=>{await service.startImport(uid,mid,fileId);const n=calls.length;await assert.rejects(service.chat('foreign',mid,chatInput()));await assert.rejects(service.chat(uid,mid,chatInput({fileId:'b'.repeat(64)})));await assert.rejects(service.chat(uid,mid,chatInput({previousId:'88888888-8888-4888-a888-888888888888'})));assert.equal(calls.length,n);});
 test('chat enforces existing cost cap and rejects fabricated citations',async()=>{await service.startImport(uid,mid,fileId);provider=async()=>({value:{answer:'없는 기록',references:['foreign'],questions:[]},usage:{inputTokens:100,outputTokens:10}});await assert.rejects(service.chat(uid,mid,chatInput()));assert.equal((await db.doc(base+'/chats/'+chatInput().requestId).get()).data().status,'error');const n=calls.length;await assert.rejects(service.chat(uid,mid,chatInput()));assert.equal(calls.length,n);service=make({...LIMITS,dailyCalls:0});await assert.rejects(service.chat(uid,mid,chatInput({requestId:'99999999-9999-4999-a999-999999999999'})));assert.equal(calls.length,n);});
 
-test('year defaults to Korean current year but explicit source year wins',async()=>{answer=raw({year:null});answer.records.push({...raw({rawName:'last year',year:2025}).records[0]});await service.startImport(uid,mid,fileId);const v=await imported();assert.equal(v.year,2026);assert.equal(v.rows[0].input.date,'2026-06-09');assert.match(v.rows[0].input.notes,/연도 기본값: 2026/);assert.equal(v.rows[1].input.date,'2025-06-09');assert.equal((await records()).length,2);});
+test('missing year stays unset until user chooses it and survives rereading',async()=>{answer=raw({year:null});answer.records.push({...raw({rawName:'last year',year:2025}).records[0]});await service.startImport(uid,mid,fileId);let v=await imported();assert.equal(v.year,null);assert.equal(v.yearExplicit,false);assert.equal(v.rows[0].input.date,'');assert.equal(v.rows[1].input.date,'2025-06-09');assert.equal((await records()).length,1);await service.reviewImport(uid,mid,fileId,{operation:'member',revision:v.revision});v=await imported();assert.equal(v.rows[0].input.date,'');await service.reviewImport(uid,mid,fileId,{operation:'year',year:2024,revision:v.revision});v=await imported();assert.equal(v.yearExplicit,true);assert.equal(v.rows[0].input.date,'2024-06-09');await service.startImport(uid,mid,fileId,false,{revision:v.revision});assert.equal(calls.length,2);assert.equal((await imported()).year,2024);});
 test('page date applies atomically to that page only and preserves unrelated issues',async()=>{await db.doc(base+'/files/'+fileId).update({contentType:'application/pdf'});answer=raw({year:null,month:null});answer.records.push({...raw({rawName:'ambiguous',year:null,month:null,issues:['세트 판독 모호']}).records[0]},{...raw({rawName:'page two',page:2}).records[0]});await service.startImport(uid,mid,fileId);let v=await imported();await service.reviewImport(uid,mid,fileId,{operation:'date',page:1,date:'2025-07-01',revision:v.revision});v=await imported();assert.equal(v.rows[0].input.date,'2025-07-01');assert.equal(v.rows[1].review,'needs-review');assert.ok(v.rows[1].issues.includes('세트 판독 모호'));assert.equal(v.rows[2].input.date,'2026-06-09');assert.equal((await records()).length,2);await assert.rejects(service.reviewImport(uid,mid,fileId,{operation:'date',page:1,date:'2025-02-29',revision:v.revision}));await service.reviewImport(uid,mid,fileId,{operation:'year',year:2024,revision:v.revision});v=await imported();assert.equal(v.rows[0].input.date,'2025-07-01');assert.equal(v.rows[1].input.date,'2025-07-01');assert.equal(calls.length,1);});
 test('adding unparsed creates one linked record and stays resolved after year change',async()=>{answer.unparsed=[{page:1,text:'air bike X 50',reason:'단위 확인'}];await service.startImport(uid,mid,fileId);let v=await imported();const request={operation:'add',rowId:'1234567890abcdefghij',unparsedIndex:0,input:{...v.rows[0].input,rawName:'air bike X 50',exerciseName:'확인한 운동'},revision:v.revision};await service.reviewImport(uid,mid,fileId,request);assert.equal((await imported()).unparsed.length,0);assert.equal((await records()).length,2);assert.equal((await db.doc(base).get()).data().recordCount,2);await assert.rejects(service.reviewImport(uid,mid,fileId,request));v=await imported();await service.reviewImport(uid,mid,fileId,{operation:'year',year:2025,revision:v.revision});assert.equal((await imported()).unparsed.length,0);assert.equal((await records()).length,2);assert.equal(calls.length,1);});
 test('page date includes manually added records and rejects stale or foreign requests',async()=>{await service.startImport(uid,mid,fileId);let v=await imported();const r=(await records())[0];await db.doc(base+'/records/manualRecord123456789').set({...r,sourcePage:1,revision:1});await service.reviewImport(uid,mid,fileId,{operation:'date',page:1,date:'2025-08-01',revision:v.revision});assert.ok((await records()).every(r=>r.performedAt.toDate().toISOString().startsWith('2025-08-01')));await assert.rejects(service.reviewImport(uid,mid,fileId,{operation:'date',page:1,date:'2024-08-01',revision:v.revision}));await assert.rejects(service.reviewImport('foreign',mid,fileId,{operation:'date',page:1,date:'2024-08-01',revision:v.revision+1}));});
@@ -334,7 +334,7 @@ test('training goal revisions persist atomically without AI calls',async()=>{
  await service.saveTrainingGoal(uid,mid,{input:{...input,detail:'다음 단계'},revision:1});
  assert.equal((await db.doc(base+'/trainingGoals/current').get()).data().revision,2);
  assert.equal((await db.collection(base+'/trainingGoalHistory').get()).size,2);
- assert.equal(calls.length,0);assert.equal(queued.length,1);
+ assert.equal(calls.length,0);assert.equal(queued.length,0);
 });
 
 test('assessment draft uses budgeted AI, bounded context and waits for trainer save',async()=>{
@@ -644,4 +644,54 @@ test('ignore removes a saved record and prevents bulk corrections from restoring
  v=await imported();assert.equal(v.rows[0].review,'ignored');
  await service.reviewImport(uid,mid,fileId,{operation:'year',year:2025,revision:v.revision});
  assert.equal((await records()).length,0);
+});
+
+test('reading guidance persists with the same extraction request',async()=>{
+ answer.guidance={summary:'여러 날짜의 손글씨 일지입니다.',checks:['중량 수정 표시를 확인해주세요.'],uploadAdvice:''};
+ await service.startImport(uid,mid,fileId);
+ assert.deepEqual((await imported()).guidance,answer.guidance);
+ assert.equal(calls.length,1);assert.ok((await records()).length>0);
+});
+
+
+test('undosed multi-date readings persist as editable drafts without entering measured analysis',async()=>{
+ answer={records:[13,21,26].map((day,i)=>raw({month:1,day,sessionIndex:i+1,sets:[],loadType:'unknown'}).records[0]),unparsed:[]};
+ await service.startImport(uid,mid,fileId);
+ const data=await imported();assert.equal(data.status,'ready');assert.equal(data.rows.length,3);
+ assert.deepEqual(data.rows.map(r=>r.input.date),['2026-01-13','2026-01-21','2026-01-26']);
+ assert.ok(data.rows.every(r=>r.review==='needs-review'&&r.input.sets.length===0));
+ assert.equal((await records()).length,0);
+ const first=data.rows[0];
+ await service.reviewImport(uid,mid,fileId,{operation:'row',rowId:first.id,input:{...first.input,loadType:'weighted',sets:[{kg:25,reps:10}]},revision:data.revision});
+ assert.equal((await records()).length,1);assert.equal((await records())[0].performedAt.toDate().toISOString().slice(0,10),'2026-01-13');
+ assert.equal((await imported()).rows.filter(r=>r.review==='needs-review').length,2);
+});
+
+
+test('coverage persists missing sessions even when they contain no parsed rows',async()=>{
+ answer=raw({sessionIndex:1});answer.coverage=[{page:1,sessionIndex:1,dateText:'6/9',rawText:'BB squat',status:'processed',reason:'',expectedExercises:1},{page:1,sessionIndex:2,dateText:'6/12',rawText:'row',status:'unprocessed',reason:'변환 미완료',expectedExercises:1}];
+ await service.startImport(uid,mid,fileId);
+ const data=await imported();assert.equal(data.coverage.length,2);assert.equal(data.coverage[0].extractedExercises,1);assert.equal(data.coverage[1].status,'unprocessed');assert.equal(data.coverage[1].extractedExercises,0);assert.equal(data.rows.length,1);
+});
+
+
+test('last-record deletion settles immediately and queued workers make no model call',async()=>{
+ await service.startImport(uid,mid,fileId);const previousCalls=calls.length;queued=[];
+ for(const r of await records())await db.doc(base+'/records/'+r.id).delete();
+ await db.doc(base+'/analysis/current').set({status:'processing',error:'old',report:{headline:'old'}});
+ await service.scheduleReport(uid,mid);
+ let state=(await db.doc(base+'/analysis/current').get()).data();assert.equal(state.status,'ready');assert.equal(state.error,undefined);assert.equal(state.summary.sets,0);assert.deepEqual(state.evidenceRecords,[]);assert.equal(queued.length,0);
+ await service.buildReport(uid,mid);assert.equal(calls.length,previousCalls);state=(await db.doc(base+'/analysis/current').get()).data();assert.equal(state.status,'ready');
+});
+test('provider failure arriving after all records were deleted cannot restore processing or error',async()=>{
+ await service.startImport(uid,mid,fileId);
+ provider=async()=>{for(const r of await records())await db.doc(base+'/records/'+r.id).delete();await service.scheduleReport(uid,mid);throw Error('늦게 도착한 오류');};
+ await service.buildReport(uid,mid);const state=(await db.doc(base+'/analysis/current').get()).data();assert.equal(state.status,'ready');assert.equal(state.error,undefined);assert.deepEqual(state.evidenceRecords,[]);
+});
+
+
+test('successful analysis arriving after deletion cannot restore old evidence',async()=>{
+ await service.startImport(uid,mid,fileId);
+ provider=async request=>{const facts=JSON.parse(request.parts[0].text);for(const r of await records())await db.doc(base+'/records/'+r.id).delete();await service.scheduleReport(uid,mid);return {value:{judgments:judgments(facts),headline:'삭제 전 분석',overview:'old',findings:[],limitations:[],questions:[],program:[],quests:[]},usage:{inputTokens:100,outputTokens:100}};};
+ const result=await service.buildReport(uid,mid);assert.equal(result.stale,true);const state=(await db.doc(base+'/analysis/current').get()).data();assert.equal(state.status,'ready');assert.notEqual(state.report.headline,'삭제 전 분석');assert.deepEqual(state.evidenceRecords,[]);
 });

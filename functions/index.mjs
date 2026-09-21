@@ -53,7 +53,7 @@ export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
   if(data.action==='regenerateChat')return await service.regenerateChat(uid,data.memberId,data);
   if(data.action==='newChat')return await service.newChat(uid,data.memberId,data);
   if(data.action==='chat')return await service.chat(uid,data.memberId,data);
-  if(data.action==='manageSource')return await manageSource(uid,data.memberId,data);
+  if(data.action==='manageSource'){const result=await manageSource(uid,data.memberId,data);if(data.operation==='clearRecords')await service.scheduleReport(uid,data.memberId);return result;}
   if(data.action==='read'&&data.fileId)return await service.startImport(uid,data.memberId,data.fileId,!!data.retry,data.regenerate===true?{revision:data.revision}:undefined);
   if(data.action==='review'&&data.fileId){await service.reviewImport(uid,data.memberId,data.fileId,data);return {ok:true};}
   if(data.action==='report'){if(data.retry)await service.retryReport(uid,data.memberId,data.regenerate===true);else await service.scheduleReport(uid,data.memberId);return {ok:true};}
