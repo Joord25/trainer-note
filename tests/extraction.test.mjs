@@ -18,7 +18,7 @@ test('empty template and unsupported time/distance are preserved separately',asy
 test('repeat reads yield stable IDs and repeated same-page exercises stay distinct',async()=>{const value={records:[row(),row()],unparsed:[]};const a=await parseExtraction(value,source,'회원 A'),b=await parseExtraction(value,source,'회원 A');assert.deepEqual(a.records.map(v=>v.id),b.records.map(v=>v.id));assert.notEqual(a.records[0].id,a.records[1].id);assert.match(a.records[0].id,/^[a-f0-9]{20}$/);});
 test('zero kg is a missing weighted value requiring review, not counted volume',async()=>{const r=(await parse({sets:[{kg:0,reps:10}]})).records[0];assert.equal(r.input.sets[0].kg,null);assert.ok(r.issues.some(v=>v.includes('중량')));});
 
-test('reject excessive record output before displaying drafts',async()=>assert.rejects(parseExtraction({records:Array.from({length:61},row),unparsed:[]},source,'회원 A')));
+test('reject excessive record output before displaying drafts',async()=>assert.rejects(parseExtraction({records:Array.from({length:121},row),unparsed:[]},source,'회원 A')));
 
 const component=(rawName,exerciseName,bodyPart,kg,reps)=>({rawName,exerciseName,bodyPart,loadType:'weighted',sets:[{kg,reps}],notes:'',issues:[],mapping:`원문 중량 ${kg}, 횟수 ${reps} 대응`});
 const compound=()=>({year:2026,rawName:'Cable lying ext + DB curl',exerciseName:'복합 운동',bodyPart:'미분류',sets:[],notes:'',issues:[],components:[component('Cable lying ext','케이블 익스텐션','삼두',20,8),component('DB curl','덤벨 컬','이두',5,10)]});
@@ -26,3 +26,21 @@ test('compound row becomes two records with corresponding sets, not a parent plu
 test('compound parent sets and duplicated components are rejected',async()=>{await assert.rejects(parse({...compound(),sets:[{kg:20,reps:8}]}));const c=compound();await assert.rejects(parse({...c,components:[c.components[0],c.components[0]]}));});
 test('uncertain split values remain missing and unambiguous component stays valid',async()=>{const c=compound();c.components[1].sets=[{kg:null,reps:10}];const a=await parse(c);assert.equal(a.records[0].issues.length,0);assert.equal(a.records[1].input.sets[0].kg,null);assert.ok(a.records[1].issues.some(v=>v.includes('중량')));});
 test('single compound movement remains one record; dubious split needs review',async()=>{const single=await parse({year:2026,rawName:'Thruster',exerciseName:'스러스터',sets:[{kg:20,reps:10}],issues:[],components:[]});assert.equal(single.records.length,1);const split=await parse({...compound(),rawName:'Thruster'});assert.ok(split.records.every(r=>r.issues.some(v=>v.includes('원문과 수치 대응'))));});
+
+test('one page retains separate date sessions, sections, notes and stable identities',async()=>{
+ const first={...row(),sessionIndex:1,year:2026,programSection:'W.O.D',month:1,day:21,sessionNote:'첫 수업 메모'};
+ const second={...row(),sessionIndex:2,year:2026,programSection:'F',month:1,day:26,sessionNote:'둘째 수업 메모'};
+ const result=await parseExtraction({records:[first,second],unparsed:[]},source,'회원 A');
+ const reversed=await parseExtraction({records:[second,first],unparsed:[]},source,'회원 A');
+ assert.equal(result.records[0].input.date.slice(5),'01-21');
+ assert.equal(result.records[1].input.date.slice(5),'01-26');
+ assert.equal(result.records[0].id,reversed.records[1].id);
+ assert.equal(result.records[1].programSection,'F');
+ assert.equal(result.records[1].sessionNote,'둘째 수업 메모');
+});
+test('missing sets are flagged rather than invented and unknown dates remain separate sessions',async()=>{
+ const result=await parseExtraction({records:[{...row(),sessionIndex:1,year:null,month:null,day:null,sets:[]},{...row(),sessionIndex:2,year:null,month:null,day:null,sets:[]}],unparsed:[]},source,'회원 A');
+ assert.equal(result.records[0].input.date,'');assert.equal(result.records[0].input.sets[0].reps,0);
+ assert.notEqual(result.records[0].id,result.records[1].id);
+ assert.ok(result.records[0].issues.some(v=>v.includes('세트')));
+});

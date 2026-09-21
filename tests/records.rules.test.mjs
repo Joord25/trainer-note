@@ -133,3 +133,21 @@ test('owner can save cardio body part without weakening ownership or measurement
  await assertFails(updateDoc(doc(db('trainer-a'),rp),{sets:[{kg:null,reps:0,inclinePercent:20,speedKph:5,durationSeconds:-1}],revision:2,updatedAt:serverTimestamp()}));
  await assertSucceeds(updateDoc(doc(db('trainer-a'),rp),{bodyPart:'코어',revision:2,updatedAt:serverTimestamp()}));
 });
+
+test('numeric range checks reject nonnumeric measurements without extra expression cost',async()=>{
+ const d=db('trainer-a');
+ for(const value of ['20',true,null,[],{},Timestamp.fromMillis(20)]) {
+  await assertFails(create(d,{sets:[{kg:value,reps:10}]}));
+  for(const key of ['inclinePercent','speedKph','durationSeconds'])await assertFails(create(d,{measurementType:'incline_speed_time',loadType:'unknown',sets:[{kg:null,reps:0,inclinePercent:20,speedKph:5,durationSeconds:60,[key]:value}]}));
+  await assertFails(create(d,{measurementType:'distance',loadType:'unknown',sets:[{kg:null,reps:0,distanceMeters:value}]}));
+ }
+});
+
+test('source deletion locks record writes, while archived originals remain editable',async()=>{
+ const d=db('trainer-a'),sourceHash='b'.repeat(64),filePath=path+'/files/'+sourceHash;
+ await create(d,{sourceHash,sourceName:'source.png',sourcePage:1});
+ await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),filePath),{status:'deleting'}));
+ await assertFails(updateDoc(doc(d,rp),{notes:'race',revision:2,updatedAt:serverTimestamp()}));
+ await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),filePath),{status:'ready',originalRemoved:true}));
+ await assertSucceeds(updateDoc(doc(d,rp),{notes:'확정 데이터 유지',revision:2,updatedAt:serverTimestamp()}));
+});

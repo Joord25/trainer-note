@@ -72,7 +72,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   const rows=parsed.records.map(r=>classify(r,history,opts));
   await db.runTransaction(async tx=>{
    const [m,current,file]=await tx.getAll(member,ref,member.collection('files').doc(fileId));
-   if(!m.exists||!file.exists||file.data().status!=='ready'||current.data()?.job!==job)throw Error('원본이나 판독 상태가 변경됐어요.');
+   if(!m.exists||!file.exists||file.data().originalRemoved||file.data().status!=='ready'||current.data()?.job!==job)throw Error('원본이나 판독 상태가 변경됐어요.');
    const old=current.data(),existingRows=new Map((old.rows||[]).map(r=>[r.id,r]));
    const merged=rows.map(r=>{
     const previous=existingRows.get(r.id);
@@ -106,7 +106,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
  async function startImport(uid,mid,fileId,retry=false,regenerate){
   const member=memberRef(uid,mid),ref=member.collection('imports').doc(fileId),job=randomUUID();let source,memberData,previousYear,previousMemberConfirmed,preserveSavedRecords,claimed=false;
   await db.runTransaction(async tx=>{claimed=false;const [m,f,i]=await tx.getAll(member,member.collection('files').doc(fileId),ref);
-   if(!m.exists||!f.exists||f.data().status!=='ready')throw Error('저장 완료된 회원 원본 파일을 선택해주세요.');
+   if(!m.exists||!f.exists||f.data().originalRemoved||f.data().status!=='ready')throw Error('저장 완료된 회원 원본 파일을 선택해주세요.');
    const old=i.data();if(regenerate&&(!Number.isInteger(regenerate.revision)||regenerate.revision!==(old?.revision||0)))throw Error('판독 결과가 변경됐어요. 최신 화면에서 다시 생성해주세요.');if(old?.status==='ready'&&!regenerate)return;if(old?.status==='processing'&&old.startedAt?.toMillis()>now()-180000)return;
    if(old&&!retry&&!regenerate)return;
    source={id:fileId,...f.data()};memberData=m.data();previousYear=old?.year;previousMemberConfirmed=!!old?.memberConfirmed;preserveSavedRecords=!!regenerate||!!old?.preserveSavedRecords;if(source.size>10*1024*1024){tx.set(ref,{status:'error',name:source.name,rows:[],unparsed:[],revision:0,error:'자동 판독은 파일당 10MB까지 가능해요. 파일을 나눠주세요.',updatedAt:stamp()});return;}
@@ -148,6 +148,8 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    await storeRows(uid,mid,fileId,job,data.raw,parsed,{year,yearConfirmed:!!year,memberConfirmed});return;
   }
   if(request.operation==='date'){
+   const selectedIds=request.rowIds;
+   if(selectedIds!==undefined&&(!Array.isArray(selectedIds)||!selectedIds.length||selectedIds.length>240||new Set(selectedIds).size!==selectedIds.length||selectedIds.some(id=>typeof id!=='string'||!/^[a-zA-Z0-9]{20}$/.test(id))))throw Error('날짜를 수정할 수업 기록을 확인해주세요.');
    const date=request.date,page=request.page,d=new Date(date+'T12:00:00Z');
    if(typeof date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(d.getTime())||d.toISOString().slice(0,10)!==date||date<'1900-01-01'||date>'2100-12-31'||!Number.isInteger(page)||page<1||page>10000)throw Error('날짜와 페이지를 확인해주세요.');
    await db.runTransaction(async tx=>{
@@ -155,8 +157,10 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
     if(!parent.exists||file.data()?.status!=='ready'||cur.data()?.revision!==request.revision)throw Error('다른 화면에서 수정됐어요.');
     if(file.data().contentType!=='application/pdf'&&page!==1)throw Error('이미지는 1쪽만 적용할 수 있어요.');
     const saved=await tx.get(member.collection('records').where('sourceHash','==',fileId));
-    const onPage=saved.docs.filter(d=>d.data().sourcePage===page),byId=new Map(onPage.map(d=>[d.id,d]));
-    const rows=cur.data().rows.map(r=>({...r})),targets=rows.filter(r=>r.input.sourcePage===page&&r.review!=='ignored');
+    const onPage=saved.docs.filter(d=>d.data().sourcePage===page&&(!selectedIds||selectedIds.includes(d.id))),byId=new Map(onPage.map(d=>[d.id,d]));
+    const rows=cur.data().rows.map(r=>({...r})),targets=rows.filter(r=>r.input.sourcePage===page&&r.review!=='ignored'&&(!selectedIds||selectedIds.includes(r.id)));
+    if(selectedIds&&selectedIds.some(id=>!targets.some(r=>r.id===id)&&!byId.has(id)))throw Error('선택한 수업 기록이 변경됐어요.');
+    if(!selectedIds&&new Set([...targets.map(r=>r.input.date),...onPage.map(d=>d.data().performedAt.toDate().toISOString().slice(0,10))]).size>1)throw Error('여러 날짜가 있는 페이지예요. 수업별로 날짜를 수정해주세요.');
     if(!targets.length&&!onPage.length)throw Error('이 페이지에 적용할 기록이 없어요.');
     if(new Set([...targets.map(r=>r.id),...onPage.map(r=>r.id)]).size>240)throw Error('한 페이지에 기록이 너무 많아요. 나누어 수정해주세요.');
     const missing=targets.filter(r=>!byId.has(r.id));const missingDocs=missing.length?await tx.getAll(...missing.map(r=>member.collection('records').doc(r.id))):[];
@@ -177,10 +181,11 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
     if((parent.data().recordCount||0)+delta>5000)throw Error('회원 기록 한도에 도달했어요.');
     if(delta)tx.update(member,{recordCount:(parent.data().recordCount||0)+delta,updatedAt:stamp()});
     tx.update(ref,{rows,revision:request.revision+1,updatedAt:stamp()});
-    tx.create(member.collection('corrections').doc(),{fileId,page,before:{dates:changes.map(c=>c.before.date)},after:{date},reason:'같은 페이지 날짜 일괄 적용',createdAt:stamp()});
+    tx.create(member.collection('corrections').doc(),{fileId,page,before:{dates:changes.map(c=>c.before.date)},after:{date},reason:selectedIds?'선택한 수업 날짜 수정':'같은 페이지 날짜 일괄 적용',createdAt:stamp()});
    });await scheduleReport(uid,mid).catch(()=>{});return;
   }
   if(request.operation==='add'){
+   if(request.sessionIndex!==undefined&&(!Number.isInteger(request.sessionIndex)||request.sessionIndex<1||request.sessionIndex>200))throw Error('수업 영역을 확인해주세요.');
    const input=validInput(request.input),id=request.rowId;
    if(typeof id!=='string'||!/^[a-zA-Z0-9]{20}$/.test(id)||input.sourceHash!==fileId||input.sourceName!==data.name)throw Error('원본 연결을 확인해주세요.');
    await db.runTransaction(async tx=>{
@@ -194,7 +199,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
     if(rule)tx.set(rule.ref,rule.value);
     const {date,...fields}=input;tx.create(record,{...fields,performedAt:Timestamp.fromDate(new Date(date+'T12:00:00Z')),status:'confirmed',origin:'ai-reviewed',revision:1,createdAt:stamp(),updatedAt:stamp()});
     tx.update(member,{recordCount:(parent.data().recordCount||0)+1,lastRecordId:id,updatedAt:stamp()});
-    tx.update(ref,{rows:[...v.rows,{id,input,issues:[],memberName:parent.data().name,review:'confirmed',revision:1}],unparsed,resolvedUnparsed,revision:v.revision+1,updatedAt:stamp()});
+    tx.update(ref,{rows:[...v.rows,{id,...(request.sessionIndex?{sessionIndex:request.sessionIndex}:{}),input,issues:[],memberName:parent.data().name,review:'confirmed',revision:1}],unparsed,resolvedUnparsed,revision:v.revision+1,updatedAt:stamp()});
     tx.create(member.collection('corrections').doc(),{fileId,rowId:id,before:request.unparsedIndex===undefined?null:v.unparsed[request.unparsedIndex],after:input,reason:'원본에서 운동 추가·판독 보완',createdAt:stamp()});
    });await scheduleReport(uid,mid).catch(()=>{});return;
   }
@@ -203,14 +208,14 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   const before=data.rows[index],input=request.operation==='ignore'?before.input:validInput(request.input);
   if(input.sourceHash!==fileId||input.sourceName!==data.name)throw Error('원본 연결을 변경할 수 없어요.');
   await db.runTransaction(async tx=>{
-   const record=member.collection('records').doc(before.id),[current,parent,oldRecord]=await tx.getAll(ref,member,record);
+   const record=member.collection('records').doc(before.id),[current,parent,oldRecord,sourceFile]=await tx.getAll(ref,member,record,member.collection('files').doc(fileId));
    const latest=current.data(),currentIndex=latest?.rows.findIndex(r=>r.id===request.rowId)??-1;
-   if(!parent.exists||latest?.status!=='ready'||currentIndex<0)throw Error('판독 항목이 변경됐어요. 다시 열어주세요.');
+   if(!parent.exists||sourceFile.data()?.status==='deleting'||latest?.status!=='ready'||currentIndex<0)throw Error('판독 항목이 변경됐어요. 다시 열어주세요.');
    const currentRow=latest.rows[currentIndex];
    if(Number.isInteger(request.rowRevision)?currentRow.revision!==request.rowRevision:latest.revision!==request.revision)throw Error('이 운동이 다른 화면에서 수정됐어요. 닫고 다시 열어 확인해주세요.');
    if(Number.isInteger(request.recordRevision)&&(oldRecord.data()?.revision??0)!==request.recordRevision)throw Error('저장된 운동이 변경됐어요. 닫고 다시 열어 확인해주세요.');
    if(oldRecord.exists&&(oldRecord.data().sourceHash!==fileId||oldRecord.data().sourceName!==input.sourceName))throw Error('원본 연결이 변경됐어요.');
-   if(request.operation==='ignore'&&oldRecord.exists)throw Error('저장된 기록은 기록 목록에서 삭제해주세요.');
+   if(request.operation==='ignore'&&oldRecord.exists){tx.delete(record);tx.update(member,{recordCount:Math.max(0,(parent.data().recordCount||0)-1),lastRecordId:before.id,updatedAt:stamp()});}
    const rule=request.operation==='row'?await prepareInterpretation(tx,uid,mid,input,before.id,request):null;
    if(rule)tx.set(rule.ref,rule.value);
    const rows=[...latest.rows];rows[currentIndex]={...currentRow,input,issues:[],review:request.operation==='ignore'?'ignored':'confirmed',revision:currentRow.revision+1};

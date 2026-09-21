@@ -1,5 +1,8 @@
 "use client";
 
+import {SourceActions} from './source-actions';
+import {Icon} from './icons';
+import {useOriginalSelection} from './bulk-originals';
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import type {SourceSelection} from './assistant-chat';
 import type {PDFDocumentProxy, PDFDocumentLoadingTask, RenderTask} from 'pdfjs-dist';
@@ -10,9 +13,11 @@ type PreviewAsset = {url:string;pdf:PDFDocumentProxy|null;error:string};
 type Position = {fileId: string; page: number; total: number};
 
 /** Originals stay separate in Storage; only the browser presentation is continuous. */
-export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePage = 1, selectionMode=false, onSelection, jumpRequest=0, onPageClick, thumbnailsOpen=false, onNavigate}: {
-  memberId: string; files: MemberFile[]; selectedFile: string; sourcePage?: number; selectionMode?:boolean; onSelection?:(s:SourceSelection)=>void; jumpRequest?:number; onPageClick?:(fileId:string,page:number)=>void; thumbnailsOpen?:boolean; onNavigate?:(fileId:string,page:number)=>void|boolean;
+export function ContinuousSourceViewer({memberId, files:sourceFiles, selectedFile, onVisibleFile, onUpload, onCollapse, onToggleThumbnails, onNotice=()=>{}, online=false, beforeDelete=()=>true, onDeleteBusy, sourcePage = 1, selectionMode=false, onSelection, jumpRequest=0, onPageClick, thumbnailsOpen=false, onNavigate}: {
+  onUpload?:()=>void; onCollapse?:()=>void; onToggleThumbnails?:()=>void; onNotice?:(message:string)=>void; online?:boolean; beforeDelete?:()=>boolean; onDeleteBusy?:(value:boolean)=>void; onVisibleFile?:(id:string)=>void; memberId: string; files: MemberFile[]; selectedFile: string; sourcePage?: number; selectionMode?:boolean; onSelection?:(s:SourceSelection)=>void; jumpRequest?:number; onPageClick?:(fileId:string,page:number)=>void; thumbnailsOpen?:boolean; onNavigate?:(fileId:string,page:number)=>void|boolean;
 }) {
+  const bulk=useOriginalSelection(memberId,sourceFiles.filter(f=>!f.originalRemoved),online,beforeDelete,onDeleteBusy);
+  const files=bulk.items;
   const viewport = useRef<HTMLDivElement>(null);
   const thumbnailViewport=useRef<HTMLDivElement>(null);
   const [assets,setAssets]=useState<Record<string,PreviewAsset>>({}),[requestedPreviews,setRequestedPreviews]=useState(new Set<string>()),[localTarget,setLocalTarget]=useState<{id:string;page:number;request:number}|null>(null);
@@ -34,24 +39,32 @@ export function ContinuousSourceViewer({memberId, files, selectedFile, sourcePag
   useEffect(() => {
     if (selectedFile === 'all') viewport.current?.scrollTo({top: 0});
   }, [selectedFile]);
+  useEffect(()=>{if(position?.fileId)onVisibleFile?.(position.fileId);},[position?.fileId,onVisibleFile]);
   const index = files.findIndex(file => file.id === position?.fileId);
+  const active=files[index]||files.find(f=>f.id===selectedFile)||files[0];
   return <div className="original-viewer">
-    <div className="original-controls">
-      <span aria-live="polite">{index >= 0 ? `파일 ${index + 1} / ${files.length} · ${position!.page} / ${position!.total}쪽` : `원본 ${files.length}개 · 연속 보기`}</span>
-      <div className="original-zoom">
-        <button aria-label="원본 축소" disabled={zoom <= 75} onClick={() => setZoom(v => v - 25)}>−</button>
-        <button aria-label="원본 너비 맞춤" onClick={() => setZoom(100)}>{zoom === 100 ? '너비 맞춤' : `${zoom}%`}</button>
-        <button aria-label="원본 확대" disabled={zoom >= 200} onClick={() => setZoom(v => v + 25)}>+</button>
-      </div>
+    <div className="original-unified-toolbar" aria-label="원본 도구">
+      {onToggleThumbnails&&<button aria-label="원본 미리보기 목록" aria-expanded={thumbnailsOpen} onClick={onToggleThumbnails}><Icon name="panel" size={17}/></button>}
+      {bulk.selectControl}
+      <span className="original-toolbar-name" title={active?.name}>{active?.name||'원본'}</span>
+      <span className="original-toolbar-position" title={`파일 ${index>=0?index+1:1}/${files.length} · ${position?.page||1}/${position?.total||1}쪽`}>{files.length?`${index>=0?index+1:1}/${files.length} · ${index>=0?position?.page||1:1}쪽`:'원본 없음'}</span>
+      <button aria-label="원본 축소" disabled={zoom<=75} onClick={()=>setZoom(v=>v-25)}>−</button>
+      <button className="original-toolbar-fit" aria-label="원본 너비 맞춤" title="너비 맞춤" onClick={()=>setZoom(100)}>{zoom}%</button>
+      <button aria-label="원본 확대" disabled={zoom>=200} onClick={()=>setZoom(v=>v+25)}>+</button>
+      {bulk.selectedCount>0&&<button className="original-trash" aria-label={`선택한 원본 ${bulk.selectedCount}개 삭제 · 운동 기록 유지`} title="선택한 원본만 즉시 삭제 · 운동 기록 유지" disabled={!online||bulk.busy} onClick={bulk.deleteSelectedImmediately}><Icon name="trash" size={18}/></button>}
+      <SourceActions memberId={memberId} file={active} online={online} externalBusy={bulk.busy} onBeforeAction={beforeDelete} onNotice={onNotice} onEdit={()=>{if(active)onPageClick?.(active.id,position?.fileId===active.id?position.page:1);}}/>
+      {onUpload&&<button aria-label="일지 추가" title="일지 추가" disabled={!online||bulk.busy} onClick={onUpload}><Icon name="plus" size={17}/></button>}
+      {onCollapse&&<button aria-label="원본 접기" title="원본 접기" onClick={onCollapse}><Icon name="back" size={17}/></button>}
     </div>
+    {bulk.feedback}
     <div className="original-viewer-body">
     {thumbnailsOpen&&<div className="original-thumbnails" ref={thumbnailViewport} aria-label="원본 페이지 미리보기">{files.map((file,i)=><ThumbnailDocument key={file.id} file={file} index={i+1} asset={assets[file.id]} viewport={thumbnailViewport} onRequest={requestPreview} current={position} onNavigate={navigate}/>)}</div>}
     <div className="original-scroll" ref={viewport} tabIndex={0} aria-label="모든 원본 연속 보기">
       <div className="original-stream" style={{width: Math.round(width * zoom / 100)}}>
         {files.map((file, i) => <SourceDocument key={`${memberId}/${file.id}`} memberId={memberId} file={file}
-          index={i + 1} viewport={viewport} width={Math.round(width * zoom / 100)}
+          selectionControl={bulk.checkbox(file,file.name)} index={i + 1} viewport={viewport} width={Math.round(width * zoom / 100)}
           selected={targetFile === file.id} sourcePage={targetPage} onPosition={setPosition} selectionMode={selectionMode} onSelection={onSelection} jumpRequest={jumpRequest+(localTarget?.request||0)} onPageClick={onPageClick} onAsset={assetReady} forceLoad={requestedPreviews.has(file.id)}/>) }
-        <p className="original-end">원본 {files.length}개 · 마지막 파일이에요</p>
+        <p className="original-end">{files.length?`원본 ${files.length}개 · 마지막 파일이에요`:"남아 있는 원본 파일이 없어요. 보존한 운동 기록은 기록 수정에서 확인할 수 있어요."}</p>
       </div>
     </div></div>
   </div>;
@@ -77,11 +90,11 @@ function ThumbnailDocument({file,index,asset,viewport,onRequest,current,onNaviga
  const ref=useRef<HTMLDivElement>(null),near=useNearby(ref,viewport,'200px',true);
  useEffect(()=>{if(near)onRequest(file.id);},[near,file.id,onRequest]);
  const total=asset?.pdf?.numPages||1;
- return <div ref={ref} className="thumbnail-document"><span className="thumbnail-file-name" title={file.name}>{String(index).padStart(2,'0')} · {file.name}</span>{Array.from({length:total},(_,i)=><button key={i} className="original-thumbnail" aria-label={`${file.name} ${i+1}쪽 미리보기`} aria-current={current?.fileId===file.id&&current.page===i+1?'page':undefined} onClick={()=>onNavigate(file.id,i+1)}>{asset?.pdf?<PdfCanvas pdf={asset.pdf} number={i+1} width={112} viewport={viewport}/>:asset?.url&&file.contentType!=='application/pdf'?<img src={asset.url} alt="" loading="lazy"/>:<span className="thumbnail-placeholder">{asset?.error?'미리보기 오류':file.status!=='ready'?'저장 중':'불러오는 중'}</span>}<small>{i+1} / {total}</small></button>)}</div>;
+ return <div ref={ref} className="thumbnail-document"><span className="thumbnail-file-name" title={file.name}>{String(index).padStart(2,'0')} · {file.name}</span>{Array.from({length:total},(_,i)=><button key={i} className="original-thumbnail" aria-label={`${file.name} ${i+1}쪽 미리보기`} aria-current={current?.fileId===file.id&&current.page===i+1?'page':undefined} onClick={()=>onNavigate(file.id,i+1)}>{file.originalRemoved?<span className="thumbnail-placeholder">원본 정리 완료</span>:asset?.pdf?<PdfCanvas pdf={asset.pdf} number={i+1} width={112} viewport={viewport}/>:asset?.url&&file.contentType!=='application/pdf'?<img src={asset.url} alt="" loading="lazy"/>:<span className="thumbnail-placeholder">{asset?.error?'미리보기 오류':file.status!=='ready'?'저장 중':'불러오는 중'}</span>}<small>{i+1} / {total}</small></button>)}</div>;
 }
 
-function SourceDocument({memberId, file, index, viewport, width, selected, sourcePage, onPosition, selectionMode, onSelection, jumpRequest, onPageClick, onAsset, forceLoad}: {
-  memberId: string; file: MemberFile; index: number; viewport: Viewport; width: number;
+function SourceDocument({memberId, file, index, viewport, width, selected, sourcePage, onPosition, selectionMode, onSelection, jumpRequest, onPageClick, onAsset, forceLoad, selectionControl}: {
+  selectionControl?:React.ReactNode; memberId: string; file: MemberFile; index: number; viewport: Viewport; width: number;
   selected: boolean; sourcePage: number; onPosition: (p: Position) => void; selectionMode:boolean; onSelection?: (s:SourceSelection)=>void; jumpRequest:number; onAsset:(id:string,asset:PreviewAsset|null)=>void; forceLoad:boolean; onPageClick?:(fileId:string,page:number)=>void;
 }) {
   const container = useRef<HTMLElement>(null);
@@ -94,7 +107,7 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
   const [imageError, setImageError] = useState(false);
   useEffect(() => {if (near || selected || forceLoad) setRequested(true);}, [near, selected, forceLoad]);
   useEffect(() => {
-    if (!requested || file.status !== 'ready') return;
+    if (!requested || file.originalRemoved || file.status !== 'ready') {setUrl('');setDocument(null);return;}
     let live = true, objectUrl = '', task: PDFDocumentLoadingTask | undefined;
     setError(''); setUrl(''); setDocument(null); setImageError(false);
     void (async () => {
@@ -124,7 +137,7 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
       }
     })();
     return () => {live = false; if (objectUrl) URL.revokeObjectURL(objectUrl); void task?.destroy();};
-  }, [requested, memberId, file.id, file.contentType, file.status, attempt]);
+  }, [requested, memberId, file.id, file.contentType, file.status, file.originalRemoved, attempt]);
   useEffect(()=>{if(url||error)onAsset(file.id,{url,pdf:document,error});return()=>onAsset(file.id,null);},[file.id,url,document,error,onAsset]);
   const total = document?.numPages ?? 1;
   const page = Math.min(total, Math.max(1, sourcePage));
@@ -158,11 +171,11 @@ function SourceDocument({memberId, file, index, viewport, width, selected, sourc
     requestAnimationFrame(() => {if (pendingJump.current) {jump(); pendingJump.current = false;}});
   }, [jump]);
   return <section className="original-document" ref={container} data-source-file={file.id} aria-label={`원본 ${index}: ${file.name}`}>
-    <header className="original-file-heading"><span className="original-file-number">{String(index).padStart(2, '0')}</span>
+    <header className="original-file-heading">{selectionControl}<span className="original-file-number">{String(index).padStart(2, '0')}</span>
       <div><strong title={file.name}>{file.name}</strong><small>{file.contentType === 'application/pdf' ? `PDF${document ? ` · ${total}쪽` : ''}` : '이미지 · 1쪽'}</small></div>
       {url && <a href={url} target="_blank" rel="noopener noreferrer" aria-label={`${file.name} 원본 크게 보기`}>크게 보기 ↗</a>}
     </header>
-    {file.status !== 'ready' ? <p className="original-placeholder" role="status">{file.status === 'deleting' ? '삭제 중인 원본이에요.' : '원본을 저장하고 있어요…'}</p>
+    {file.originalRemoved ? <SourcePage fileId={file.id} number={1} total={1} viewport={viewport} onPosition={onPosition} selectionMode={false} fileName={file.name} onPageClick={onPageClick}><p className="original-placeholder">원본 정리 완료 · 저장된 운동 기록은 계속 수정하고 분석할 수 있어요.</p></SourcePage> : file.status !== 'ready' ? <p className="original-placeholder" role="status">{file.status === 'deleting' ? '삭제 중인 원본이에요.' : '원본을 저장하고 있어요…'}</p>
       : error || imageError ? <div className="original-placeholder" role="alert"><p>{error || '이미지를 표시할 수 없어요. 파일을 다시 확인해주세요.'}</p><button onClick={() => setAttempt(v => v + 1)}>원본 다시 불러오기</button></div>
       : document ? Array.from({length: total}, (_, i) => <SourcePage key={i} fileId={file.id} number={i + 1} total={total} viewport={viewport} onPosition={onPosition} selectionMode={selectionMode} onSelection={onSelection} fileName={file.name} onPageClick={onPageClick}>
           <PdfCanvas pdf={document} number={i + 1} width={width} viewport={viewport} onReady={i + 1 === page ? pageReady : undefined}/>

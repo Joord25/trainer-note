@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 export const MODEL='gemini-3.1-flash-lite';
 export const REPORT_VERSION='trainer-judgment-v13-cardio-guidance';
 export const PRICE_VERSION='2026-09-11-gemini-3.1-flash-lite';
-export const LIMITS={...AI_USAGE_POLICY,maxInputTokens:32768,extractOutputTokens:12288,reportOutputTokens:4096,maxRecords:120};
+export const LIMITS={...AI_USAGE_POLICY,maxInputTokens:32768,extractOutputTokens:32768,reportOutputTokens:4096,maxRecords:120};
 export const hash=value=>createHash('sha256').update(typeof value==='string'||Buffer.isBuffer(value)?value:JSON.stringify(value)).digest('hex');
 export const costMicros=(input,output)=>Math.ceil(input*.25+output*1.5);
 export function validInput(v){

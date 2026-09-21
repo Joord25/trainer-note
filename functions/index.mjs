@@ -1,3 +1,5 @@
+import {createRecordDeletion} from './record-deletion.mjs';
+import {createSourceManagement} from './source-management.mjs';
 import {createRequestGuard} from './request-guard.mjs';
 import {getAuth} from 'firebase-admin/auth';
 import {createAccountService} from './account-service.mjs';
@@ -18,6 +20,7 @@ const db=getFirestore(),secret=defineSecret('TRAINER_NOTE_GEMINI_API_KEY');
 const region='us-central1',options={region,maxInstances:3,minInstances:0,concurrency:4,memory:'512MiB',timeoutSeconds:180,secrets:[secret]};
 const accountService=createAccountService({db,auth:getAuth(),bucket:getStorage().bucket(`${process.env.GCLOUD_PROJECT}.firebasestorage.app`),enqueue:async(data,delay,id)=>{try{await getFunctions().taskQueue(`locations/${region}/functions/purgeTrainerAccount`).enqueue(data,{id,scheduleDelaySeconds:delay,dispatchDeadlineSeconds:540});}catch(e){if(e.code!=='functions/task-already-exists')throw e;}}});
 const requestGuard=createRequestGuard({db});
+const manageSource=createSourceManagement({db,bucket:getStorage().bucket(`${process.env.GCLOUD_PROJECT}.firebasestorage.app`)});
 const deletionPending=async uid=>(await db.doc(`accountDeletions/${uid}`).get()).exists;
 const gemini=createGemini({apiKey:()=>secret.value()});
 
@@ -28,6 +31,7 @@ const service=createService({db,model:gemini,readSource:async(uid,mid,file)=>{
  const [bytes]=await object.download();if(hash(bytes)!==file.id)throw Error('원본 파일 식별자가 일치하지 않아요.');
  return bytes.toString('base64');
 },enqueue:async(data,id)=>{try{await getFunctions().taskQueue(`locations/${region}/functions/buildMemberReport`).enqueue(data,{id:'tn-'+id,scheduleDelaySeconds:30,dispatchDeadlineSeconds:180});}catch(e){if(e.code!=='functions/task-already-exists')throw e;}}});
+const deleteRecords=createRecordDeletion({db,scheduleReport:service.scheduleReport});
 function input(data){if(!data||typeof data!=='object'||Array.isArray(data)||Buffer.byteLength(JSON.stringify(data))>1024*1024||typeof data.memberId!=='string'||!/^[-_a-zA-Z0-9]{1,100}$/.test(data.memberId))throw new HttpsError('invalid-argument','회원 정보를 확인해주세요.');if(data.fileId!==undefined&&!(data.action==='chat'&&data.fileId==='')&&(typeof data.fileId!=='string'||!/^[a-f0-9]{64}$/.test(data.fileId)))throw new HttpsError('invalid-argument','원본 파일을 확인해주세요.');return data;}
 export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
  if(!request.auth)throw new HttpsError('unauthenticated','로그인이 필요해요.');const uid=request.auth.uid,data=input(request.data);
@@ -35,6 +39,11 @@ export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
  if(!(await db.doc(`trainers/${uid}/members/${data.memberId}`).get()).exists)throw new HttpsError('not-found','회원 정보를 찾을 수 없어요.');
  const release=await requestGuard.acquire(uid);
  try{
+  if(data.action==='manageSources'){
+   if(!Array.isArray(data.fileIds)||!data.fileIds.length||data.fileIds.length>5||new Set(data.fileIds).size!==data.fileIds.length||data.fileIds.some(id=>typeof id!=='string'||!/^[a-f0-9]{64}$/.test(id))||!['archive','delete'].includes(data.operation))throw Error('삭제할 원본을 다시 선택해주세요.');
+   const failed=[];for(const fileId of data.fileIds){try{await manageSource(uid,data.memberId,{fileId,operation:data.operation});}catch(e){failed.push({id:fileId,message:safeError(e)});}}return {failed};
+  }
+  if(data.action==='deleteRecords')return await deleteRecords(uid,data.memberId,data);
   if(['draftGoal','listTrainingPrinciples','removeTrainingPrinciple','saveAssessmentResult','assessmentReview','saveAssessmentDecision'].includes(data.action))return await service[data.action](uid,data.memberId,data);
   if(data.action==='draftAssessment')return await service.draftAssessment(uid,data.memberId,data);
   if(data.action==='trainingGoal')return await service.saveTrainingGoal(uid,data.memberId,data);
@@ -44,6 +53,7 @@ export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
   if(data.action==='regenerateChat')return await service.regenerateChat(uid,data.memberId,data);
   if(data.action==='newChat')return await service.newChat(uid,data.memberId,data);
   if(data.action==='chat')return await service.chat(uid,data.memberId,data);
+  if(data.action==='manageSource')return await manageSource(uid,data.memberId,data);
   if(data.action==='read'&&data.fileId)return await service.startImport(uid,data.memberId,data.fileId,!!data.retry,data.regenerate===true?{revision:data.revision}:undefined);
   if(data.action==='review'&&data.fileId){await service.reviewImport(uid,data.memberId,data.fileId,data);return {ok:true};}
   if(data.action==='report'){if(data.retry)await service.retryReport(uid,data.memberId,data.regenerate===true);else await service.scheduleReport(uid,data.memberId);return {ok:true};}
@@ -59,7 +69,7 @@ export const readUploadedWorkout=onDocumentWritten({...options,document:'trainer
  if(await deletionPending(event.params.uid))return;
  const {uid,memberId,fileId}=event.params,before=event.data?.before.data(),after=event.data?.after.data();
  if(!after){await db.doc(`trainers/${uid}/members/${memberId}/imports/${fileId}`).delete();await service.scheduleReport(uid,memberId);return;}
- if(after.status==='ready'&&before?.status!=='ready')await service.startImport(uid,memberId,fileId);
+ if(after.status==='ready'&&!after.originalRemoved&&before?.status!=='ready')await service.startImport(uid,memberId,fileId);
 });
 export const reportOnRecordChange=onDocumentWritten({...options,secrets:[],document:'trainers/{uid}/members/{memberId}/records/{recordId}',retry:false},async event=>{
  if(await deletionPending(event.params.uid))return;

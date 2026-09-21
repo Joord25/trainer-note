@@ -625,3 +625,23 @@ test('global allowance counts legacy totals and shards, even when accounts race'
  assert.equal(shards.docs.reduce((sum,d)=>sum+(d.data().usedMicros||0),0),reserve+200);
  assert.equal(shards.docs.reduce((sum,d)=>sum+(d.data().reservedMicros||0),0),0);
 });
+
+test('date-scoped correction changes only the selected session on one page',async()=>{
+ answer.records.push(raw({sessionIndex:2,day:10,sessionNote:'둘째 수업'}).records[0]);answer.records[0].sessionIndex=1;
+ await service.startImport(uid,mid,fileId);const before=await imported(),target=before.rows[0];
+ await assert.rejects(service.reviewImport(uid,mid,fileId,{operation:'date',page:1,date:'2026-07-01',revision:before.revision}),/여러 날짜/);
+ await service.reviewImport(uid,mid,fileId,{operation:'date',page:1,date:'2026-07-01',rowIds:[target.id],revision:before.revision});
+ const after=await imported();
+ assert.equal(after.rows.find(r=>r.id===target.id).input.date,'2026-07-01');
+ assert.equal(after.rows.find(r=>r.id!==target.id).input.date,'2026-06-10');
+ assert.equal((await records()).find(r=>r.id!==target.id).performedAt.toDate().toISOString().slice(0,10),'2026-06-10');
+ await assert.rejects(service.reviewImport(uid,mid,fileId,{operation:'date',page:1,date:'2026-07-01',rowIds:['z'.repeat(20)],revision:after.revision}));
+});
+test('ignore removes a saved record and prevents bulk corrections from restoring it',async()=>{
+ await service.startImport(uid,mid,fileId);let v=await imported();
+ await service.reviewImport(uid,mid,fileId,{operation:'ignore',rowId:v.rows[0].id,revision:v.revision});
+ assert.equal((await records()).length,0);assert.equal((await db.doc(base).get()).data().recordCount,0);
+ v=await imported();assert.equal(v.rows[0].review,'ignored');
+ await service.reviewImport(uid,mid,fileId,{operation:'year',year:2025,revision:v.revision});
+ assert.equal((await records()).length,0);
+});

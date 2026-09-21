@@ -93,17 +93,17 @@ service cloud.firestore {
         }
         function validSingleSet(value,weighted) {
           let kg = value.kg;
-          return (weighted ? kg is number && kg > 0 && kg <= 2000 : kg == null)
+          return (weighted ? kg > 0 && kg <= 2000 : kg == null)
             && (value.size() == 2
               ? value.reps is int && value.reps > 0 && value.reps <= 1000 : validSides(value));
         }
         function validDuration(value) {
           let seconds = value.durationSeconds;
-          return value == {'kg':null,'reps':0,'durationSeconds':seconds} && seconds is number && seconds > 0 && seconds <= 86400;
+          return value == {'kg':null,'reps':0,'durationSeconds':seconds} && seconds > 0 && seconds <= 86400;
         }
         function validDistance(value) {
           let meters = value.distanceMeters;
-          return value == {'kg':null,'reps':0,'distanceMeters':meters} && meters is number && meters > 0 && meters <= 1000000;
+          return value == {'kg':null,'reps':0,'distanceMeters':meters} && meters > 0 && meters <= 1000000;
         }
         function validSets(sets,kind) {
           let size = sets.size();
@@ -122,17 +122,17 @@ service cloud.firestore {
           let meters = value.distanceMeters;
           let seconds = value.durationSeconds;
           return value == {'kg':null,'reps':0,'distanceMeters':meters,'durationSeconds':seconds}
-            && meters is number && meters > 0 && meters <= 1000000
-            && seconds is number && seconds > 0 && seconds <= 86400;
+            && meters > 0 && meters <= 1000000
+            && seconds > 0 && seconds <= 86400;
         }
         function validInclineSpeedTime(value) {
           let incline = value.inclinePercent;
           let speed = value.speedKph;
           let seconds = value.durationSeconds;
           return value == {'kg':null,'reps':0,'inclinePercent':incline,'speedKph':speed,'durationSeconds':seconds}
-            && incline is number && incline >= -100 && incline <= 100
-            && speed is number && speed >= 0 && speed <= 100
-            && seconds is number && seconds > 0 && seconds <= 86400;
+            && incline >= -100 && incline <= 100
+            && speed >= 0 && speed <= 100
+            && seconds > 0 && seconds <= 86400;
         }
         function validIntervals(sets,kind) {
           let size = sets.size();
@@ -174,6 +174,10 @@ service cloud.firestore {
               && (size <= 7 || validDistance(sets[7]))
           ));
         }
+        function sourceWritable(data) {
+          let path = /databases/$(database)/documents/trainers/$(uid)/members/$(memberId)/files/$(data.sourceHash);
+          return data.sourceHash == '' || !exists(path) || get(path).data.status == 'ready';
+        }
         function valid(data) {
           let raw=data.rawName;
           let name=data.exerciseName;
@@ -199,7 +203,7 @@ service cloud.firestore {
           && notes.matches('(?s).{0,1000}') && data.status == 'confirmed' && data.origin in ['manual','ai-reviewed','ai-auto'] && (data.origin == 'manual' || sourceHash != '')
           && revision is int && revision > 0 && data.createdAt is timestamp && data.updatedAt == request.time;}
         allow read: if isOwner(uid) && exists(parent());
-        allow create: if isOwner(uid) && valid(request.resource.data) && counted(1)
+        allow create: if isOwner(uid) && sourceWritable(request.resource.data) && valid(request.resource.data) && counted(1)
           && request.resource.data.origin in ['manual','ai-reviewed']
           && request.resource.data.revision == 1 && request.resource.data.createdAt == request.time;
         allow update: if isOwner(uid) && exists(parent())
@@ -207,7 +211,7 @@ service cloud.firestore {
           && request.resource.data.origin == resource.data.origin
           && request.resource.data.revision == resource.data.revision + 1
           && request.resource.data.sourceHash == resource.data.sourceHash && request.resource.data.sourceName == resource.data.sourceName
-          && valid(request.resource.data);
+          && sourceWritable(request.resource.data) && valid(request.resource.data);
         allow delete: if isOwner(uid) && counted(-1);
       }
       match /files/{fileId} {

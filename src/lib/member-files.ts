@@ -1,11 +1,12 @@
 "use client";
 import {collection, doc, getFirestore, onSnapshot, orderBy, query, runTransaction, serverTimestamp, type Timestamp} from "firebase/firestore";
 import {deleteObject, getBlob, getMetadata, getStorage, ref, uploadBytesResumable} from "firebase/storage";
+import {manageSource} from './server-ai';
 import {getClientAuth} from "./firebase-client";
 
 import {MAX_SOURCE_BYTES,inspectSourceFile,sourceObjectName,type SourceContentType} from "./source-file";
 export const storageEnabled = process.env.NEXT_PUBLIC_STORAGE_ENABLED === "true";
-export type MemberFile = {id: string; name: string; size: number; contentType: SourceContentType; status: "uploading" | "ready" | "deleting"; createdAt: Timestamp | null; pending: boolean};
+export type MemberFile = {sourceName?:string; originalRemoved?:boolean; deletionOperation?:string; id: string; name: string; size: number; contentType: SourceContentType; status: "uploading" | "ready" | "deleting"; createdAt: Timestamp | null; pending: boolean};
 class FileActionError extends Error {}
 function scope(memberId: string, fileId?: string, contentType:SourceContentType="application/pdf") {
   const auth = getClientAuth(), uid = auth.currentUser?.uid;
@@ -19,7 +20,7 @@ function scope(memberId: string, fileId?: string, contentType:SourceContentType=
 }
 export function listenMemberFiles(memberId: string, onData: (files: MemberFile[], cached: boolean) => void, onError: (error: unknown) => void) {
   const s = scope(memberId);
-  return onSnapshot(query(s.files, orderBy("createdAt", "desc")), {includeMetadataChanges: true}, snapshot => onData(snapshot.docs.map(d => ({id:d.id, name:d.data().name, size:d.data().size, contentType:d.data().contentType, status:d.data().status, createdAt:d.data().createdAt ?? null, pending:d.metadata.hasPendingWrites})), snapshot.metadata.fromCache), onError);
+  return onSnapshot(query(s.files, orderBy("createdAt", "desc")), {includeMetadataChanges: true}, snapshot => onData(snapshot.docs.map(d => ({id:d.id, name:d.data().displayName||d.data().name, sourceName:d.data().name, originalRemoved:d.data().originalRemoved===true, deletionOperation:d.data().deletionOperation, size:d.data().size, contentType:d.data().contentType, status:d.data().status, createdAt:d.data().createdAt ?? null, pending:d.metadata.hasPendingWrites})), snapshot.metadata.fromCache), onError);
 }
 export async function uploadMemberFile(memberId: string, file: File, progress: (value: number) => void, signal: AbortSignal) {
   if (!storageEnabled) throw new FileActionError("파일 저장 기능을 준비하고 있어요.");
@@ -61,22 +62,8 @@ export async function readMemberFile(memberId: string, id: string, contentType:S
   s.check();
   return new Blob([blob],{type:contentType});
 }
-export async function deleteMemberFile(memberId: string, id: string, contentType:SourceContentType) {
-  const s = scope(memberId,id,contentType);
-  await runTransaction(s.db, async tx => {
-    const existing = await tx.get(s.file!);
-    if (existing.exists()) tx.update(s.file!,{status:"deleting",updatedAt:serverTimestamp()});
-  });
-  s.check();
-  try {await deleteObject(s.object!);} catch (error) {if ((error as {code?:string}).code !== "storage/object-not-found") throw error;}
-  s.check();
-  await runTransaction(s.db, async tx => {
-    const existing = await tx.get(s.file!), member = await tx.get(s.member);
-    if (!existing.exists()) return;
-    if (!member.exists()) throw new FileActionError("회원 정보를 확인할 수 없어요.");
-    tx.delete(s.file!);
-    tx.update(s.member,{fileCount:(member.data().fileCount ?? 0)-1,lastFileId:id,updatedAt:serverTimestamp()});
-  });
+export async function deleteMemberFile(memberId: string, id: string, _contentType:SourceContentType) {
+  await manageSource(memberId,id,'delete');
 }
 export function fileError(error: unknown) {
   if (error instanceof FileActionError) return error.message;

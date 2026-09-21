@@ -39,7 +39,7 @@ test('extraction omits nested API array bounds while onboarding keeps its questi
  walk(schema);
  assert.equal(schema.properties.records.items.properties.sets.items.properties.kg.nullable,true);
  assert.equal(openApiSchema(GOAL_SCHEMA).properties.questions.maxItems,2);
- assert.equal(EXTRACTION_SCHEMA.properties.records.maxItems,60);
+ assert.equal(EXTRACTION_SCHEMA.properties.records.maxItems,120);
  await assert.rejects(parseExtraction({records:Array(61).fill({}),unparsed:[]},{id:'a'.repeat(64),name:'test.png'},'회원',2026),/너무 많은 항목/);
 });
 
