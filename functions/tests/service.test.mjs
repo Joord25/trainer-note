@@ -695,3 +695,18 @@ test('successful analysis arriving after deletion cannot restore old evidence',a
  provider=async request=>{const facts=JSON.parse(request.parts[0].text);for(const r of await records())await db.doc(base+'/records/'+r.id).delete();await service.scheduleReport(uid,mid);return {value:{judgments:judgments(facts),headline:'삭제 전 분석',overview:'old',findings:[],limitations:[],questions:[],program:[],quests:[]},usage:{inputTokens:100,outputTokens:100}};};
  const result=await service.buildReport(uid,mid);assert.equal(result.stale,true);const state=(await db.doc(base+'/analysis/current').get()).data();assert.equal(state.status,'ready');assert.notEqual(state.report.headline,'삭제 전 분석');assert.deepEqual(state.evidenceRecords,[]);
 });
+
+test('name-only correction learns per-account alias without inventing missing sets; opt-out, edit and deletion work',async()=>{
+ answer=raw({rawName:'SLR',exerciseName:'',sets:[],issues:['운동명 확인']});await service.startImport(uid,mid,fileId);
+ let v=await imported();const request={operation:'name',rowId:v.rows[0].id,rowRevision:v.rows[0].revision,exerciseName:'사이드 레터럴 레이즈'};
+ await service.reviewImport(uid,mid,fileId,request);
+ await assert.rejects(service.reviewImport(uid,mid,fileId,request));
+ v=await imported();assert.equal(v.rows[0].input.exerciseName,'사이드 레터럴 레이즈');assert.deepEqual(v.rows[0].input.sets,[]);assert.equal((await records()).length,0);
+ const rule=(await db.collection(`trainers/${uid}/interpretations`).get()).docs[0];assert.equal(rule.data().alias,'SLR');
+ const other='b'.repeat(64);await db.doc(base+'/files/'+other).set({name:'새 일지.png',contentType:'image/png',size:100,status:'ready'});await service.startImport(uid,mid,other);
+ const second=(await db.doc(base+'/imports/'+other).get()).data();assert.equal(second.rows[0].input.exerciseName,'사이드 레터럴 레이즈');assert.deepEqual(second.rows[0].input.sets,[]);
+ const foreignBase='trainers/another-trainer/members/member';await db.doc(foreignBase).set({name:'회원 A',recordCount:0});await db.doc(foreignBase+'/files/'+fileId).set({name:'일지.png',contentType:'image/png',size:100,status:'ready'});await service.startImport('another-trainer',mid,fileId);assert.equal((await db.doc(foreignBase+'/imports/'+fileId).get()).data().rows[0].input.exerciseName,'');
+ await service.reviewImport(uid,mid,fileId,{...request,rowRevision:v.rows[0].revision,exerciseName:'다른 이름',learnAlias:false});assert.equal((await rule.ref.get()).data().exerciseName,'사이드 레터럴 레이즈');
+ await service.saveInterpretation(uid,mid,{id:rule.id,revision:1,exerciseName:'사이드 래터럴 레이즈',explanation:'내 운동명 표기'});assert.equal((await rule.ref.get()).data().exerciseName,'사이드 래터럴 레이즈');
+ await service.saveInterpretation(uid,mid,{id:rule.id,revision:2,remove:true});assert.equal((await rule.ref.get()).exists,false);
+});

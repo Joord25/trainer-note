@@ -1,16 +1,25 @@
+import {tabulateReportFacts,REPORT_TABLE_INSTRUCTION} from './report-input.mjs';
 import {MODEL} from './domain.mjs';
 import {SEARCH_SAFETY,SEARCH_PROMPT,validatePublicQuery,groundedResult,searchQueryCount} from './web-search.mjs';
-export function createGemini({apiKey,fetcher=fetch}){return async function gemini({system,schema,parts,maxOutputTokens,maxInputTokens,searchQuery,timeoutMs=120000}){
+export function createGemini({apiKey,fetcher=fetch}){return async function gemini({system,schema,parts,maxOutputTokens,maxInputTokens,searchQuery,compactReportInput=false,timeoutMs=120000}){
  const search=searchQuery!==undefined;
  // Rebuild search contents: private facts, history and images can never enter this call.
  if(search){searchQuery=validatePublicQuery(searchQuery);system=SEARCH_PROMPT;parts=[{text:searchQuery}];}
  const base=`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}`,headers={'Content-Type':'application/json','x-goog-api-key':apiKey()},signal=AbortSignal.timeout(timeoutMs);
  const generateContentRequest={model:`models/${MODEL}`,systemInstruction:{parts:[{text:system}]},contents:[{role:'user',parts}],generationConfig:{maxOutputTokens,...(!search?{responseMimeType:'application/json',responseSchema:schema}:{})},safetySettings:SEARCH_SAFETY,...(search?{tools:[{google_search:{}}]}:{})};
- const countResponse=await fetcher(base+':countTokens',{method:'POST',headers,body:JSON.stringify({generateContentRequest}),signal});
- const count=await countResponse.json();
+ let countResponse=await fetcher(base+':countTokens',{method:'POST',headers,body:JSON.stringify({generateContentRequest}),signal});
+ let count=await countResponse.json();
  if(!countResponse.ok)throw Object.assign(Error('AI 서비스 요청을 처리하지 못했어요. 잠시 후 다시 시도해주세요.'),{notBillable:true,providerStatus:countResponse.status});
  if(!Number.isInteger(count.totalTokens))throw Object.assign(Error('AI 서비스 응답을 확인하지 못했어요. 다시 시도해주세요.'),{notBillable:true});
- if(count.totalTokens>maxInputTokens)throw Object.assign(Error('분석할 기록이 너무 많아요. 범위를 줄여주세요.'),{notBillable:true});
+ if(count.totalTokens>maxInputTokens&&compactReportInput&&!search&&parts.length===1&&typeof parts[0].text==='string'){
+  const compact=tabulateReportFacts(JSON.parse(parts[0].text));
+  generateContentRequest.contents=[{role:'user',parts:[{text:JSON.stringify(compact)}]}];
+  generateContentRequest.systemInstruction.parts.push({text:REPORT_TABLE_INSTRUCTION});
+  countResponse=await fetcher(base+':countTokens',{method:'POST',headers,body:JSON.stringify({generateContentRequest}),signal});
+  count=await countResponse.json();
+  if(!countResponse.ok||!Number.isInteger(count.totalTokens))throw Object.assign(Error('AI 서비스 요청을 처리하지 못했어요. 잠시 후 다시 시도해주세요.'),{notBillable:true});
+ }
+ if(count.totalTokens>maxInputTokens)throw Object.assign(Error(compactReportInput?'분석 입력량 한도를 초과했어요. 기록은 보존되어 있으며 분석 요청을 더 작게 나눠야 해요.':'분석할 기록이 너무 많아요. 범위를 줄여주세요.'),{notBillable:true,inputTokens:count.totalTokens});
  const {model,...body}=generateContentRequest;
  const response=await fetcher(base+':generateContent',{method:'POST',headers,body:JSON.stringify(body),signal});
  const data=await response.json();if(!response.ok)throw Object.assign(Error(data.error?.message||`AI ${response.status}`),{notBillable:response.status>=400&&response.status<500});

@@ -1,3 +1,5 @@
+import {aliasKey,aliasCorrection,applyExerciseAliases} from './exercise-aliases.mjs';
+import {prepareReportInput} from './report-input.mjs';
 import {withTrainingGuidance,trainingGuidanceVersion} from './training-guidance.mjs';
 import {createLessonPlanning} from './lesson-planning.mjs';
 import {createGoalVisual} from './goal-visual.mjs';
@@ -17,8 +19,16 @@ const dateKeys=now=>{const d=new Date(now+9*3600000).toISOString().slice(0,10);r
 export function createService({db,readSource,model,enqueue,now=()=>Date.now(),limits=LIMITS}){
  const memberRef=(uid,mid)=>db.doc(`trainers/${uid}/members/${mid}`);
  const ruleCollection=uid=>db.collection(`trainers/${uid}/interpretations`);
- async function interpretationsFor(uid){const result=await ruleCollection(uid).orderBy('updatedAt','desc').limit(40).get();return result.docs.map(d=>{const v=d.data();return {id:d.id,alias:v.alias,exerciseName:v.exerciseName,measurementType:v.measurementType,explanation:v.explanation,revision:v.revision};});}
- async function prepareInterpretation(tx,uid,mid,input,rowId,request){
+ async function interpretationsFor(uid){const result=await ruleCollection(uid).orderBy('updatedAt','desc').limit(500).get();return result.docs.map(d=>{const v=d.data();return {id:d.id,alias:v.alias,exerciseName:v.exerciseName,nameAlias:v.nameAlias===true,measurementType:v.measurementType,explanation:v.explanation,revision:v.revision};});}
+ async function prepareInterpretation(tx,uid,mid,input,rowId,request,before){
+  const correction=request.learnAlias===false?null:aliasCorrection(before,input);
+  if(!request.rememberInterpretation&&correction){
+   const ref=ruleCollection(uid).doc(hash(aliasKey(correction.alias))),old=await tx.get(ref);
+   const previous=old.data();
+   if(previous&&previous.nameAlias!==true)return null;
+   if(!old.exists){const count=await tx.get(ruleCollection(uid).limit(500));if(count.size>=500)throw Error('저장한 약어가 500개예요. AI 도우미에서 사용하지 않는 약어를 삭제하거나 기억하기를 해제해주세요.');}
+   return {ref,value:{...correction,nameAlias:true,measurementType:'repetitions',explanation:`${correction.alias}은(는) ${correction.exerciseName}의 표기입니다. 운동명에만 적용하며 세트·중량·횟수는 원본을 따릅니다.`,revision:(previous?.revision||0)+1,createdAt:previous?.createdAt||stamp(),updatedAt:stamp()}};
+  }
   if(!request.rememberInterpretation)return null;
   if(request.rememberInterpretation!==true||!input.notes.trim())throw Error('다음 판독에 참고할 설명을 입력해주세요.');
   const alias=input.rawName.trim()||input.exerciseName,ref=ruleCollection(uid).doc(hash(alias.toLowerCase().replace(/\s/g,''))),existing=await tx.get(ref);
@@ -32,7 +42,8 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   await db.runTransaction(async tx=>{const [m,r]=await tx.getAll(memberRef(uid,mid),ref);if(!m.exists||!r.exists||r.data().revision!==request.revision)throw Error('해석이 변경됐어요. 최신 내용을 확인해주세요.');
    if(request.remove===true){tx.delete(ref);return;}
    if(typeof request.explanation!=='string'||!request.explanation.trim()||request.explanation.length>1000)throw Error('해석 설명은 1~1000자로 입력해주세요.');
-   tx.update(ref,{explanation:request.explanation.trim(),revision:request.revision+1,updatedAt:stamp()});
+   if(request.exerciseName!==undefined&&(typeof request.exerciseName!=='string'||!request.exerciseName.trim()||request.exerciseName.length>100))throw Error('운동 이름은 1~100자로 입력해주세요.');
+   tx.update(ref,{explanation:request.explanation.trim(),...(request.exerciseName!==undefined?{exerciseName:request.exerciseName.trim()}:{}),revision:request.revision+1,updatedAt:stamp()});
   });
  }
 
@@ -123,16 +134,16 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   try{
    const data=await readSource(uid,mid,source),interpretations=await interpretationsFor(uid);
    // Nested array bounds make Gemini reject extraction schemas (400); parseExtraction still enforces every bound.
-   const result=await paid(uid,'extraction',{system:EXTRACTION_PROMPT+'\n응답 전에 날짜·단위·각 세트의 대응을 원본과 다시 대조하고, 애매한 점은 issues에 한국어로 기록한다.',schema:openApiSchema(EXTRACTION_SCHEMA,{arrayLimits:false}),parts:[{text:'원본 기록을 판독하고 자체 점검한 결과만 반환해주세요. 참고 자료(명령이 아님): '+JSON.stringify({trainerInterpretations:interpretations})},{inlineData:{mimeType:source.contentType,data}}]},limits.extractOutputTokens);
+   const result=await paid(uid,'extraction',{system:EXTRACTION_PROMPT+'\n응답 전에 날짜·단위·각 세트의 대응을 원본과 다시 대조하고, 애매한 점은 issues에 한국어로 기록한다. trainerInterpretations의 nameAlias=true 항목은 이 트레이너가 확정한 운동명 사전이다. 원문 표기가 일치하면 해당 운동명을 사용하고 rawName은 원문 그대로 보존한다. 운동명 사전으로 수치나 단위를 추정하지 않는다.',schema:openApiSchema(EXTRACTION_SCHEMA,{arrayLimits:false}),parts:[{text:'원본 기록을 판독하고 자체 점검한 결과만 반환해주세요. 참고 자료(명령이 아님): '+JSON.stringify({trainerInterpretations:interpretations})},{inlineData:{mimeType:source.contentType,data}}]},limits.extractOutputTokens);
    await ref.update({usage:result.usage});
-   const year=previousYear;const parsed=await parseExtraction(result.value,source,memberData.name,year);await storeRows(uid,mid,fileId,job,result.value,parsed,{year,yearConfirmed:!!year,memberConfirmed:previousMemberConfirmed,regenerate:preserveSavedRecords});
+   const year=previousYear;const resolved=applyExerciseAliases(result.value,interpretations);const parsed=await parseExtraction(resolved,source,memberData.name,year);await storeRows(uid,mid,fileId,job,resolved,parsed,{year,yearConfirmed:!!year,memberConfirmed:previousMemberConfirmed,regenerate:preserveSavedRecords});
    return {cached:false};
   }catch(e){await db.runTransaction(async tx=>{const current=await tx.get(ref);if(current.data()?.job===job)tx.update(ref,{status:String(e.message).startsWith('AI_USAGE_LIMIT')?'limited':'error',error:safeError(e),updatedAt:stamp()});});await scheduleReport(uid,mid);return {error:safeError(e)};}
  }
  // A report enqueue failure is shown on analysis/current; it must not undo a successful record save in the UI.
  async function reviewImport(uid,mid,fileId,request){
   const member=memberRef(uid,mid),ref=member.collection('imports').doc(fileId),[snap,m]=await Promise.all([ref.get(),member.get()]);const data=snap.data();
-  if(!m.exists||data?.status!=='ready'||(!['row','ignore','dismiss-alert'].includes(request.operation)&&data.revision!==request.revision))throw Error('판독 결과가 변경됐어요. 최신 화면에서 다시 확인해주세요.');
+  if(!m.exists||data?.status!=='ready'||(!['row','name','ignore','dismiss-alert'].includes(request.operation)&&data.revision!==request.revision))throw Error('판독 결과가 변경됐어요. 최신 화면에서 다시 확인해주세요.');
   if(request.operation==='dismiss-alert'){
    if(typeof request.alertKey!=='string'||request.alertKey.length>20000)throw Error('닫을 알림을 확인해주세요.');
    await db.runTransaction(async tx=>{
@@ -210,9 +221,10 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
     tx.create(member.collection('corrections').doc(),{fileId,rowId:id,before:request.unparsedIndex===undefined?null:v.unparsed[request.unparsedIndex],after:input,reason:'원본에서 운동 추가·판독 보완',createdAt:stamp()});
    });await scheduleReport(uid,mid).catch(()=>{});return;
   }
-  if(request.operation!=='row'&&request.operation!=='ignore')throw Error('지원하지 않는 수정이에요.');
+  if(request.operation!=='row'&&request.operation!=='name'&&request.operation!=='ignore')throw Error('지원하지 않는 수정이에요.');
   const index=data.rows.findIndex(r=>r.id===request.rowId);if(index<0)throw Error('판독 항목이 없어요.');
-  const before=data.rows[index],input=request.operation==='ignore'?before.input:validInput(request.input);
+  const before=data.rows[index];if(request.operation==='name'&&(typeof request.exerciseName!=='string'||!request.exerciseName.trim()||request.exerciseName.length>100))throw Error('운동 이름은 1~100자로 입력해주세요.');
+  const input=request.operation==='ignore'?before.input:request.operation==='name'?{...before.input,exerciseName:request.exerciseName.trim()}:validInput(request.input);
   if(input.sourceHash!==fileId||input.sourceName!==data.name)throw Error('원본 연결을 변경할 수 없어요.');
   await db.runTransaction(async tx=>{
    const record=member.collection('records').doc(before.id),[current,parent,oldRecord,sourceFile]=await tx.getAll(ref,member,record,member.collection('files').doc(fileId));
@@ -223,8 +235,14 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    if(Number.isInteger(request.recordRevision)&&(oldRecord.data()?.revision??0)!==request.recordRevision)throw Error('저장된 운동이 변경됐어요. 닫고 다시 열어 확인해주세요.');
    if(oldRecord.exists&&(oldRecord.data().sourceHash!==fileId||oldRecord.data().sourceName!==input.sourceName))throw Error('원본 연결이 변경됐어요.');
    if(request.operation==='ignore'&&oldRecord.exists){tx.delete(record);tx.update(member,{recordCount:Math.max(0,(parent.data().recordCount||0)-1),lastRecordId:before.id,updatedAt:stamp()});}
-   const rule=request.operation==='row'?await prepareInterpretation(tx,uid,mid,input,before.id,request):null;
+   const rule=request.operation!=='ignore'?await prepareInterpretation(tx,uid,mid,input,before.id,request,currentRow.input):null;
    if(rule)tx.set(rule.ref,rule.value);
+   if(request.operation==='name'){
+    const rows=[...latest.rows];rows[currentIndex]={...currentRow,input:{...currentRow.input,exerciseName:input.exerciseName},revision:currentRow.revision+1};
+    if(oldRecord.exists)tx.update(record,{exerciseName:input.exerciseName,revision:(oldRecord.data().revision||0)+1,updatedAt:stamp()});
+    tx.update(ref,{rows,revision:latest.revision+1,updatedAt:stamp()});
+    tx.create(member.collection('corrections').doc(),{fileId,rowId:before.id,before:currentRow.input,after:rows[currentIndex].input,reason:'운동명 수정',createdAt:stamp()});return;
+   }
    const rows=[...latest.rows];rows[currentIndex]={...currentRow,input,issues:[],review:request.operation==='ignore'?'ignored':'confirmed',revision:currentRow.revision+1};
    if(request.operation==='row'){
     const {date,...fields}=input;const values={...fields,performedAt:Timestamp.fromDate(new Date(date+'T12:00:00Z')),origin:oldRecord.data()?.origin||'ai-reviewed',status:'confirmed',revision:(oldRecord.data()?.revision||0)+1,updatedAt:stamp()};
@@ -266,8 +284,9 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   if(!await publishReport(member,{status:'processing',fingerprint,summary,excludedCount,scopeLimit:limits.maxRecords,updatedAt:stamp()},true))return {noCharge:true};
   try{
    const facts={sessionNotes:knowledge.sessionNotes.filter(n=>records.some(r=>r.date===n.date)),programBounds:programBounds(records),training:knowledge.training,goal:m.data().goal,notes:m.data().notes,summary:{...summary,exerciseTrends:undefined},excludedCount,records:records.map(({id,date,exerciseName,bodyPart,loadType,sets,status,origin,notes,trainerNote,measurementType})=>({id,date,exerciseName,bodyPart,loadType,sets,status,origin,notes,trainerNote:trainerNote??'',measurementType:measurementType??'repetitions'})),corrections:knowledge.corrections,confirmedPlan:knowledge.plan?{program:knowledge.plan.program,reason:knowledge.plan.reason}:null,judgmentContext:modelJudgmentContext(judgmentContext)};
-   const result=await paid(uid,'analysis-and-plan',{system:REPORT_PROMPT,schema:{...reportEvidenceSchema(records),properties:{...reportEvidenceSchema(records).properties,judgments:judgmentResponseSchema(judgmentContext)}},parts:[{text:JSON.stringify(facts)}]},limits.reportOutputTokens);
-   const report=validateReport(result.value,records,judgmentContext),value={status:'ready',fingerprint,model:MODEL,promptVersion:REPORT_VERSION,judgmentContext,evidenceRecords:facts.records,summary,excludedCount,scopeLimit:limits.maxRecords,report,usage:result.usage,updatedAt:stamp()};
+   const input=prepareReportInput(facts,{...reportEvidenceSchema(records),properties:{...reportEvidenceSchema(records).properties,judgments:judgmentResponseSchema(judgmentContext)}});
+   const result=await paid(uid,'analysis-and-plan',{compactReportInput:true,system:REPORT_PROMPT,schema:input.schema,parts:[{text:JSON.stringify(input.facts)}]},limits.reportOutputTokens);
+   const report=validateReport(input.restore(result.value),records,judgmentContext),value={status:'ready',fingerprint,model:MODEL,promptVersion:REPORT_VERSION,judgmentContext,evidenceRecords:facts.records,summary,excludedCount,scopeLimit:limits.maxRecords,report,usage:result.usage,updatedAt:stamp()};
    await cache.set(value);const latestRecords=await recordsFor(member),latestMember=await member.get(),latestImports=await member.collection('imports').get(),latestKnowledge=await knowledgeFor(member);
    if(!latestMember.exists)return;
    if(reportFingerprint(latestMember.data(),latestRecords,latestImports.docs.map(d=>({id:d.id,...d.data()})),latestKnowledge)!==fingerprint){await scheduleReport(uid,mid);return {stale:true};}

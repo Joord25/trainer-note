@@ -2,7 +2,7 @@ import {type MeasurementType} from './workout-measurements';
 import type {WorkoutInput} from './workout-records';
 
 export const EXTRACTION_MODEL = process.env.NEXT_PUBLIC_FIREBASE_AI_MODEL || 'gemini-3.1-flash-lite';
-export const EXTRACTION_VERSION = 'workout-v12-grounded-records';
+export const EXTRACTION_VERSION = 'workout-v13-session-observations';
 export const MAX_AI_BYTES = 10 * 1024 * 1024;
 export type ExtractedWorkout = {sessionIndex?:number;programSection?:string;sessionNote?:string;input:WorkoutInput;issues:string[];memberName:string;id:string;compound?:{groupId:string;rawName:string;index:number;total:number;mapping:string}};
 export type ReadingGuidance={summary:string;checks:string[];uploadAdvice:string};
@@ -42,7 +42,7 @@ reportedSetCount는 해당 운동 원문에 명시된 세트 수만 정수로 �
 SLR 90처럼 각도·시간·횟수가 모호하거나 90'의 작은 기호를 확신할 수 없으면 durationSeconds=null로 두고 원문을 notes와 issues에 보존한다. 시간 단위인지 확인 필요라는 issues와 확정 durationSeconds를 함께 반환하지 않는다.
 날짜는 원문에 명시된 year/month/day를 각각 숫자로 반환한다. 연도가 없으면 year=null. 오늘 날짜, 요일, 파일명, 주변 맥락으로 연도를 추측하지 않는다. 판독 불가능한 날짜 요소는 null이다.
 rawName은 원문 표기를 보존한다. exerciseName은 확실한 경우에만 한국어 운동명으로 정리한다. BB sq를 프런트 스쿼트 등 특정 변형으로 단정하지 않는다. 모호하면 원문명을 유지하고 issues에 운동명 확인 이유를 쓴다. 주 운동 부위는 1개만, 모르면 미분류.
-trainerNote에는 원본의 트레이너 메모(컨디션·통증 호소·피로·휴식·수업 조정 이유 등)를 의미를 바꾸지 않고 보존한다. 원본에 없으면 빈 문자열. AI 해석·진단·판독 설명을 trainerNote로 만들지 않는다. trainerNote에는 해당 운동에만 적용되는 메모를 담는다. 날짜 전체 컨디션·조정 메모는 sessionNote에 담고 같은 날짜·페이지의 첫 운동에만 연결한다. sessionNote가 없으면 빈 문자열. 수업 메모를 trainerNote에 중복하지 않는다. 서로 다른 날짜의 메모를 옮기지 않는다. 부정 표현(통증 없음)과 관찰 주체를 유지한다. 기존 notes에는 판독 설명·단위 해석을 남긴다.
+trainerNote에는 원본의 트레이너 메모(컨디션·통증 호소·피로·휴식·수업 조정 이유 등)를 의미를 바꾸지 않고 보존한다. 원본에 없으면 빈 문자열. AI 해석·진단·판독 설명을 trainerNote로 만들지 않는다. trainerNote에는 해당 운동에만 적용되는 수행 방법·기술 지시를 담는다. 회원 상태·수업 참고사항은 특정 운동 옆에 있어도 운동명을 덧붙여 sessionNote에 담는다. 날짜 구간의 “허리 불편”, “척추 L측굴”, “R 어깨 통증 발생” 같은 컨디션·자세 관찰·증상 문구는 운동명이 아니라 그 날짜의 sessionNote에 자동 추출한다. 트레이너가 회원 상태 또는 수업에서 알아야 할 사항을 적어둔 문구인지 원문 문맥으로 분류하는 작업이며, 운동 종류·중량·횟수로 회원 상태를 새로 추론하는 작업이 아니다. 수면·피로·컨디션·자세 관찰·통증 호소·수업 주의사항·조정 이유가 원문에 있으면 해당 날짜 수업 메모에 보존한다. 특정 운동에 붙은 상태 메모는 운동명도 함께 적어 맥락을 유지하고 sessionNote에 보존하며 trainerNote에 중복하지 않는다. L/R, 발생·없음 등 방향과 부정 표현을 원문 그대로 보존하며 진단이나 인과관계를 덧붙이지 않는다. 이는 형식 예시이며 사진에 없는 문구를 추가하지 않는다. 여러 문구는 줄바꿈으로 연결하고 중복하지 않는다. 날짜 전체 컨디션·조정 메모는 sessionNote에 담고 같은 날짜·페이지의 첫 운동에만 연결한다. sessionNote가 없으면 빈 문자열. 수업 메모를 trainerNote에 중복하지 않는다. 서로 다른 날짜의 메모를 옮기지 않는다. 부정 표현(통증 없음)과 관찰 주체를 유지한다. 기존 notes에는 판독 설명·단위 해석을 남긴다.
 운동 부위에 유산소를 사용할 수 있다. 명확한 러닝·로잉·스키 에르고미터 등 심폐 운동은 유산소로 분류한다. 에어 바이크/air bike는 누워서 하는 복근 운동 이름이기도 하다. 맨몸 반복 동작의 에어 바이크는 코어로 분류하고 이름만으로 유산소 머신으로 해석하지 않는다. 실제 바이크 머신·거리·시간·저항 맥락이 있을 때만 유산소로 구분하며 불분명하면 issues에 확인을 남긴다. 트레이너가 확인한 부위·표기 해석을 우선한다.
 마이마운틴·트레드밀에서 경사·속도·시간이 함께 기록되면 measurementType=incline_speed_time, loadType=unknown, kg=null, reps=null로 반환한다. inclinePercent는 경사(%), speedKph는 속도(km/h), durationSeconds는 각 구간의 초 단위 시간이다. 음수 경사(내리막), 경사 0과 속도 0은 유효한 수치다. 경사 도(°)·기구 단계는 %로 추정하지 않는다. 20/6처럼 의미나 단위가 불명확하면 해당 값은 null과 issues에 확인 질문을 남긴다. trainerInterpretations에 트레이너가 확인한 표기 해석이 있으면 참고한다. 반복 구간과 달리기·걷기 구간은 실제 원본대로 각각 기록하며 생략된 회복 구간·라운드 수를 만들지 않는다. 다른 기록 방식의 inclinePercent/speedKph는 null이다.
 각 세트의 kg와 reps를 별개로 읽는다. 20/70처럼 애매하면 해당 값을 null로 두고 issues에 후보와 세트 번호를 쓴다. 무게 단위가 kg임이 확인된 경우만 weighted. X 표기만으로 맨몸을 단정하지 않는다. kg 미기재나 lb/기구 단계 등 단위가 불명확하면 unknown 및 kg=null, 원문 표기를 notes에 남긴다. 덤벨 무게를 두 배로 계산하지 않는다. 맨몸이 분명하면 bodyweight 및 kg=null.
@@ -161,9 +161,9 @@ export async function parseExtraction(value:unknown,source:{id:string;name:strin
 
 
 /** Date-level source observations; explicit trainer edits (including clearing) take precedence. */
-export function mergeSessionNotes(imports:{rows?:{sessionNote?:string;review?:string;input:{date:string}}[]}[],overrides:{date:string;text:string;revision:number}[]){
+export function mergeSessionNotes(imports:{rows?:{sessionNote?:string;review?:string;input:{date:string}}[]}[],overrides:{date:string;text:string;revision:number}[],includePending=false){
  const notes=new Map<string,{date:string;text:string;revision:number}>();
- for(const file of imports)for(const row of file.rows??[]){const date=row.input.date,text=row.sessionNote?.trim();if(!text||row.review==='ignored'||row.review==='needs-review'||!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;
+ for(const file of imports)for(const row of file.rows??[]){const date=row.input.date,text=row.sessionNote?.trim();if(!text||row.review==='ignored'||(!includePending&&row.review==='needs-review')||!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;
   const previous=notes.get(date);if(!previous)notes.set(date,{date,text,revision:0});else if(!previous.text.split('\n').includes(text))previous.text=[previous.text,text].join('\n').slice(0,1000);
  }
  for(const note of overrides)notes.set(note.date,note);

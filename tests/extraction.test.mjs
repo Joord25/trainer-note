@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import ts from 'typescript';
 const code=ts.transpileModule(readFileSync(new URL('../src/lib/workout-extraction.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
-const {parseExtraction,EXTRACTION_MODEL}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const {parseExtraction,EXTRACTION_MODEL,mergeSessionNotes}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 const source={id:'a'.repeat(64),name:'일지.png',contentType:'image/png'};
 const row=()=>({page:1,memberName:'회원 A',year:null,month:6,day:9,rawName:'BB sq',exerciseName:'바벨 스쿼트',bodyPart:'하체',loadType:'weighted',sets:[{kg:40,reps:12},{kg:null,reps:null}],notes:'둘째 세트 판독 불명',issues:['운동 변형 확인']});
 const parse=(patch={},year)=>parseExtraction({records:[{...row(),...patch}],unparsed:[]},source,'회원 A',year);
@@ -72,4 +72,13 @@ test('compound without doses counts constituent exercises consistently',async()=
  const c=compound();c.sessionIndex=1;c.components.forEach(x=>{x.sets=[];x.loadType='unknown';});
  const result=await parseExtraction({records:[{...row(),...c}],unparsed:[],coverage:[{page:1,sessionIndex:1,dateText:'6/9',rawText:c.rawName,status:'processed',reason:'',expectedExercises:2}]},source,'회원 A');
  assert.equal(result.records.length,2);assert.equal(result.coverage[0].status,'processed');assert.ok(result.records.every(r=>r.input.sets.length===0));
+});
+
+test('session observations appear in editing while unreviewed notes stay out of analysis',()=>{
+ const imports=[{rows:[{sessionNote:'허리 불편\n척추 L측굴\nR 어깨 통증 발생',review:'needs-review',input:{date:'2026-01-13'}},{sessionNote:'다른 날짜',review:'auto',input:{date:'2026-01-17'}}]}];
+ assert.deepEqual(mergeSessionNotes(imports,[]).map(n=>n.date),['2026-01-17']);
+ const preview=mergeSessionNotes(imports,[],true);assert.equal(preview[0].text,'허리 불편\n척추 L측굴\nR 어깨 통증 발생');
+ assert.equal(mergeSessionNotes(imports,[{date:'2026-01-13',text:'직접 작성',revision:1}],true)[0].text,'직접 작성');
+ assert.equal(mergeSessionNotes(imports,[{date:'2026-01-13',text:'',revision:2}],true)[0].text,'');
+ assert.equal(mergeSessionNotes([{rows:[{sessionNote:'미확정 날짜',review:'needs-review',input:{date:''}},{sessionNote:'제외',review:'ignored',input:{date:'2026-01-13'}}]}],[],true).length,0);
 });
