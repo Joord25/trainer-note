@@ -35,7 +35,7 @@ export function CoachingJourney({request=callAi,legacyPlan,memberId,revision,sta
  return <section className="coaching-journey" aria-label="회원 변화와 수업 계획">
  {error&&<div role="alert" className="file-error">{error}<button onClick={()=>setRefresh(v=>v+1)}>최신 기록 다시 확인</button></div>}
  {!online&&<p role="status">연결 후 저장된 분석과 계획을 확인할 수 있어요.</p>}
- 
+
  {working&&<div ref={progressRef}><JourneyProgress title={!context?"기록을 불러오고 있어요":pendingProposal||busy.includes("수업의")?"수업 계획을 구성하고 있어요":busy.includes("저장")?"계획을 저장하고 있어요":"회원 변화를 분석하고 있어요"} description={busy||(!context?"저장된 기록과 분석 상태를 확인합니다.":"전체 기간의 기록을 비교하고 있습니다.")} /></div>}{notice&&<p role="status">{notice}</p>}
  {context&&!working&&<><details className="journey-record-summary" open={stage==='analysis'}><summary>기록 요약 · {context.days}개 기록일 · {context.records}개 운동</summary><p>{context.from||'기록 없음'} — {context.to} · 전체 확인 가능 기록 기준</p><p>{context.excluded?`미확인·제외 기록 ${context.excluded}개는 분석에서 제외했습니다.`:'저장된 분석 대상 기록을 사용합니다.'} 사진의 누락 여부는 원본과 함께 확인하세요.</p><button onClick={onGoal}>{context.goal?`목표: ${context.goal}`:'회원 목표·배경 확인'}</button></details>
  {stage==='analysis'&&<><div className="journey-heading"><div><small>01 · 회원 변화</small><h2>{context.report?.headline??'무엇이 달라졌을까요?'}</h2></div><button className="primary" disabled={!!busy||!context.evidence.length} onClick={()=>void analyze()}>{context.report?'분석 결과 확인':'회원 변화 분석하기'}</button></div>
