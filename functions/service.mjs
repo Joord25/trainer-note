@@ -1,3 +1,5 @@
+import {COACHING_INPUT_TOKENS} from './coaching-input.mjs';
+import {createCoachingWorkflow} from './coaching-workflow.mjs';
 import {aliasKey,aliasCorrection,applyExerciseAliases} from './exercise-aliases.mjs';
 import {prepareReportInput} from './report-input.mjs';
 import {withTrainingGuidance,trainingGuidanceVersion} from './training-guidance.mjs';
@@ -51,7 +53,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
  async function paid(uid,kind,request,maxOutputTokens){
   const callStarted=now();
   request=withTrainingGuidance(kind,request);
-  const maxInputTokens=kind==='assistant-chat'?(limits.chatInputTokens??CHAT_MAX_INPUT_TOKENS):limits.maxInputTokens;
+  const maxInputTokens=['member-changes','cycle-plan'].includes(kind)?(limits.coachingInputTokens??COACHING_INPUT_TOKENS):kind==='assistant-chat'?(limits.chatInputTokens??CHAT_MAX_INPUT_TOKENS):limits.maxInputTokens;
   const key=randomUUID(),dates=dateKeys(now()),usage=db.doc(`trainers/${uid}/aiUsage/${dates.month}`),daily=db.doc(`trainers/${uid}/aiDaily/${dates.day}`),global=db.doc(`aiGlobalUsage/${dates.month}`),globalShard=global.collection('shards').doc(String(parseInt(key.slice(0,8),16)%64).padStart(2,'0')),call=db.doc(`trainers/${uid}/aiCalls/${key}`),searchReserve=request.searchQuery!==undefined?SEARCH_QUERY_MICROS*SEARCH_RESERVE_QUERIES:0,reserve=costMicros(maxInputTokens,maxOutputTokens)+searchReserve;
   await db.runTransaction(async tx=>{
    const [u,d]=await tx.getAll(usage,daily),uv=u.data()||{},dv=d.data()||{};
@@ -81,7 +83,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
  }
  async function scheduleReport(uid,mid){
   const member=memberRef(uid,mid),ref=member.collection('analysis').doc('current');let queued=false;
-  await db.runTransaction(async tx=>{queued=false;const [m,a]=await tx.getAll(member,ref);if(!m.exists)return;const remaining=await tx.get(member.collection('records').limit(1));if(remaining.empty){tx.set(ref,emptyReport());return;}const old=a.data();if(old?.status==='queued'&&old.queuedAt?.toMillis()>now()-25000)return;
+  await db.runTransaction(async tx=>{queued=false;const [m,a,workflow]=await tx.getAll(member,ref,member.collection('workflowSettings').doc('current'));if(!m.exists||workflow.data()?.version===2)return;const remaining=await tx.get(member.collection('records').limit(1));if(remaining.empty){tx.set(ref,emptyReport());return;}const old=a.data();if(old?.status==='queued'&&old.queuedAt?.toMillis()>now()-25000)return;
    tx.set(ref,{status:'queued',queuedAt:Timestamp.fromMillis(now()),updatedAt:stamp()},{merge:true});queued=true;});
   if(queued)try{await enqueue({uid,memberId:mid},randomUUID());}catch(e){await publishReport(member,{status:'error',error:'분석 대기열에 연결하지 못했어요. 다시 시도해주세요.',updatedAt:stamp()},true);throw e;}
  }
@@ -117,7 +119,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    if((m.data().recordCount||0)+delta>5000)throw Error('회원 기록 한도에 도달했어요.');
    if(delta)tx.update(member,{recordCount:(m.data().recordCount||0)+delta,lastRecordId:lastId,updatedAt:stamp()});
    const state={raw,coverage:parsed.coverage??null,guidance:parsed.guidance??null,recordsDeleted:false,rows:merged,unparsed:parsed.unparsed.filter(v=>!(old.resolvedUnparsed||[]).includes(hash(v))),status:'ready',revision:(old.revision||0)+1,year:opts.year??null,yearExplicit:!!opts.yearConfirmed,memberConfirmed:!!opts.memberConfirmed,error:'',updatedAt:stamp()};
-   if(Buffer.byteLength(JSON.stringify(state))>700000)throw Error('판독 결과가 너무 커요. 파일을 나눠주세요.');tx.update(ref,state);
+   if(Buffer.byteLength(JSON.stringify(state))>700000)throw Error('판독 결과가 한 번에 저장할 수 있는 양을 초과했어요. 원본과 기존 기록은 유지됩니다.');tx.update(ref,state);
   });
   await scheduleReport(uid,mid);
  }
@@ -127,7 +129,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    if(!m.exists||!f.exists||f.data().originalRemoved||f.data().status!=='ready')throw Error('저장 완료된 회원 원본 파일을 선택해주세요.');
    const old=i.data();if(regenerate&&(!Number.isInteger(regenerate.revision)||regenerate.revision!==(old?.revision||0)))throw Error('판독 결과가 변경됐어요. 최신 화면에서 다시 생성해주세요.');if(old?.status==='ready'&&!regenerate)return;if(old?.status==='processing'&&old.startedAt?.toMillis()>now()-180000)return;
    if(old&&!retry&&!regenerate)return;
-   source={id:fileId,...f.data()};memberData=m.data();previousYear=old?.yearExplicit?old.year:undefined;previousMemberConfirmed=!!old?.memberConfirmed;preserveSavedRecords=!!regenerate||!!old?.preserveSavedRecords;if(source.size>10*1024*1024){tx.set(ref,{status:'error',name:source.name,rows:[],unparsed:[],revision:0,error:'자동 판독은 파일당 10MB까지 가능해요. 파일을 나눠주세요.',updatedAt:stamp()});return;}
+   source={id:fileId,...f.data()};memberData=m.data();previousYear=old?.yearExplicit?old.year:undefined;previousMemberConfirmed=!!old?.memberConfirmed;preserveSavedRecords=!!regenerate||!!old?.preserveSavedRecords;if(source.size>10*1024*1024){tx.set(ref,{status:'error',name:source.name,rows:[],unparsed:[],revision:0,error:'원본은 저장되어 있지만, 이 파일은 현재 AI 판독 크기 한도를 초과했어요. 다른 파일의 기록은 계속 확인할 수 있어요.',updatedAt:stamp()});return;}
    tx.set(ref,{status:'processing',job,preserveSavedRecords,model:MODEL,promptVersion:EXTRACTION_VERSION,name:source.name,contentType:source.contentType,revision:old?.revision||0,rows:old?.rows||[],unparsed:old?.unparsed||[],startedAt:Timestamp.fromMillis(now()),updatedAt:stamp(),error:''},{merge:true});claimed=true;
   });
   if(!claimed)return {cached:true};
@@ -273,7 +275,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   return {sessionNotes:await sessionNotesFor(member),training,generation:generation.data()?.value||null,criteria:criteria.data()??null,decisions:decisions.docs.map(d=>({id:d.id,...d.data()})),outcomes:outcomes.docs.map(d=>({id:d.id,...d.data()})),corrections:corrections.docs.map(d=>{const v=d.data();return {id:d.id,before:v.before??null,after:v.after??null,reason:v.reason??''};}),plan:plan.data()??null};
  }
  async function buildReport(uid,mid){
-  const active=memberRef(uid,mid);if(!await publishReport(active,{status:'processing',startedAt:Timestamp.fromMillis(now()),updatedAt:stamp()},true))return {noCharge:true};
+  const active=memberRef(uid,mid);if((await active.collection('workflowSettings').doc('current').get()).data()?.version===2)return {noCharge:true};if(!await publishReport(active,{status:'processing',startedAt:Timestamp.fromMillis(now()),updatedAt:stamp()},true))return {noCharge:true};
   const member=memberRef(uid,mid),[m,records,importsSnap,knowledge]=await Promise.all([member.get(),recordsFor(member),member.collection('imports').get(),knowledgeFor(member)]);if(!m.exists)return;
   const imports=importsSnap.docs.map(d=>({id:d.id,...d.data()})),fingerprint=reportFingerprint(m.data(),records,imports,knowledge),cache=member.collection('reports').doc(fingerprint),current=member.collection('analysis').doc('current');
   const cached=await cache.get();if(cached.data()?.status==='ready'){await publishReport(member,{...cached.data(),updatedAt:stamp()});return {cached:true};}
@@ -417,6 +419,6 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   }catch(e){await db.runTransaction(async tx=>{const [parent,current]=await tx.getAll(member,ref);if(parent.exists&&current.data()?.job===job)tx.update(ref,previousAnswer?{...previousAnswer,status:'ready',phase:'complete',regenerationError:safeError(e),updatedAt:stamp()}:{status:'error',error:safeError(e),updatedAt:stamp()});});throw e;}
  }
  const goalFlow=createGoalFlow({db,paid,now});
- return {...createLessonPlanning({db,paid,sessionNotesFor,goalContext:goalFlow.goalContext,now}),...createGoalVisual({db,paid,sessionNotesFor,now}),...goalFlow,saveSessionNote,saveTrainingGoal:async(...args)=>{const r=await goalFlow.saveTrainingGoal(...args);await scheduleReport(args[0],args[1]).catch(()=>{});return r;},draftAssessment,startImport,reviewImport,buildReport,scheduleReport,retryReport,savePlan,paid,saveJudgmentCriteria,saveJudgmentDecision,saveJudgmentOutcome,chat,newChat,regenerateChat,saveInterpretation};
+ return {...createCoachingWorkflow({db,paid,sessionNotesFor,now}),...createLessonPlanning({db,paid,sessionNotesFor,goalContext:goalFlow.goalContext,now}),...createGoalVisual({db,paid,sessionNotesFor,now}),...goalFlow,saveSessionNote,saveTrainingGoal:async(...args)=>{const r=await goalFlow.saveTrainingGoal(...args);await scheduleReport(args[0],args[1]).catch(()=>{});return r;},draftAssessment,startImport,reviewImport,buildReport,scheduleReport,retryReport,savePlan,paid,saveJudgmentCriteria,saveJudgmentDecision,saveJudgmentOutcome,chat,newChat,regenerateChat,saveInterpretation};
 }
 export function safeError(e){const s=String(e?.message||'');if(s.startsWith('AI_USAGE_LIMIT:'))return s.slice(15);if(/ACCESS_TOKEN_TYPE_UNSUPPORTED|invalid authentication credentials|API key not valid/i.test(s))return 'Gemini 인증 설정을 확인해주세요. 서비스 관리자에게 알려주세요.';if(/prepayment|credits.*depleted/i.test(s))return 'Gemini 크레딧이 부족해요. 서비스 관리자에게 알려주세요.';if(/429|quota/i.test(s))return 'AI 요청 한도에 도달했어요. 저장된 결과는 계속 볼 수 있어요.';if(/^[가-힣]/.test(s))return s.slice(0,500);return 'AI 작업을 완료하지 못했어요. 저장된 기록은 유지됩니다. 다시 시도할 수 있어요.';}

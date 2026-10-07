@@ -9,7 +9,8 @@ export function sourceObjectName(contentType:SourceContentType) {
 // Check the extension against bytes, not the browser-supplied MIME label.
 // This is a format signature check, not full parsing or malware scanning.
 export async function inspectSourceFile(file:File):Promise<{id:string;contentType:SourceContentType}> {
-  if(!file.size||file.size>MAX_SOURCE_BYTES)throw new Error("0바이트가 아닌 50MB 이하 PDF·PNG·JPEG를 선택해주세요.");
+  if(!file.size)throw new Error("비어 있는 파일이에요. 내용이 있는 파일을 선택해주세요.");
+  if(file.size>MAX_SOURCE_BYTES)throw new Error("업로드 가능한 파일 크기를 초과했어요. 다른 파일은 계속 올릴 수 있어요.");
   if(file.name.length>200)throw new Error("파일 이름을 200자 이내로 줄여주세요.");
   const extension=file.name.split('.').pop()?.toLowerCase();
   if(!extension||!['pdf','png','jpg','jpeg'].includes(extension))throw new Error("PDF, PNG, JPG, JPEG 파일을 선택해주세요.");

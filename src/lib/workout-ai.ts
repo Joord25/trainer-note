@@ -8,7 +8,7 @@ import type {MemberFile} from './member-files';
 export const aiEnabled=process.env.NEXT_PUBLIC_AI_ENABLED==='true';
 export async function extractWorkout(blob:Blob,source:MemberFile,memberName:string,year:number|undefined,signal:AbortSignal){
  if(!aiEnabled)throw new Error('AI 판독 연결을 준비 중이에요. 직접 기록을 입력할 수 있어요.');
- if(blob.size>MAX_AI_BYTES)throw new Error('AI 판독은 파일당 10MB까지 가능해요. PDF를 나누거나 이미지를 줄여주세요.');
+ if(blob.size>MAX_AI_BYTES)throw new Error('원본은 저장되어 있지만, 이 파일은 현재 AI 판독 크기 한도를 초과했어요. 다른 파일의 기록은 계속 확인할 수 있어요.');
  const auth=getClientAuth(),uid=auth.currentUser?.uid;if(!uid)throw new Error('다시 로그인해주세요.');
  signal.throwIfAborted();
  const check=getClientAppCheck();if(!check)throw new Error('AI 연결 보호 설정이 필요해요. 관리자에게 문의해주세요.');

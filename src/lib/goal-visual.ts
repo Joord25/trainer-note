@@ -3,7 +3,7 @@ import type {SavedTrainingGoal} from './training-goals';
 import {progressStats,TRAINING_PARTS} from './training-goals';
 import {analysisWindow,exerciseGroups,performanceDays,performanceLabels,type PerformanceMetric} from './progress-analysis';
 import {assessmentProtocol,assessmentConditions,type AssessmentResult} from './assessment-results';
-export const GOAL_VISUAL_VERSION='goal-visual-v6-cardio-guidance-claims';
+export const GOAL_VISUAL_VERSION='goal-visual-v7-observed-change';
 export type GoalVisualPoint={date:string;value:number;recordIds:string[];condition:string;notes:string[]};
 export type GoalVisualCandidate={id:string;name:string;label:string;unit:string;kind:'exercise'|'summary'|'distribution'|'assessment';link:string;metric?:PerformanceMetric;points:GoalVisualPoint[];target:number|null;direction:'up'|'down'|'observe';conditionsMatch:boolean};
 export type GoalVisualCard={candidateId:string;format:'trend'|'comparison'|'target'|'conditions';goal:string;status:'progress'|'review'|'insufficient';interpretation:string;interpretationSource?:'record-check';nextStep:string};

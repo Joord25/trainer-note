@@ -56,7 +56,7 @@ measurementType은 일반 중량·횟수=repetitions, 거리와 소요 시간=di
 응답은 지정 JSON 스키마만 따른다.`;
 function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v))throw new Error('AI 응답 형식을 읽지 못했어요. 다시 시도해주세요.');return v as Record<string,unknown>;}
 function string(v:unknown,max:number){if(typeof v!=='string'||v.length>max)throw new Error('AI 응답의 텍스트 형식이 올바르지 않아요.');return v.trim();}
-function array(v:unknown,max:number){if(!Array.isArray(v)||v.length>max)throw new Error('AI가 너무 많은 항목 또는 잘못된 형식을 반환했어요. 파일을 나눠 다시 시도해주세요.');return v;}
+function array(v:unknown,max:number){if(!Array.isArray(v)||v.length>max)throw new Error('판독 결과의 항목 수 또는 형식을 확인하지 못했어요. 기존 기록은 유지됩니다.');return v;}
 function number(v:unknown,min:number,max:number,integer=false):number|null{if(v===null)return null;if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max||(integer&&!Number.isInteger(v)))throw new Error('AI 응답의 숫자 범위를 확인할 수 없어요.');return v;}
 export async function parseExtraction(value:unknown,source:{id:string;name:string;contentType:string},memberName:string,year?:number):Promise<Extraction>{
  if(year!==undefined&&(!Number.isInteger(year)||year<1900||year>2100))throw new Error('기록 연도는 1900~2100년으로 입력해주세요.');
@@ -79,7 +79,7 @@ export async function parseExtraction(value:unknown,source:{id:string;name:strin
    expanded.push({...parent,...c,sessionNote:i===0?string(parent.sessionNote??c.sessionNote??'',1000):'',trainerNote:[string(c.trainerNote??'',1000),...(i===0?[string(parent.trainerNote??'',1000)]:[])].filter(Boolean).join(' / ').slice(0,1000),page:parent.page,memberName:parent.memberName,year:parent.year,month:parent.month,day:parent.day,issues,notes:[`복합 원문: ${whole} · ${i+1}/${components.length}`,mapping,string(c.notes,500),string(parent.notes,300)].filter(Boolean).join(' / ').slice(0,1000),compound:{groupId,rawName:whole,index:i+1,total:components.length,mapping}});
   }
  }
- if(expanded.length>240)throw new Error('분리한 운동이 240개를 넘어요. 원본 파일을 나눠주세요.');
+ if(expanded.length>240)throw new Error('한 번에 처리할 수 있는 운동 항목 수를 초과했어요. 기존 기록은 유지됩니다.');
  const records=await Promise.all(expanded.map(async item=>{
   const r=object(item),issues=array(r.issues,30).map(v=>string(v,500));
   const page=number(r.page,1,10000,true);if(page===null||(source.contentType!=='application/pdf'&&page!==1))throw new Error('AI 응답의 원본 페이지가 올바르지 않아요.');

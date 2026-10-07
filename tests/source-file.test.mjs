@@ -14,7 +14,7 @@ test('same JPEG bytes deduplicate across jpg/jpeg filenames',async()=>{
  assert.equal((await inspectSourceFile(new File([jpeg],'a.jpg'))).id,(await inspectSourceFile(new File([jpeg],'b.jpeg'))).id);
 });
 for(const [name,bytes] of [['fake.png',pdf],['fake.pdf',png],['fake.jpg',png],['fake.png',png.slice(0,7)],['fake.jpeg',new TextEncoder().encode('<svg/>')],['file.svg',png],['empty.jpg',new Uint8Array()]])test(`reject extension/signature mismatch ${name} (${bytes.length})`,async()=>{await assert.rejects(inspectSourceFile(new File([bytes],name)));});
-test('size limit is checked before reading bytes',async()=>{await assert.rejects(inspectSourceFile({name:'big.png',size:MAX_SOURCE_BYTES+1,arrayBuffer(){throw new Error('must not read');}}),/50MB/);});
+test('size limit is checked before reading bytes',async()=>{await assert.rejects(inspectSourceFile({name:'big.png',size:MAX_SOURCE_BYTES+1,arrayBuffer(){throw new Error('must not read');}}),/업로드 가능한 파일 크기/);});
 test('legacy PDF and canonical image paths',()=>{
  assert.equal(sourceObjectName('application/pdf'),'source.pdf');assert.equal(sourceObjectName('image/png'),'source.png');assert.equal(sourceObjectName('image/jpeg'),'source.jpg');assert.throws(()=>sourceObjectName('image/svg+xml'));
 });
