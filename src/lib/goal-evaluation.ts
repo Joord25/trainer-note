@@ -23,7 +23,7 @@ export function goalEvaluationData(records:WorkoutRecord[],allRecords:WorkoutRec
     if(!point)return '';
     if(id==='cardio'&&g.kind==='incline_speed_time'){const sets=g.records.filter(r=>r.date===point.date).flatMap(r=>r.sets);return [...new Set(sets.map(s=>`경사 ${fmt(s.inclinePercent!)}% · ${fmt(s.speedKph!)}km/h`))].join(' / ');}
     if(id==='cardio'&&g.kind==='distance_time'){const time=performanceDays(g.records,'duration').find(d=>d.date===point.date)?.value;return time===null||time===undefined?'시간 미기록':`${fmt(time)}초`;}
-    if(id==='strength'&&metric==='kg'){const sets=g.records.filter(r=>r.date===point.date&&r.loadType==='weighted').flatMap(r=>r.sets).filter(s=>s.kg===point.value);const best=sets.reduce<(typeof sets)[number]|null>((best,s)=>!best||s.reps>best.reps?s:best,null);return best?`${best.leftReps!==undefined?`L ${best.leftReps} / R ${best.rightReps}회`:`${best.reps}회`} · 최고 중량 세트`:'';}
+    if(id==='strength'&&metric==='kg'){const sets=g.records.filter(r=>r.date===point.date&&(r.loadType==='weighted'||r.loadType==='mixed')).flatMap(r=>r.sets).filter(s=>s.kg===point.value);const best=sets.reduce<(typeof sets)[number]|null>((best,s)=>!best||s.reps>best.reps?s:best,null);return best?`${best.leftReps!==undefined?`L ${best.leftReps} / R ${best.rightReps}회`:`${best.reps}회`} · 최고 중량 세트`:'';}
     return '';
    };
    return {firstExtra:extra(first),latestExtra:days.length>1?extra(last):'',key:g.key,name:g.name,metric,first:describe(first),latest:days.length>1?describe(last):'비교 대기',firstDate:first?.date??'',latestDate:days.length>1?last?.date??'':'',measuredDays:days.length,records:g.records,mixed:g.loadTypes.length>1};

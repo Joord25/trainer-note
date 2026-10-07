@@ -18,7 +18,7 @@ export function validateCriteria(input,records,goal,plan){
  if(!input||input.scope!=='general-adult'||input.conditionsConfirmed!==true)throw Error('적용 대상과 동일 수행 조건을 확인해주세요.');
  const exerciseName=text(input.exerciseName,100),equipment=text(input.equipment,100),loadBasis=text(input.loadBasis,100),side=text(input.side,100),setPurpose=text(input.setPurpose,100);
  if(!exerciseName||!equipment||!loadBasis||!side||!setPurpose)throw Error('비교할 운동·기구·중량·좌우·세트 목적을 입력해주세요.');
- const group=records.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(exerciseName)&&r.loadType==='weighted');if(!group.length)throw Error('비교할 중량 운동 기록이 없어요.');
+ const group=records.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(exerciseName)&&(r.loadType==='weighted'||r.loadType==='mixed'));if(!group.length)throw Error('비교할 중량 운동 기록이 없어요.');
  const {loadKg,targetReps,minSessions,windowDays}=input;
  if(!Number.isFinite(loadKg)||loadKg<=0||loadKg>2000||!Number.isInteger(targetReps)||targetReps<1||targetReps>1000||!Number.isInteger(minSessions)||minSessions<2||minSessions>30||!Number.isInteger(windowDays)||windowDays<1||windowDays>365)throw Error('목표 중량·횟수와 관찰 기간을 확인해주세요.');
  const planDate=input.planDate?text(input.planDate,10):'';if(planDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(planDate)||new Date(planDate+'T00:00:00Z').toISOString().slice(0,10)!==planDate))throw Error('계획 대조 날짜를 확인해주세요.');
@@ -32,7 +32,7 @@ export function selectCases(decisions,outcomes,records,asOf){
 }
 export function evaluateJudgment({records,goal='',criteria=null,cases=[]}){
  const matching=criteria?.memberGoal===goal&&criteria?.scope==='general-adult';
- const group=matching?records.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(criteria.exerciseName)&&r.loadType==='weighted'):[];
+ const group=matching?records.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(criteria.exerciseName)&&(r.loadType==='weighted'||r.loadType==='mixed')):[];
  const confirmed=group.filter(r=>criteria.confirmedRecordSignatures.some(v=>v.id===r.id&&v.signature===recordSignature(r)));
  const sideModes=new Set(group.flatMap(r=>r.sets.map(s=>s.leftReps!==undefined?'sides':'total')));
  const comparable=group.length>0&&group.length===confirmed.length&&sideModes.size===1;

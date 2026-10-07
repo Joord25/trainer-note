@@ -25,8 +25,8 @@ test('cardio counts dates once, keeps missing time unknown and never converts re
 });
 test('guidance augments only analysis calls without mutating records, schema or request budgets',()=>{
  const request={system:'original',schema:{type:'object'},parts:[{text:'member facts'}],timeoutMs:1234};
- for(const kind of ['analysis-and-plan','goal-design','goal-visual','connected-lesson','assessment','assessment-review','assistant-chat']){
+ for(const kind of ['analysis-and-plan','goal-design','goal-visual','connected-lesson','assessment','assessment-review']){
  const output=withTrainingGuidance(kind,request);assert.match(output.system,/최대근력/);assert.match(output.system,/근비대/);assert.match(output.system,/근지구력/);assert.match(output.system,/파워/);assert.equal(output.parts,request.parts);assert.equal(output.schema,request.schema);assert.equal(output.timeoutMs,1234);}
- for(const kind of ['extraction','assistant-web-search','search-safety'])assert.equal(withTrainingGuidance(kind,request),request);
+ for(const kind of ['extraction','assistant-web-search','search-safety','assistant-chat'])assert.equal(withTrainingGuidance(kind,request),request);
  assert.equal(request.system,'original');assert(TRAINING_GUIDANCE.length<2500);assert(TRAINING_GUIDANCE.includes(TRAINING_GUIDANCE_VERSION));assert.equal(TRAINING_GUIDANCE_SOURCES.length,3);
 });

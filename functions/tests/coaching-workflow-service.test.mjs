@@ -38,3 +38,41 @@ test('one analysis supplies changes and editable direction proposals; reading ei
  assert.deepEqual((await service.workflowContext(uid,mid)).report.directions,original);
  assert.deepEqual(calls,['member-changes','cycle-plan']);
 });
+
+test('reopening restores generated proposal and settings without another paid call',async()=>{
+ const c=await analyzed(),custom={...options,count:8,frequency:3,minutes:60,equipment:'덤벨'};
+ const p=await service.generateCycle(uid,mid,{inputKey:c.inputKey,options:custom});
+ const restored=await service.workflowContext(uid,mid);
+ assert.deepEqual(restored.report,c.report);
+ assert.equal(restored.latestProposal.id,p.proposalId);
+ assert.deepEqual(restored.latestProposal.plan.options,custom);
+ assert.equal(restored.savedPlan,null);
+ assert.deepEqual(calls,['member-changes','cycle-plan']);
+ await service.saveCycle(uid,mid,{inputKey:c.inputKey,proposalId:p.proposalId,revision:0});
+ const saved=await service.workflowContext(uid,mid);
+ assert.equal(saved.latestProposal,null);
+ assert.deepEqual(saved.savedPlan.plan.options,custom);
+ await db.doc(base+'/records/a').update({revision:2,sets:[{kg:10,reps:12}]});
+ const changed=await service.workflowContext(uid,mid);
+ assert.equal(changed.latestProposal,null);
+ assert.equal(changed.report,null);
+ assert.deepEqual(calls,['member-changes','cycle-plan']);
+});
+
+test('trainer edits save without AI, preserve source and options, and survive reopen',async()=>{
+ const c=await analyzed(),p=await service.generateCycle(uid,mid,{inputKey:c.inputKey,options});
+ const edited=structuredClone(p.plan);edited.sessions[0].items[0].segments=[{kg:10,reps:8},{kg:10,reps:8}];
+ edited.sessions[0].items[0].reference='forged reference';edited.options.minutes=999;
+ const result=await service.saveCycle(uid,mid,{inputKey:c.inputKey,proposalId:p.proposalId,revision:0,editedPlan:edited});
+ assert.equal(result.plan.trainerEdited,true);assert.equal(result.plan.options.minutes,50);
+ assert.equal(result.plan.sessions[0].items[0].reference,p.plan.sessions[0].items[0].reference);
+ assert.deepEqual(result.plan.sessions[0].items[0].segments,[{kg:10,reps:8},{kg:10,reps:8}]);
+ const reopened=await service.workflowContext(uid,mid);assert.deepEqual(reopened.savedPlan.plan,result.plan);assert.equal(reopened.latestProposal,null);
+ assert.deepEqual(calls,['member-changes','cycle-plan']);
+ edited.sessions[0].items[0].segments=[{kg:-2,reps:8}];
+ await assert.rejects(service.saveCycle(uid,mid,{inputKey:c.inputKey,proposalId:p.proposalId,revision:1,editedPlan:edited}));
+ edited.sessions[0].items[0].id='foreign';
+ await assert.rejects(service.saveCycle(uid,mid,{inputKey:c.inputKey,proposalId:p.proposalId,revision:1,editedPlan:edited}));
+ assert.equal((await service.workflowContext(uid,mid)).savedPlan.revision,1);
+ assert.deepEqual(calls,['member-changes','cycle-plan']);
+});

@@ -17,7 +17,9 @@ NASM-OPT: 안정화 지구력→근력 지구력→근비대→최대근력→�
 `;
 const kinds=new Set(['member-changes','cycle-plan','analysis-and-plan','goal-design','goal-visual','connected-lesson','assessment','assessment-review','assistant-chat']);
 export function withTrainingGuidance(kind,request){
- if(!kinds.has(kind))return request;
- return {...request,system:(request.system??'')+'\n'+TRAINING_GUIDANCE+'\n참고 출처: '+TRAINING_GUIDANCE_SOURCES.map(s=>`${s.id} ${s.url}`).join(' | ')};
+ // Chat uses question-specific evidence. Blanket institution summaries caused irrelevant citations and prescriptions.
+ if(kind==='assistant-chat'||!kinds.has(kind))return request;
+ const reference=TRAINING_GUIDANCE+'\n참고 출처: '+TRAINING_GUIDANCE_SOURCES.map(s=>`${s.id} ${s.url}`).join(' | ');
+ return {...request,system:(request.system??'')+'\n'+reference};
 }
-export function trainingGuidanceVersion(kind){return kinds.has(kind)?TRAINING_GUIDANCE_VERSION:null;}
+export function trainingGuidanceVersion(kind){return kind!=='assistant-chat'&&kinds.has(kind)?TRAINING_GUIDANCE_VERSION:null;}

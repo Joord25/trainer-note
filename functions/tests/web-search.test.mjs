@@ -27,3 +27,15 @@ test('explicit source requests require search while opt-out is respected',()=>{f
  for(const q of ['웹에서 검색할수가 없는거야?','웹 검색 가능해?','인터넷 검색도 가능해?','검색 기능이 있나요?','Can you search the web?'])assert.equal(requestedSearchMode(q),'capability',q);
  for(const q of ['ACSM을 웹에서 검색할 수 있어?','근비대 논문 검색 가능해?','인터넷에서 최신 지침 찾아줘','검색이 안되면 NSCA 공식 자료 찾아줘'])assert.equal(requestedSearchMode(q),'required',q);
  });
+
+test('local source requests do not force web search and external requests still do',()=>{
+ for(const q of ['최신 회원 기록 정리해줘','이 수치의 출처 원본 페이지는?','업로드한 PDF에서 검색해줘'])assert.equal(requestedSearchMode(q),'auto',q);
+ for(const q of ['이 기록과 관련된 최신 논문 검색해줘','PDF 밖에서 공식 지침 찾아줘'])assert.equal(requestedSearchMode(q),'required',q);
+});
+test('source sufficiency gates automatic search without overriding explicit public research or opt-out',()=>{
+ const value={searchDecision:'search',searchQuery:publicQuery};
+ for(const evidenceNeed of ['sufficient','member'])assert.equal(searchDecision({...value,evidenceNeed},'어떻게 생각해?').requested,undefined);
+ assert.equal(searchDecision({...value,evidenceNeed:'external'},'이 방법의 타당성은?').requested,true);
+ assert.equal(searchDecision({...value,evidenceNeed:'sufficient'},'공식 논문 검색해줘').requested,true);
+ assert.equal(searchDecision({...value,evidenceNeed:'external'},'웹 검색하지 마').requested,undefined);
+});

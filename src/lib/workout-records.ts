@@ -5,14 +5,14 @@ export const BODY_PARTS = ["가슴","등","어깨","이두","삼두","하체","�
 import {validMeasurement} from './workout-measurements';
 import type {MeasurementType,WorkoutSet} from './workout-measurements';
 export type {WorkoutSet} from './workout-measurements';
-export type WorkoutInput = {measurementType?:MeasurementType;date:string;rawName:string;exerciseName:string;bodyPart:string;loadType:"weighted"|"bodyweight"|"unknown";sets:WorkoutSet[];sourceName:string;sourceHash:string;sourcePage:number;notes:string;trainerNote?:string};
+export type WorkoutInput = {measurementType?:MeasurementType;date:string;rawName:string;exerciseName:string;bodyPart:string;loadType:"weighted"|"bodyweight"|"unknown"|"mixed";sets:WorkoutSet[];sourceName:string;sourceHash:string;sourcePage:number;notes:string;trainerNote?:string};
 export type WorkoutRecord = WorkoutInput & {id:string;revision:number;pending:boolean;origin:"manual"|"ai-reviewed"|"ai-auto";status:"confirmed"|"provisional"};
 export function validateWorkout(input:WorkoutInput) {
   const v={...input,rawName:input.rawName.trim(),exerciseName:input.exerciseName.trim(),notes:input.notes.trim()};
   const date=new Date(v.date+"T12:00:00Z");
   if(!/^\d{4}-\d{2}-\d{2}$/.test(v.date)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==v.date||v.date<'1900-01-01'||v.date>'2100-12-31')throw new Error("연도를 포함한 올바른 운동 날짜를 입력해주세요.");
   if(!v.exerciseName||v.exerciseName.length>100||v.rawName.length>100)throw new Error("운동 이름은 1~100자로 입력해주세요.");
-  if(!(BODY_PARTS as readonly string[]).includes(v.bodyPart)||!["weighted","bodyweight","unknown"].includes(v.loadType))throw new Error("운동 부위와 중량 기준을 확인해주세요.");
+  if(!(BODY_PARTS as readonly string[]).includes(v.bodyPart)||!["weighted","bodyweight","unknown","mixed"].includes(v.loadType))throw new Error("운동 부위와 중량 기준을 확인해주세요.");
   if(!validMeasurement(v))throw new Error("세트의 기록 방식과 단위를 확인해주세요. 거리(m)·시간(초)은 양수로 입력하세요.");
   if(v.trainerNote!==undefined&&(typeof v.trainerNote!=='string'||v.trainerNote.length>1000))throw new Error("운동 메모는 1,000자까지 입력해주세요.");
   if(v.notes.length>1000)throw new Error("메모는 1,000자까지 입력해주세요.");
@@ -52,7 +52,7 @@ export async function deleteWorkout(memberId:string,record:WorkoutRecord){
 }
 export function summarizeWorkouts(records:WorkoutRecord[]){
   const totals={sets:0,volume:0,excluded:0,days:new Set<string>(),parts:new Map<string,number>()};
-  for(const r of records){if(r.pending)continue;totals.days.add(r.date);totals.sets+=r.sets.length;totals.parts.set(r.bodyPart,(totals.parts.get(r.bodyPart)??0)+r.sets.length);for(const s of r.sets){if(r.loadType==='weighted'&&s.kg!==null)totals.volume+=s.kg*s.reps;else totals.excluded++;}}
+  for(const r of records){if(r.pending)continue;totals.days.add(r.date);totals.sets+=r.sets.length;totals.parts.set(r.bodyPart,(totals.parts.get(r.bodyPart)??0)+r.sets.length);for(const s of r.sets){if((r.loadType==='weighted'||r.loadType==='mixed')&&s.kg!==null)totals.volume+=s.kg*s.reps;else totals.excluded++;}}
   return {...totals,volume:Math.round(totals.volume*100)/100};
 }
 export function workoutError(e:unknown){const code=(e as {code?:string})?.code;if(code==='permission-denied')return "기록에 접근할 수 없어요. 로그인 계정과 서비스 연결을 확인해주세요.";if(code)return "기록을 저장하지 못했어요. 연결 상태를 확인하고 다시 시도해주세요.";return e instanceof Error?e.message:"기록을 처리하지 못했어요.";}

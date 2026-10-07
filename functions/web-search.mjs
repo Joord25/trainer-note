@@ -14,8 +14,11 @@ export function validatePublicQuery(value,privateTerms=[]){
  if(privateTerms.filter(v=>typeof v==='string'&&compact(v).length>=2).some(v=>key.includes(compact(v))))throw Error('회원 정보가 포함된 검색어는 외부로 보내지 않아요.');
  return q;
 }
-export function searchDecision(value){
+export function searchDecision(value,question=''){
+ const mode=requestedSearchMode(question);
+ if(mode==='off'||mode==='capability')return {blocked:false,query:''};
  if(value?.searchDecision==='blocked')return {blocked:true,query:''};
+ if(mode!=='required'&&['sufficient','member'].includes(value?.evidenceNeed))return {blocked:false,query:''};
  if(value?.searchDecision==='search')return {blocked:false,requested:true,query:value.searchQuery};
  return {blocked:false,query:''};
 }
@@ -55,5 +58,7 @@ export const SEARCH_CAPABILITY_ANSWER={answer:'네, 웹 검색을 사용할 수 
 export function requestedSearchMode(question){
  if(isSearchCapabilityQuestion(question))return 'capability';
  if(/(?:검색|웹|인터넷).{0,12}(?:하지\s*마|하지\s*말|말고|없이|사용하지)|(?:do not|don't|without|no)\s+(?:web\s+)?(?:search|brows)/i.test(question))return 'off';
+ // A request for a source page or latest member record is not a web request.
+ if(!/웹|인터넷|논문|연구|공식|지침|\b(?:ACSM|NASM|NSCA|web|internet|research|official)\b/i.test(question)&&/(?:기록|원본|캡처|첨부|업로드|PDF|자료|수업|회원)/i.test(question))return 'auto';
  return /검색|웹|인터넷|공식|출처|논문|최신|\b(?:NASM|ACSM|NSCA|search|sources?|latest|research|official)\b/i.test(question)?'required':'auto';
 }

@@ -10,14 +10,14 @@ export function analysisWindow(records:WorkoutRecord[],period:string){
 export function exerciseKey(r:WorkoutRecord){return exerciseIdentity(r);}
 export function exerciseGroups(records:WorkoutRecord[]){
  const map=new Map<string,WorkoutRecord[]>();for(const r of records){const key=exerciseKey(r);map.set(key,[...(map.get(key)??[]),r]);}
- return [...map].map(([key,rows])=>({key,sessionDays:new Set(rows.map(r=>r.date)).size,name:rows[0].exerciseName,part:rows[0].bodyPart,kind:measurementType(rows[0]),load:rows[0].loadType,loadTypes:[...new Set(rows.map(r=>r.loadType))],hasWeighted:rows.some(r=>r.loadType==='weighted'),records:rows.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id))})).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+ return [...map].map(([key,rows])=>({key,sessionDays:new Set(rows.map(r=>r.date)).size,name:rows[0].exerciseName,part:rows[0].bodyPart,kind:measurementType(rows[0]),load:rows[0].loadType,loadTypes:[...new Set(rows.map(r=>r.loadType))],hasWeighted:rows.some(r=>(r.loadType==='weighted'||r.loadType==='mixed')),records:rows.sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id))})).sort((a,b)=>a.name.localeCompare(b.name,'ko'));
 }
 export type PerformanceMetric='sets'|'volume'|'kg'|'reps'|'left'|'right'|'distance'|'duration'|'incline'|'speed';
 export const performanceLabels:Record<PerformanceMetric,[string,string]>={sets:['세트 수','세트'],volume:['볼륨','kg·회'],kg:['최고 중량','kg'],reps:['총 횟수','회'],left:['L 횟수','회'],right:['R 횟수','회'],distance:['총 거리','m'],duration:['총 시간','초'],incline:['평균 경사','%'],speed:['평균 속도','km/h']};
 export function performanceDays(records:WorkoutRecord[],metric:PerformanceMetric){
  const map=new Map<string,WorkoutRecord[]>();for(const r of records)map.set(r.date,[...(map.get(r.date)??[]),r]);
  return [...map].sort(([a],[b])=>a.localeCompare(b)).map(([date,rows])=>{
-  const sets=rows.flatMap(r=>r.sets),weights=rows.filter(r=>r.loadType==='weighted').flatMap(r=>r.sets).filter(s=>s.kg!==null);
+  const sets=rows.flatMap(r=>r.sets),weights=rows.filter(r=>(r.loadType==='weighted'||r.loadType==='mixed')).flatMap(r=>r.sets).filter(s=>s.kg!==null);
   const sided=sets.filter(s=>s.leftReps!==undefined&&s.rightReps!==undefined);
   let value:number|null=null;
   if(metric==='sets')value=sets.length;

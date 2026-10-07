@@ -4,7 +4,7 @@ import {useContext,useEffect,useRef,useState,type ReactNode,type PointerEvent,ty
 const defaults={two:[34,66],three:[24,50,26],collapsed:[72,28]};
 type Layout=keyof typeof defaults;
 /** Resize adjacent panels without remounting their editors or document viewers. */
-export function ResizableReviewColumns({mode,sourceHidden,children}:{mode:number;sourceHidden:boolean;children:ReactNode}){
+export function ResizableReviewColumns({mode,sourceHidden,assistantOnly=false,children}:{mode:number;sourceHidden:boolean;assistantOnly?:boolean;children:ReactNode}){
  const {preferences,update}=useContext(DisplayPreferenceContext);
  const configured={...defaults,two:[preferences.twoRatio,100-preferences.twoRatio],three:preferences.threeRatio};
  const root=useRef<HTMLDivElement>(null),drag=useRef<{index:number;x:number;width:number;values:number[];layout:Layout}|null>(null);
@@ -25,6 +25,6 @@ export function ResizableReviewColumns({mode,sourceHidden,children}:{mode:number
  function key(e:KeyboardEvent<HTMLDivElement>,index:number){if(e.key==='Enter'){e.preventDefault();setSizes(v=>({...v,[layout]:configured[layout]}));return;}if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();change(index,(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?5:2),values,root.current?.clientWidth||1,layout);}
  return <div ref={root} className="review-columns" data-resizing={resizing||undefined} style={enabled?{gridTemplateColumns:values.map(v=>`minmax(0,${v}fr)`).join(' ')}:undefined}>
  {children}
- {enabled&&values.slice(0,-1).map((_,index)=>{const position=values.slice(0,index+1).reduce((a,b)=>a+b,0);return <div key={index} className="review-resize-handle" role="separator" aria-label={sourceHidden?'작업 화면과 우측 패널 너비 조절':index===0?'원본과 작업 화면 너비 조절':'작업 화면과 우측 패널 너비 조절'} aria-orientation="vertical" aria-valuenow={Math.round(position)} aria-valuemin={0} aria-valuemax={100} tabIndex={0} style={{left:`${position}%`}} title="드래그로 너비 조절 · 더블클릭으로 초기화" onPointerDown={e=>start(e,index)} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish} onKeyDown={e=>key(e,index)} onDoubleClick={()=>setSizes(v=>({...v,[layout]:configured[layout]}))}><span/></div>;})}
+ {enabled&&values.slice(0,-1).map((_,index)=>{const position=values.slice(0,index+1).reduce((a,b)=>a+b,0);return <div key={index} className="review-resize-handle" role="separator" aria-label={assistantOnly?'원본과 보조 화면 너비 조절':sourceHidden?'작업 화면과 우측 패널 너비 조절':index===0?'원본과 작업 화면 너비 조절':'작업 화면과 우측 패널 너비 조절'} aria-orientation="vertical" aria-valuenow={Math.round(position)} aria-valuemin={0} aria-valuemax={100} tabIndex={0} style={{left:`${position}%`}} title="드래그로 너비 조절 · 더블클릭으로 초기화" onPointerDown={e=>start(e,index)} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish} onKeyDown={e=>key(e,index)} onDoubleClick={()=>setSizes(v=>({...v,[layout]:configured[layout]}))}><span/></div>;})}
  </div>;
 }

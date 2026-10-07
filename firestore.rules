@@ -108,7 +108,7 @@ service cloud.firestore {
         function validSets(sets,kind) {
           let size = sets.size();
           let weighted = kind == 'weighted';
-          return sets is list && size <= 8
+          return kind == 'mixed' ? validMixedSets(sets) : sets is list && size <= 8
             && validSingleSet(sets[0],weighted)
             && (size <= 1 || validSingleSet(sets[1],weighted))
             && (size <= 2 || validSingleSet(sets[2],weighted))
@@ -117,6 +117,24 @@ service cloud.firestore {
             && (size <= 5 || validSingleSet(sets[5],weighted))
             && (size <= 6 || validSingleSet(sets[6],weighted))
             && (size <= 7 || validSingleSet(sets[7],weighted));
+        }
+        function validMixedSet(value) {
+          let kg = value.kg;
+          return (kg == null || kg > 0 && kg <= 2000)
+            && (value.size() == 2
+              ? value.reps is int && value.reps > 0 && value.reps <= 1000 : validSides(value));
+        }
+        function validMixedSets(sets) {
+          let size = sets.size();
+          return sets is list && size <= 8
+            && validMixedSet(sets[0])
+            && (size <= 1 || validMixedSet(sets[1]))
+            && (size <= 2 || validMixedSet(sets[2]))
+            && (size <= 3 || validMixedSet(sets[3]))
+            && (size <= 4 || validMixedSet(sets[4]))
+            && (size <= 5 || validMixedSet(sets[5]))
+            && (size <= 6 || validMixedSet(sets[6]))
+            && (size <= 7 || validMixedSet(sets[7]));
         }
         function validDistanceTime(value) {
           let meters = value.distanceMeters;
@@ -194,7 +212,7 @@ service cloud.firestore {
           && raw.matches('(?s).{0,100}')
           && name.size() <= 100 && name.matches('.*[^ ].*')
           && data.bodyPart in ['가슴','등','어깨','이두','삼두','하체','코어','유산소','전신','미분류']
-          && data.loadType in ['weighted','bodyweight','unknown']
+          && data.loadType in ['weighted','bodyweight','unknown','mixed']
           && kind in ['repetitions','distance_time','duration','distance','incline_speed_time']
           && (kind == 'repetitions' ? validSets(data.sets,data.loadType) : data.loadType == 'unknown' && validIntervals(data.sets,data.measurementType))
           && source.matches('(?s).{0,200}') && page is int
@@ -233,7 +251,7 @@ service cloud.firestore {
       }
     }
     match /trainers/{uid}/{kind}/{id} {
-      allow read: if kind in ['aiUsage','aiDaily','aiCalls','interpretations','trainingPrinciples'] && isOwner(uid);
+      allow read: if kind in ['aiUsage','aiDaily','interpretations','trainingPrinciples'] && isOwner(uid);
       allow write: if false;
     }
     match /{document=**} { allow read, write: if false; }

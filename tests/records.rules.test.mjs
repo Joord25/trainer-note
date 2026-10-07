@@ -70,7 +70,7 @@ for(const kind of ['goalProposals','assessmentResults','assessmentResultHistory'
  const target=path+'/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{status:'ready'}));
  await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(setDoc(doc(db('trainer-a'),target),{status:'ready'}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
 });
-for(const kind of ['aiUsage','aiDaily','aiCalls'])test(`${kind} cannot be reset or forged by client`,async()=>{
+for(const kind of ['aiUsage','aiDaily'])test(`${kind} cannot be reset or forged by client`,async()=>{
  const target='trainers/trainer-a/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{calls:5}));await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(updateDoc(doc(db('trainer-a'),target),{calls:0}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
 });
 
@@ -150,4 +150,22 @@ test('source deletion locks record writes, while archived originals remain edita
  await assertFails(updateDoc(doc(d,rp),{notes:'race',revision:2,updatedAt:serverTimestamp()}));
  await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),filePath),{status:'ready',originalRemoved:true}));
  await assertSucceeds(updateDoc(doc(d,rp),{notes:'확정 데이터 유지',revision:2,updatedAt:serverTimestamp()}));
+});
+
+
+test('mixed sets persist bodyweight and weighted values including eight bilateral sets',async()=>{
+ const d=db('trainer-a'),sets=Array.from({length:8},(_,i)=>({kg:i%2?12.5:null,reps:20,leftReps:10,rightReps:10}));
+ await assertSucceeds(create(d,{loadType:'mixed',sourceHash:'a'.repeat(64),sourceName:'혼합 운동.pdf',sourcePage:3,trainerNote:'x'.repeat(1000),sets}));
+ assert.deepEqual((await getDoc(doc(d,rp))).data().sets,sets);
+ for(const kg of [0,-1,2001,'12'])await assertFails(updateDoc(doc(d,rp),{sets:[{kg,reps:10}],revision:2,updatedAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(d,rp),{loadType:'bodyweight',revision:2,updatedAt:serverTimestamp()}));
+});
+
+test('provider billing and model metadata remain server-only even for the trainer owner',async()=>{
+ const target='trainers/trainer-a/aiCalls/call';
+ await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{model:'internal-provider-model',calls:1}));
+ for(const uid of ['trainer-a','trainer-b',null]){
+  await assertFails(getDoc(doc(db(uid),target)));await assertFails(getDocs(collection(db(uid),'trainers/trainer-a/aiCalls')));
+  await assertFails(setDoc(doc(db(uid),target),{calls:0}));
+ }
 });

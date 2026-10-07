@@ -6,10 +6,11 @@ import {KNOWLEDGE_VERSION,JUDGMENT_PROMPT,JUDGMENTS_SCHEMA,validateJudgments} fr
 import {createHash} from 'node:crypto';
 export const MODEL='gemini-3.1-flash-lite';
 export const REPORT_VERSION='trainer-judgment-v14-compact-evidence';
-export const PRICE_VERSION='2026-09-11-gemini-3.1-flash-lite';
+export const PRICE_VERSION='2026-10-08-chat-model-rates';
+export const MODEL_PRICES=Object.freeze({'gemini-3.1-flash-lite':{input:.25,output:1.5},'gemini-3.5-flash-lite':{input:.30,output:2.5}});
 export const LIMITS={...AI_USAGE_POLICY,maxInputTokens:32768,extractOutputTokens:32768,reportOutputTokens:4096,maxRecords:120};
 export const hash=value=>createHash('sha256').update(typeof value==='string'||Buffer.isBuffer(value)?value:JSON.stringify(value)).digest('hex');
-export const costMicros=(input,output)=>Math.ceil(input*.25+output*1.5);
+export const costMicros=(input,output,model=MODEL)=>{const rates=MODEL_PRICES[model];if(!rates)throw Error('지원하지 않는 AI 모델이에요.');return Math.ceil(input*rates.input+output*rates.output);};
 export function validInput(v){
  if(!v||typeof v!=='object')throw Error('기록 형식이 올바르지 않아요.');
  const keys=['date','rawName','exerciseName','bodyPart','loadType','sets','sourceName','sourceHash','sourcePage','notes','trainerNote','measurementType'];
@@ -18,7 +19,7 @@ export function validInput(v){
  const date=new Date(v.date+'T12:00:00Z');
  if(typeof v.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v.date)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==v.date||v.date<'1900-01-01'||v.date>'2100-12-31')throw Error('연도를 포함한 운동 날짜를 확인해주세요.');
  for(const [k,max,required]of [['rawName',100,false],['exerciseName',100,true],['sourceName',200,true],['notes',1000,false]])if(typeof v[k]!=='string'||v[k].length>max||(required&&!v[k].trim()))throw Error('운동명과 원본 정보를 확인해주세요.');
- if(!['가슴','등','어깨','이두','삼두','하체','코어','유산소','전신','미분류'].includes(v.bodyPart)||!['weighted','bodyweight','unknown'].includes(v.loadType))throw Error('부위와 중량 기준을 확인해주세요.');
+ if(!['가슴','등','어깨','이두','삼두','하체','코어','유산소','전신','미분류'].includes(v.bodyPart)||!['weighted','bodyweight','unknown','mixed'].includes(v.loadType))throw Error('부위와 중량 기준을 확인해주세요.');
  if(!validMeasurement(v))throw Error('세트의 거리·시간 또는 중량·횟수를 확인해주세요.');
  if(!/^[a-f0-9]{64}$/.test(v.sourceHash)||!Number.isInteger(v.sourcePage)||v.sourcePage<1||v.sourcePage>10000)throw Error('원본 페이지를 확인해주세요.');
  return {...v,rawName:v.rawName.trim(),exerciseName:v.exerciseName.trim(),notes:v.notes.trim()};
@@ -27,7 +28,7 @@ export function classify(row,history=[],options={}){
  let issues=row.issues.filter(s=>!(options.yearConfirmed&&s.includes('지정한'))&&!(options.memberConfirmed&&(s.includes('회원 이름')||s.includes('원본 이름'))));
  try{validInput(row.input);}catch(e){if(row.input.sets.length||e.message!=='세트의 거리·시간 또는 중량·횟수를 확인해주세요.')issues.push(e.message);else if(!issues.some(s=>s.includes('미기록')))issues.push('세트·횟수·중량 미기록: 원본에서 확인되는 값만 추가해주세요.');}
  if(row.input.sets.length&&measurementType(row.input)==='repetitions'&&row.input.loadType==='unknown')issues.push('중량의 표기 기준을 확인해주세요.');
- const peers=history.filter(r=>exerciseIdentity(r)===exerciseIdentity(row.input)&&r.loadType==='weighted'&&r.date<row.input.date).sort((a,b)=>b.date.localeCompare(a.date));
+ const peers=history.filter(r=>exerciseIdentity(r)===exerciseIdentity(row.input)&&(r.loadType==='weighted'||r.loadType==='mixed')&&r.date<row.input.date).sort((a,b)=>b.date.localeCompare(a.date));
  if(peers[0]&&row.input.sets.length&&row.input.loadType==='weighted'){
   const last=Math.max(...peers[0].sets.map(s=>s.kg??0)),now=Math.max(...row.input.sets.map(s=>s.kg??0));
   if(last>0&&(now>last*1.75||now<last*.4))issues.push('같은 운동의 지난 중량과 차이가 커요. 실제 변화인지 확인해주세요.');
@@ -38,7 +39,7 @@ export function summarize(records){
  const days=new Map(),parts={},exercises=new Map();let volume=0,sets=0,auto=0;
  for(const r of records){const strength=measurementType(r)==='repetitions'&&!isCardioWorkout(r);if(strength)sets+=r.sets.length;if(r.origin==='ai-auto'&&r.status!=='confirmed')auto++;
   const day=days.get(r.date)||{date:r.date,sets:0,volume:0};if(strength)day.sets+=r.sets.length;
-  const v=strength&&r.loadType==='weighted'?r.sets.reduce((n,s)=>n+(s.kg??0)*s.reps,0):0;volume+=v;day.volume+=v;days.set(r.date,day);if(strength)parts[r.bodyPart]=(parts[r.bodyPart]||0)+r.sets.length;
+  const v=strength&&(r.loadType==='weighted'||r.loadType==='mixed')?r.sets.reduce((n,s)=>n+(s.kg??0)*s.reps,0):0;volume+=v;day.volume+=v;days.set(r.date,day);if(strength)parts[r.bodyPart]=(parts[r.bodyPart]||0)+r.sets.length;
   const key=exerciseIdentity(r)+'|'+r.loadType;const items=exercises.get(key)||[];items.push({id:r.id,date:r.date,sets:r.sets,sourcePage:r.sourcePage,sourceHash:r.sourceHash});exercises.set(key,items);
  }
  const {days:cardioDays,segments,seconds,missingTime}=cardioDistribution(records);

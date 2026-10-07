@@ -9,8 +9,8 @@ import {createGoalFlow} from './goal-flow.mjs';
 import {ASSESSMENT_PROMPT,ASSESSMENT_SCHEMA,ASSESSMENT_SOURCES,assessmentRequest,assessmentResult} from './assessment.mjs';
 import {validateTrainingGoal} from './generated/training-goals.mjs';
 import {currentReviewAlertKeys} from './generated/review-alerts.mjs';
-import {SEARCH_QUERY_MICROS,SEARCH_RESERVE_QUERIES,SEARCH_REVIEW_PROMPT,SEARCH_REVIEW_SCHEMA,validatePublicQuery,searchDecision,isAllowedReview,isSearchCapabilityQuestion,SEARCH_CAPABILITY_ANSWER} from './web-search.mjs';
-import {CHAT_VERSION,CHAT_MAX_INPUT_TOKENS,CHAT_PROMPT,validateChatRequest,chatSchema,validateChatAnswer,compactChatFacts,chatProgramSessions,CHAT_SYNTHESIS_PROMPT} from './chat.mjs';
+import {requestedSearchMode,SEARCH_QUERY_MICROS,SEARCH_RESERVE_QUERIES,SEARCH_REVIEW_PROMPT,SEARCH_REVIEW_SCHEMA,validatePublicQuery,searchDecision,isAllowedReview,isSearchCapabilityQuestion,SEARCH_CAPABILITY_ANSWER} from './web-search.mjs';
+import {CHAT_VERSION,CHAT_MAX_INPUT_TOKENS,chatMode,prepareChatFacts,containsPrivateImplementation,isPrivateImplementationOnly,PRIVATE_IMPLEMENTATION_RESULT,CHAT_PROMPT,chatEvidencePrompt,validateChatRequest,chatSchema,validateChatAnswer,compactChatFacts,chatProgramSessions,CHAT_SYNTHESIS_PROMPT} from './chat.mjs';
 import {evaluateJudgment,selectCases,validateCriteria,modelJudgmentContext,judgmentResponseSchema,judgmentDate} from './judgment.mjs';
 import {randomUUID} from 'node:crypto';
 import {FieldValue,Timestamp} from 'firebase-admin/firestore';
@@ -51,10 +51,10 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
 
  async function recordsFor(member){const snap=await member.collection('records').orderBy('performedAt','desc').limit(limits.maxRecords).get();return snap.docs.map(d=>{const v=d.data();return {...v,id:d.id,date:v.performedAt.toDate().toISOString().slice(0,10)};});}
  async function paid(uid,kind,request,maxOutputTokens){
-  const callStarted=now();
+  const callStarted=now(),billingModel=request.model??MODEL;
   request=withTrainingGuidance(kind,request);
   const maxInputTokens=['member-changes','cycle-plan'].includes(kind)?(limits.coachingInputTokens??COACHING_INPUT_TOKENS):kind==='assistant-chat'?(limits.chatInputTokens??CHAT_MAX_INPUT_TOKENS):limits.maxInputTokens;
-  const key=randomUUID(),dates=dateKeys(now()),usage=db.doc(`trainers/${uid}/aiUsage/${dates.month}`),daily=db.doc(`trainers/${uid}/aiDaily/${dates.day}`),global=db.doc(`aiGlobalUsage/${dates.month}`),globalShard=global.collection('shards').doc(String(parseInt(key.slice(0,8),16)%64).padStart(2,'0')),call=db.doc(`trainers/${uid}/aiCalls/${key}`),searchReserve=request.searchQuery!==undefined?SEARCH_QUERY_MICROS*SEARCH_RESERVE_QUERIES:0,reserve=costMicros(maxInputTokens,maxOutputTokens)+searchReserve;
+  const key=randomUUID(),dates=dateKeys(now()),usage=db.doc(`trainers/${uid}/aiUsage/${dates.month}`),daily=db.doc(`trainers/${uid}/aiDaily/${dates.day}`),global=db.doc(`aiGlobalUsage/${dates.month}`),globalShard=global.collection('shards').doc(String(parseInt(key.slice(0,8),16)%64).padStart(2,'0')),call=db.doc(`trainers/${uid}/aiCalls/${key}`),searchReserve=request.searchQuery!==undefined?SEARCH_QUERY_MICROS*SEARCH_RESERVE_QUERIES:0,reserve=costMicros(maxInputTokens,maxOutputTokens,billingModel)+searchReserve;
   await db.runTransaction(async tx=>{
    const [u,d]=await tx.getAll(usage,daily),uv=u.data()||{},dv=d.data()||{};
    // Uncapped traffic never reads or writes the shared monthly document.
@@ -63,10 +63,10 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    if((limits.monthlyMicros!=null&&(uv.usedMicros||0)+(uv.reservedMicros||0)+reserve>limits.monthlyMicros)||(limits.dailyCalls!=null&&(dv.calls||0)>=limits.dailyCalls)||(limits.globalMonthlyMicros!=null&&(gv.usedMicros||0)+(gv.reservedMicros||0)+reserve>limits.globalMonthlyMicros))throw Error('AI_USAGE_LIMIT:무료 베타 AI 이용 한도에 도달했어요. 저장된 결과는 계속 볼 수 있어요.');
    tx.set(usage,{reservedMicros:(uv.reservedMicros||0)+reserve,calls:(uv.calls||0)+1,monthlyLimitMicros:limits.monthlyMicros,dailyLimit:limits.dailyCalls,priceVersion:PRICE_VERSION,updatedAt:stamp()},{merge:true});
    tx.set(daily,{calls:(dv.calls||0)+1,updatedAt:stamp()},{merge:true});tx.set(globalShard,{reservedMicros:FieldValue.increment(reserve),updatedAt:stamp()},{merge:true});
-   tx.create(call,{kind,maxInputTokens,guidanceVersion:trainingGuidanceVersion(kind),model:MODEL,status:'reserved',reservedMicros:reserve,month:dates.month,globalShard:globalShard.id,createdAt:stamp(),priceVersion:PRICE_VERSION});
+   tx.create(call,{kind,maxInputTokens,guidanceVersion:trainingGuidanceVersion(kind),model:billingModel,status:'reserved',reservedMicros:reserve,month:dates.month,globalShard:globalShard.id,createdAt:stamp(),priceVersion:PRICE_VERSION});
   });
   let result,error;try{result=await model({...request,maxOutputTokens,maxInputTokens});}catch(e){error=e;}
-  const usageData=result?.usage??error?.usage,known=Number.isInteger(usageData?.inputTokens)&&Number.isInteger(usageData?.outputTokens)&&usageData.inputTokens>=0&&usageData.outputTokens>=0,searchQueries=Number.isInteger(usageData?.searchQueries)&&usageData.searchQueries>=0?usageData.searchQueries:null,actual=error?.notBillable?0:known?costMicros(usageData.inputTokens,usageData.outputTokens)+(searchReserve?(searchQueries===null?searchReserve:searchQueries*SEARCH_QUERY_MICROS):0):reserve;
+  const usageData=result?.usage??error?.usage,known=Number.isInteger(usageData?.inputTokens)&&Number.isInteger(usageData?.outputTokens)&&usageData.inputTokens>=0&&usageData.outputTokens>=0,searchQueries=Number.isInteger(usageData?.searchQueries)&&usageData.searchQueries>=0?usageData.searchQueries:null,actual=error?.notBillable?0:known?costMicros(usageData.inputTokens,usageData.outputTokens,billingModel)+(searchReserve?(searchQueries===null?searchReserve:searchQueries*SEARCH_QUERY_MICROS):0):reserve;
   await db.runTransaction(async tx=>{const [c,u]=await tx.getAll(call,usage);if(c.data()?.status!=='reserved')return;const uv=u.data()||{};
    tx.update(usage,{measuredCalls:(uv.measuredCalls??0)+1,completedCalls:(uv.completedCalls??0)+(error?0:1),failedCalls:(uv.failedCalls??0)+(error?1:0),totalDurationMs:(uv.totalDurationMs??0)+Math.max(0,now()-callStarted),reservedMicros:Math.max(0,(uv.reservedMicros||0)-reserve),usedMicros:(uv.usedMicros||0)+actual,inputTokens:(uv.inputTokens||0)+(usageData?.inputTokens||0),outputTokens:(uv.outputTokens||0)+(usageData?.outputTokens||0),updatedAt:stamp()});
    tx.update(globalShard,{reservedMicros:FieldValue.increment(-reserve),usedMicros:FieldValue.increment(actual),updatedAt:stamp()});
@@ -356,10 +356,10 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   if(request.chatGeneration!==(old.generation??0))throw Error('현재 대화에서 다시 생성해주세요.');
   let selection;
   if(old.selection){const attachment=await member.collection('chatAttachments').doc(doc.id).get();if(!attachment.data()?.image)throw Error('이전 캡처가 저장되지 않은 대화예요. 캡처를 다시 첨부해 질문해주세요.');selection={...old.selection,image:attachment.data().image};}
-  return chat(uid,mid,{requestId:doc.id,question:old.question,fileId:old.fileId,previousId:old.previousId,chatGeneration:old.generation??0,resumeConversation:request.resumeConversation===true,...(selection?{selection}:{})},{id,revision:request.revision});
+  return chat(uid,mid,{requestId:doc.id,answerMode:old.answerMode??'quick',question:old.question,fileId:old.fileId,previousId:old.previousId,chatGeneration:old.generation??0,resumeConversation:request.resumeConversation===true,...(selection?{selection}:{})},{id,revision:request.revision});
  }
  async function chat(uid,mid,request,regeneration=null){
-  const input=validateChatRequest(request),generation=request.chatGeneration??0;
+  const input=validateChatRequest(request),mode=chatMode(input.answerMode,input.question),generation=request.chatGeneration??0;
   if(!Number.isSafeInteger(generation)||generation<0)throw Error('대화 상태를 다시 확인해주세요.');
   const {image,...storedInput}=input,member=memberRef(uid,mid),state=member.collection('chatState').doc('current'),ref=member.collection('chats').doc(input.requestId),payloadHash=hash({...storedInput,version:CHAT_VERSION});
   const [m,allRecords,a,p,source,importSnap]=await Promise.all([member.get(),recordsFor(member),member.collection('analysis').doc('current').get(),member.collection('plans').doc('current').get(),input.fileId?member.collection('files').doc(input.fileId).get():null,input.fileId?member.collection('imports').doc(input.fileId).get():null]);
@@ -370,7 +370,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   for(const row of importSnap?.data()?.rows??[])if(row.review!=='ignored'&&!byId.has(row.id))byId.set(row.id,{id:row.id,...row.input,status:row.review});
   const records=[...byId.values()].slice(0,120).map(({id,date,rawName,exerciseName,bodyPart,loadType,sets,notes,trainerNote,sourceHash,sourcePage,status,measurementType})=>({id,date,rawName,exerciseName,bodyPart,loadType,sets,notes,trainerNote:trainerNote??'',sourceHash,sourcePage,status,measurementType:measurementType??'repetitions'}));
   const history=[];let previous=input.previousId;
-  for(let i=0;i<3&&previous;i++){const doc=await member.collection('chats').doc(previous).get(),v=doc.data();if(v?.status!=='ready'||(v.generation??0)!==generation)throw Error('이전 답변이 완료된 뒤 질문해주세요.');history.unshift({question:v.question,answer:v.answer});previous=v.previousId;}
+  for(let i=0;i<3&&previous;i++){const doc=await member.collection('chats').doc(previous).get(),v=doc.data();if(v?.status!=='ready'||(v.generation??0)!==generation)throw Error('이전 답변이 완료된 뒤 질문해주세요.');history.unshift({question:v.question,answer:v.answer,chatContext:v.chatContext,usesRecords:!!(v.references?.length||v.contextScope?.recordCount)});previous=v.previousId;}
   let claimed=false,previousAnswer=null;const job=randomUUID();
   await db.runTransaction(async tx=>{claimed=false;previousAnswer=null;const session=member.collection('chatSessions').doc(String(generation));const [parent,current,conversation,archived]=await tx.getAll(member,ref,state,session);if(!parent.exists)throw Error('회원이 없어요.');const currentGeneration=conversation.data()?.generation??0;const resuming=generation<currentGeneration&&request.resumeConversation===true&&archived.data()?.generation===generation;if(currentGeneration!==generation&&!resuming)throw Error('새 채팅으로 변경됐어요. 대화 기록에서 이어갈 대화를 다시 열어주세요.');const v=current.data();if(v&&(v.generation??0)!==generation)throw Error('다른 대화의 질문 식별자는 사용할 수 없어요.');if(regeneration){if(!v)throw Error('다시 생성할 대화가 없어요.');if(v.lastRegenerationId===regeneration.id){if(v.status==='processing')throw Error('답변을 다시 생성하고 있어요.');if(v.regenerationError)throw Error(v.regenerationError);return;}if((v.revision??0)!==regeneration.revision)throw Error('답변이 변경됐어요. 최신 답변에서 다시 시도해주세요.');if(v.status==='processing'&&v.startedAt?.toMillis()>now()-180000)throw Error('도우미가 답변 중이에요.');if(v.answer)previousAnswer={answer:v.answer,references:v.references??[],questions:v.questions??[],referenceDetails:v.referenceDetails??[],webSources:v.webSources??[],searchSuggestions:v.searchSuggestions??'',searchNotice:v.searchNotice??''};}else if(v){if(v.payloadHash!==payloadHash)throw Error('같은 질문 식별자로 다른 내용을 보낼 수 없어요.');if(v.status==='ready'||v.status==='error')return;if(v.startedAt?.toMillis()>now()-180000)throw Error('도우미가 답변 중이에요. 잠시 기다려주세요.');}
    if(image)tx.set(member.collection('chatAttachments').doc(input.requestId),{image:'data:image/jpeg;base64,'+image.inlineData.data,createdAt:stamp()});
@@ -381,13 +381,16 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    const interpretations=await interpretationsFor(uid);
    await setPhase('thinking');
    const training=await goalFlow.goalContext(uid,mid);
-   const analysis=a.data(),facts={asOf:judgmentDate(now()),programSessions:chatProgramSessions(records),sessionNotes:(await sessionNotesFor(member)).filter(n=>records.some(r=>r.date===n.date)),training,trainerInterpretations:interpretations,question:input.question,history,capture:input.selection?.kind==='screen'?input.selection:null,scope:input.fileId?{fileId:input.fileId,name:source.data().name,selection:input.selection}: '최근 회원 기록 최대120개',goal:m.data().goal,notes:m.data().notes,records,summary:summarize(selectedRecords),analysis:analysis?.status==='ready'?analysis.report:null,analysisStatus:analysis?.status??'missing',judgmentContext:analysis?.judgmentContext?modelJudgmentContext(analysis.judgmentContext):null,plan:p.data()?.program??[],savedLesson:p.data()?.lesson??null};
+   const workflow=await coachingFlow.workflowContext(uid,mid);
+   const coaching={memberChanges:workflow.report,savedCycle:workflow.savedPlan?.plan??null,savedCycleStale:!!workflow.savedPlan&&workflow.savedPlan.inputKey!==workflow.inputKey,draftCycle:workflow.latestProposal?.plan??null};
+   const analysis=a.data(),rawFacts={sourceScope:'추출된 운동 기록·수업 메모·저장된 분석/계획과 첨부 캡처. PDF 전체 본문 검색 결과는 아님.',coaching,asOf:judgmentDate(now()),programSessions:chatProgramSessions(records),sessionNotes:(await sessionNotesFor(member)).filter(n=>records.some(r=>r.date===n.date)),training,trainerInterpretations:interpretations,question:input.question,history,capture:input.selection?.kind==='screen'?input.selection:null,scope:input.fileId?{fileId:input.fileId,name:source.data().name,selection:input.selection}: '최근 회원 기록 최대120개',goal:m.data().goal,notes:m.data().notes,records,summary:summarize(selectedRecords),analysis:analysis?.status==='ready'?analysis.report:null,analysisStatus:analysis?.status??'missing',judgmentContext:analysis?.judgmentContext?modelJudgmentContext(analysis.judgmentContext):null,plan:p.data()?.program??[],savedLesson:p.data()?.lesson??null};
+   const facts=prepareChatFacts(rawFacts),answerRecords=facts.records,answerImage=['hypothetical','general'].includes(facts.scope)?null:image;
    const deadline=Date.now()+140000;
    const remaining=()=>{const ms=deadline-Date.now();if(ms<3000)throw Error('답변 준비 시간이 길어졌어요. 다시 시도해주세요.');return Math.min(ms,60000);};
-   const result=isSearchCapabilityQuestion(input.question)?{value:SEARCH_CAPABILITY_ANSWER,usage:null}:await paid(uid,'assistant-chat',{system:CHAT_PROMPT,schema:chatSchema(records,input.question),parts:[{text:JSON.stringify(compactChatFacts(facts))},...(image?[image]:[])],timeoutMs:remaining()},2200);
-   let validated=validateChatAnswer(result.value,records),webSources=[],searchSuggestions='',searchNotice='';
-   const decision=searchDecision(result.value);
-   if(decision.blocked)searchNotice='안전 기준에 따라 이 요청의 웹 검색을 제한했어요.';
+   const result=isPrivateImplementationOnly(input.question)?{value:PRIVATE_IMPLEMENTATION_RESULT,usage:null}:isSearchCapabilityQuestion(input.question)?{value:SEARCH_CAPABILITY_ANSWER,usage:null}:await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:CHAT_PROMPT+'\n'+mode.prompt+chatEvidencePrompt(facts),schema:chatSchema(answerRecords,input.question),parts:[{text:JSON.stringify(compactChatFacts(facts))},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
+   let validated=validateChatAnswer(result.value,answerRecords,input.answerMode),webSources=[],searchSuggestions='',searchNotice='';
+   const decision=searchDecision(result.value,input.question);
+   if(decision.blocked&&requestedSearchMode(input.question)==='required')searchNotice='이 요청에는 웹 검색을 사용할 수 없어요.';
    else if(decision.requested){
     try{
      const query=validatePublicQuery(decision.query,[m.data().name,uid,mid,...records.map(r=>r.sourceHash).filter(Boolean)]);
@@ -400,13 +403,13 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
      await setPhase('composing');
      const includeRecords=validated.references.length>0&&validated.answer.length<=500;
      const next={...validated,answer:(includeRecords?'### 기록에서 확인한 점\n'+validated.answer+'\n\n':'')+'### 웹에서 확인한 내용\n'+search.value.text,references:includeRecords?validated.references:[]};
-     validated=validateChatAnswer(next,records);webSources=search.value.sources;searchSuggestions=search.value.searchSuggestions;
+     validated=validateChatAnswer(next,answerRecords,input.answerMode);webSources=search.value.sources;searchSuggestions=search.value.searchSuggestions;
      // Public search stays isolated. Only this private, non-search request joins
      // grounded sources with member context; it never sends member data to Search.
      try{
-      const merged=await paid(uid,'assistant-chat',{system:CHAT_PROMPT+'\n'+CHAT_SYNTHESIS_PROMPT,schema:chatSchema(records,'검색 없이 답변'),parts:[{text:JSON.stringify({...compactChatFacts(facts),publicResearch:search.value})},...(image?[image]:[])],timeoutMs:remaining()},2200);
+      const merged=await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:CHAT_PROMPT+'\n'+mode.prompt+chatEvidencePrompt(facts)+'\n'+CHAT_SYNTHESIS_PROMPT,schema:chatSchema(answerRecords,input.question,true),parts:[{text:JSON.stringify({...compactChatFacts(facts),publicResearch:search.value})},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
       if(merged.value.searchDecision!=='none')throw Error('검색 후 답변 상태 오류');
-      const combined=validateChatAnswer(merged.value,records);
+      const combined=validateChatAnswer(merged.value,answerRecords,input.answerMode);
       if([...combined.answer.matchAll(/\[웹(\d+)\]/g)].some(m=>Number(m[1])<1||Number(m[1])>webSources.length))throw Error('검색 출처 번호 오류');
       validated=combined;
      }catch{searchNotice='웹 자료는 확인했지만 회원 기록과의 통합 해석을 완료하지 못했어요. 아래는 검색 결과입니다.';}
@@ -414,11 +417,12 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
     }catch(e){if(regeneration&&previousAnswer)throw e;validated={answer:'웹 검색 기능은 지원하지만 이번 검색은 완료하지 못했어요. 아직 확인한 웹 자료나 출처가 없습니다.',references:[],questions:[]};webSources=[];searchSuggestions='';searchNotice='검색을 완료하지 못한 이유: '+safeError(e);}
    }
    await setPhase('composing');
-   const answer={...validated,contextScope:{recordCount:records.length,sessionCount:new Set(records.map(r=>r.date)).size,from:records.map(r=>r.date).sort()[0]??'',to:records.map(r=>r.date).sort().at(-1)??'',capture:!!image},searchDecision:result.value.searchDecision??'none',webSources,searchSuggestions,searchNotice,referenceDetails:validated.references.map(id=>{const r=records.find(r=>r.id===id);return {id,date:r.date??'',exerciseName:r.exerciseName??'',sourcePage:r.sourcePage??0};})};
-   await db.runTransaction(async tx=>{const [parent,current]=await tx.getAll(member,ref);if(!parent.exists||current.data()?.job!==job)throw Error('대화 상태가 변경됐어요.');tx.update(ref,{...answer,status:'ready',phase:'complete',regenerationError:'',usage:result.usage,updatedAt:stamp()});});return {...answer,cached:false};
+   const answer={...validated,chatContext:facts.chatContext,answerMode:input.answerMode,contextScope:{recordCount:answerRecords.length,sessionCount:new Set(answerRecords.map(r=>r.date)).size,from:answerRecords.map(r=>r.date).sort()[0]??'',to:answerRecords.map(r=>r.date).sort().at(-1)??'',capture:!!answerImage},searchDecision:decision.blocked?'blocked':decision.requested?'search':'none',webSources,searchSuggestions,searchNotice,referenceDetails:validated.references.map(id=>{const r=records.find(r=>r.id===id);return {id,date:r.date??'',exerciseName:r.exerciseName??'',sourcePage:r.sourcePage??0};})};
+   await db.runTransaction(async tx=>{const [parent,current]=await tx.getAll(member,ref);if(!parent.exists||current.data()?.job!==job)throw Error('대화 상태가 변경됐어요.');tx.update(ref,{...answer,model:FieldValue.delete(),status:'ready',phase:'complete',regenerationError:'',usage:result.usage,updatedAt:stamp()});});return {...answer,cached:false};
   }catch(e){await db.runTransaction(async tx=>{const [parent,current]=await tx.getAll(member,ref);if(parent.exists&&current.data()?.job===job)tx.update(ref,previousAnswer?{...previousAnswer,status:'ready',phase:'complete',regenerationError:safeError(e),updatedAt:stamp()}:{status:'error',error:safeError(e),updatedAt:stamp()});});throw e;}
  }
  const goalFlow=createGoalFlow({db,paid,now});
- return {...createCoachingWorkflow({db,paid,sessionNotesFor,now}),...createLessonPlanning({db,paid,sessionNotesFor,goalContext:goalFlow.goalContext,now}),...createGoalVisual({db,paid,sessionNotesFor,now}),...goalFlow,saveSessionNote,saveTrainingGoal:async(...args)=>{const r=await goalFlow.saveTrainingGoal(...args);await scheduleReport(args[0],args[1]).catch(()=>{});return r;},draftAssessment,startImport,reviewImport,buildReport,scheduleReport,retryReport,savePlan,paid,saveJudgmentCriteria,saveJudgmentDecision,saveJudgmentOutcome,chat,newChat,regenerateChat,saveInterpretation};
+ const coachingFlow=createCoachingWorkflow({db,paid,sessionNotesFor,now});
+ return {...coachingFlow,...createLessonPlanning({db,paid,sessionNotesFor,goalContext:goalFlow.goalContext,now}),...createGoalVisual({db,paid,sessionNotesFor,now}),...goalFlow,saveSessionNote,saveTrainingGoal:async(...args)=>{const r=await goalFlow.saveTrainingGoal(...args);await scheduleReport(args[0],args[1]).catch(()=>{});return r;},draftAssessment,startImport,reviewImport,buildReport,scheduleReport,retryReport,savePlan,paid,saveJudgmentCriteria,saveJudgmentDecision,saveJudgmentOutcome,chat,newChat,regenerateChat,saveInterpretation};
 }
-export function safeError(e){const s=String(e?.message||'');if(s.startsWith('AI_USAGE_LIMIT:'))return s.slice(15);if(/ACCESS_TOKEN_TYPE_UNSUPPORTED|invalid authentication credentials|API key not valid/i.test(s))return 'Gemini 인증 설정을 확인해주세요. 서비스 관리자에게 알려주세요.';if(/prepayment|credits.*depleted/i.test(s))return 'Gemini 크레딧이 부족해요. 서비스 관리자에게 알려주세요.';if(/429|quota/i.test(s))return 'AI 요청 한도에 도달했어요. 저장된 결과는 계속 볼 수 있어요.';if(/Request contains an invalid argument/i.test(s))return 'AI 분석 요청 형식을 처리하지 못했어요. 서비스 관리자에게 알려주세요. 저장된 기록은 유지됩니다.';if(/^[가-힣]/.test(s))return s.slice(0,500);return 'AI 작업을 완료하지 못했어요. 저장된 기록은 유지됩니다. 다시 시도할 수 있어요.';}
+export function safeError(e){const s=String(e?.message||'');if(containsPrivateImplementation(s))return 'AI 서비스 요청을 처리하지 못했어요. 서비스 관리자에게 알려주세요.';if(s.startsWith('AI_USAGE_LIMIT:'))return s.slice(15);if(/ACCESS_TOKEN_TYPE_UNSUPPORTED|invalid authentication credentials|API key not valid/i.test(s))return 'AI 인증 설정을 확인해주세요. 서비스 관리자에게 알려주세요.';if(/prepayment|credits.*depleted/i.test(s))return 'AI 서비스 크레딧이 부족해요. 서비스 관리자에게 알려주세요.';if(/429|quota/i.test(s))return 'AI 요청 한도에 도달했어요. 저장된 결과는 계속 볼 수 있어요.';if(/Request contains an invalid argument/i.test(s))return 'AI 분석 요청 형식을 처리하지 못했어요. 서비스 관리자에게 알려주세요. 저장된 기록은 유지됩니다.';if(/^[가-힣]/.test(s))return s.slice(0,500);return 'AI 작업을 완료하지 못했어요. 저장된 기록은 유지됩니다. 다시 시도할 수 있어요.';}

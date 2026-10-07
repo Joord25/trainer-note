@@ -40,7 +40,7 @@ test('extraction omits nested API array bounds while onboarding keeps its questi
  assert.equal(schema.properties.records.items.properties.sets.items.properties.kg.nullable,true);
  assert.equal(openApiSchema(GOAL_SCHEMA).properties.questions.maxItems,2);
  assert.equal(EXTRACTION_SCHEMA.properties.records.maxItems,120);
- await assert.rejects(parseExtraction({records:Array(61).fill({}),unparsed:[]},{id:'a'.repeat(64),name:'test.png'},'회원',2026),/너무 많은 항목/);
+ await assert.rejects(parseExtraction({records:Array(EXTRACTION_SCHEMA.properties.records.maxItems+1).fill({}),unparsed:[]},{id:'a'.repeat(64),name:'test.png'},'회원',2026),/항목 수 또는 형식/);
 });
 
 
@@ -51,4 +51,24 @@ test('report generation can reference only supplied records and uses per-side re
  assert.deepEqual(schema.properties.program.items.properties.recordId.enum,['strength']);
  assert.deepEqual(programBounds(rows),[{recordId:'strength',maxSets:2,minReps:8,maxReps:12}]);
  assert.deepEqual(reportEvidenceSchema([]).properties.program.items.properties.recordId.enum,['none']);
+});
+
+test('selected model is used consistently for token counting and generation',async()=>{
+ const requests=[];
+ const gemini=createGemini({apiKey:()=> 'test',fetcher:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>url.endsWith(':countTokens')?{totalTokens:10}:{candidates:[{finishReason:'STOP',content:{parts:[{text:'{"answer":"ok"}'}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5,totalTokenCount:15}}};}});
+ await gemini({model:'gemini-3.5-flash-lite',system:'test',schema:{type:'OBJECT'},parts:[{text:'test'}],maxInputTokens:100,maxOutputTokens:50});
+ assert.equal(requests.length,2);assert.ok(requests.every(r=>r.url.includes('/gemini-3.5-flash-lite:')));
+ assert.equal(requests[0].body.generateContentRequest.model,'models/gemini-3.5-flash-lite');
+ await assert.rejects(gemini({model:'unapproved'}));assert.equal(requests.length,2);
+});
+
+
+test('explicit reasoning configuration reaches both API requests and thought usage stays billable',async()=>{
+ const requests=[];
+ const gemini=createGemini({apiKey:()=> 'test',fetcher:async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return {ok:true,json:async()=>url.endsWith(':countTokens')?{totalTokens:10}:{candidates:[{finishReason:'STOP',content:{parts:[{thought:true,text:'not user output'},{text:'{"answer":"ok"}'}]}}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:5,thoughtsTokenCount:20,totalTokenCount:35}}};}});
+ const result=await gemini({model:'gemini-3.5-flash-lite',thinkingLevel:'medium',system:'test',schema:{type:'OBJECT'},parts:[{text:'test'}],maxInputTokens:100,maxOutputTokens:100});
+ assert.deepEqual(requests[0].body.generateContentRequest.generationConfig.thinkingConfig,{thinkingLevel:'medium'});
+ assert.deepEqual(requests[1].body.generationConfig.thinkingConfig,{thinkingLevel:'medium'});
+ assert.deepEqual(result.value,{answer:'ok'});assert.equal(result.usage.outputTokens,25);
+ await assert.rejects(gemini({thinkingLevel:'invented'}),e=>e.notBillable===true);assert.equal(requests.length,2);
 });

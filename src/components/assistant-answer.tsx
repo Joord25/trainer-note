@@ -14,13 +14,14 @@ export function AnswerText({text,sources=[]}:{text:string;sources?:WebSource[]})
  // Older answers sometimes flattened numbered sections. Only split sentence boundaries,
  // never decimal loads, dates, or a number inside a sentence.
  const lines=text.replace(/([.!?。]) +(?=\d{1,2}\. [^\d\s])/g,'$1\n\n').split(/\r?\n/),blocks:ReactNode[]=[];
- let paragraph:string[]=[],items:{number?:number;text:string}[]=[];
+ let paragraph:string[]=[],items:{number?:number;text:string;details:string[]}[]=[];
  function flushParagraph(){if(paragraph.length){blocks.push(<p key={blocks.length}>{inline(paragraph.join('\n'))}</p>);paragraph=[];}}
- function flushList(){if(items.length){const ordered=items[0].number!==undefined,children=items.map((item,i)=><li key={i} value={item.number}>{inline(item.text)}</li>);blocks.push(ordered?<ol key={blocks.length} start={items[0].number}>{children}</ol>:<ul key={blocks.length}>{children}</ul>);items=[];}}
+ function flushList(){if(items.length){const ordered=items[0].number!==undefined,children=items.map((item,i)=><li key={i} value={item.number}>{item.details.length?<><div className="assistant-point-title">{inline(item.text)}</div><p>{inline(item.details.join('\n'))}</p></>:inline(item.text)}</li>);blocks.push(ordered?<ol key={blocks.length} start={items[0].number}>{children}</ol>:<ul key={blocks.length}>{children}</ul>);items=[];}}
  for(const raw of lines){const line=raw.trim(),heading=/^#{1,4}\s+(.+)$/.exec(line),item=/^(?:(\d{1,2})[.)]|[-*•])\s+(.+)$/.exec(line);
-  if(!line){flushParagraph();flushList();}
+  if(!line){flushParagraph();}
   else if(heading){flushParagraph();flushList();blocks.push(<h4 key={blocks.length}>{inline(heading[1])}</h4>);}
-  else if(item){flushParagraph();const number=item[1]?Number(item[1]):undefined;if(items.length&&(items[0].number===undefined)!==(number===undefined))flushList();items.push({number,text:item[2]});}
+  else if(item){flushParagraph();const number=item[1]?Number(item[1]):undefined;if(items.length&&(items[0].number===undefined)!==(number===undefined))flushList();items.push({number,text:item[2],details:[]});}
+  else if(items.length&&/^\s{2,}\S/.test(raw)){items[items.length-1].details.push(line);}
   else{flushList();paragraph.push(line);}
  }
  flushParagraph();flushList();return <div className="assistant-answer-body">{blocks}</div>;
