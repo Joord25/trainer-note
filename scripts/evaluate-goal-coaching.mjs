@@ -1,3 +1,4 @@
+import {programChecks} from '../functions/goal-decision.mjs';
 // Synthetic fixtures only. --live makes one billed call per selected case (3 by default).
 import {spawnSync} from 'node:child_process';
 import {mkdtemp,writeFile} from 'node:fs/promises';
@@ -25,9 +26,10 @@ if(!key)throw Error('Configured credential unavailable');
 const model=createGemini({apiKey:()=>key}),output=await mkdtemp(join(tmpdir(),'trainer-goal-eval-')),results=[];console.log(output);
 for(const c of selected){
  try{
-  const evidence=changeEvidence(c.records),input=prepareChangeRequest({records:c.records,evidence,goal:c.goal,memberNotes:c.memberNotes,sessionNotes:[],history:programHistory(c.records),programContext:goalProgramContext(c.records)},[]);
-  const answer=await model(withTrainingGuidance('member-changes',{model:'gemini-3.5-flash-lite',thinkingLevel:'medium',system:CHANGE_PROMPT,schema:openApiSchema(input.schema),parts:[{text:JSON.stringify(input.facts)}],maxInputTokens:262144,maxOutputTokens:6000,timeoutMs:90000}));
-  const report=validateChanges(input.restore(answer.value),evidence,{requireGoalReview:true});results.push({id:c.id,rubric:c.rubric,report});console.log(c.id,'schema validated; semantic review required');
+  const evidence=changeEvidence(c.records),input=prepareChangeRequest({records:c.records,evidence,goal:c.goal,memberNotes:c.memberNotes,sessionNotes:[],history:programHistory(c.records),programChecks:programChecks(goalProgramContext(c.records)),trainerContext:'',programContext:goalProgramContext(c.records)},[]);
+  const answer=await model(withTrainingGuidance('member-changes',{model:'gemini-3.5-flash-lite',thinkingLevel:process.argv.includes('--high')?'high':'medium',system:CHANGE_PROMPT,schema:openApiSchema(input.schema),parts:[{text:JSON.stringify(input.facts)}],maxInputTokens:262144,maxOutputTokens:9000,timeoutMs:90000}));
+  await writeFile(join(output,c.id+'-response.json'),JSON.stringify(input.restore(answer.value),null,2),{mode:0o600});
+  const report=validateChanges(input.restore(answer.value),evidence,{requireGoalReview:true,checks:programChecks(goalProgramContext(c.records))});results.push({id:c.id,rubric:c.rubric,report});console.log(c.id,'schema validated; semantic review required');
  }catch(e){results.push({id:c.id,error:String(e.message).replace(/AIza[\w-]+/g,'[redacted]').slice(0,300)});console.log(c.id,'failed');}
  await writeFile(join(output,'review.json'),JSON.stringify({version:COACHING_EVIDENCE_VERSION,results},null,2),{mode:0o600});
 }
