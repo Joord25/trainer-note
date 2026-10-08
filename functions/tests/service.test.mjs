@@ -839,3 +839,16 @@ test('reading a captured program sends its image without unrelated member record
  const result=await service.chat(uid,mid,chatInput({fileId:'',selection,question:'운동 프로그램 알려줘'}));
  assert.equal(result.contextScope.capture,true);assert.equal(result.contextScope.recordCount,0);assert.deepEqual(result.references,[]);
 });
+
+test('a mixed-unit row stays pending while clean exercises on the same page are saved',async()=>{
+ const timed=raw({rawName:'timed walk',exerciseName:'걷기',bodyPart:'유산소',measurementType:'duration',loadType:'weighted',sets:[{kg:12,reps:4,durationSeconds:60}]}).records[0];
+ answer.records.push(timed);
+ await service.startImport(uid,mid,fileId);
+ const result=await imported();
+ assert.equal(result.status,'ready');assert.equal(result.rows.length,2);
+ const pending=result.rows.find(r=>r.input.rawName==='timed walk');
+ assert.equal(pending.review,'needs-review');assert.match(pending.input.notes,/kg=12/);
+ assert.deepEqual(pending.input.sets,[{kg:null,reps:0,durationSeconds:60}]);
+ const saved=await records();assert.equal(saved.length,1);assert.equal(saved[0].rawName,'BB squat');
+ assert.equal((await db.doc(base).get()).data().recordCount,1);
+});

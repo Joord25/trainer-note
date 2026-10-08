@@ -59,3 +59,42 @@ test('undosed exercises retain independent sessions without invented sets or dup
  const partial=await parseExtraction({records,unparsed:[]},source,'회원');
  assert.equal(partial.records[0].input.sets[0].kg,25);assert.equal(classify(partial.records[0]).review,'needs-review');
 });
+
+test('duplicate strength fields in a timed row remain reviewable without losing the rest of the page',async()=>{
+ const source={id:input.sourceHash,name:input.sourceName,contentType:'image/png'};
+ const common={page:1,memberName:'회원',year:2026,month:9,day:12,sessionIndex:1,notes:'',issues:[],components:[]};
+ const strength={...common,rawName:'squat',exerciseName:'스쿼트',bodyPart:'하체',loadType:'weighted',sets:[{kg:16,reps:10}]};
+ const timed={...common,rawName:'interval',exerciseName:'인터벌',bodyPart:'유산소',loadType:'weighted',measurementType:'duration',sets:[{kg:20,reps:5,durationSeconds:60}]};
+ const raw={records:[strength,timed],unparsed:[]};
+ const parsed=await parseExtraction(raw,source,'회원');
+ assert.equal(parsed.records.length,2);assert.equal(classify(parsed.records[0]).review,'auto');
+ assert.equal(classify(parsed.records[1]).review,'needs-review');
+ assert.deepEqual(parsed.records[1].input.sets,[{kg:null,reps:0,durationSeconds:60}]);
+ assert.equal(parsed.records[1].input.loadType,'unknown');
+ assert.match(parsed.records[1].input.notes,/kg=20/);assert.match(parsed.records[1].input.notes,/reps=5/);
+ assert.deepEqual(raw.records[1].sets,[{kg:20,reps:5,durationSeconds:60}]);
+ assert.equal(summarize(parsed.records.map(r=>r.input)).volume,160);
+});
+
+test('crossed measurement channels preserve candidates as notes and require review',async()=>{
+ const common={page:1,memberName:'회원',year:2026,month:9,day:12,rawName:'walk',exerciseName:'걷기',bodyPart:'하체',loadType:'unknown',notes:'',issues:[],components:[]};
+ for(const patch of [
+  {measurementType:'incline_speed_time',sets:[{kg:null,reps:null,inclinePercent:0,speedKph:3,durationSeconds:60,distanceMeters:50}]},
+  {measurementType:'distance',sets:[{kg:4,reps:null,distanceMeters:40,durationSeconds:60}]},
+  {measurementType:'duration',sets:[{kg:null,reps:null,durationSeconds:60,inclinePercent:20,speedKph:5}]},
+  {loadType:'weighted',measurementType:'repetitions',sets:[{kg:4,reps:10,distanceMeters:40}]}
+ ]){
+  const parsed=await parseExtraction({records:[{...common,...patch}],unparsed:[]},{id:input.sourceHash,name:input.sourceName,contentType:'image/png'},'회원');
+  assert.equal(classify(parsed.records[0]).review,'needs-review');assert.match(parsed.records[0].input.notes,/판독/);
+ }
+});
+
+test('per-set transcription preserves an unknown-load column and distance units',async()=>{
+ const row={page:1,memberName:'회원',year:2026,month:9,day:12,rawName:'loaded walk',exerciseName:'걷기',bodyPart:'하체',loadType:'unknown',measurementType:'distance',notes:'중량은 원문 참고',issues:['중량·거리 복합 기록 확인'],sets:[{sourceText:'kg: X / rep: 40m',kg:null,reps:null,distanceMeters:40},{sourceText:'kg: 6 / rep: 40m',kg:null,reps:null,distanceMeters:40}]};
+ const parsed=await parseExtraction({records:[row],unparsed:[]},{id:input.sourceHash,name:input.sourceName,contentType:'image/png'},'회원');
+ assert.equal(parsed.records[0].input.sets.length,2);
+ assert.match(parsed.records[0].input.notes,/1세트 원문: kg: X \/ rep: 40m/);
+ assert.match(parsed.records[0].input.notes,/2세트 원문: kg: 6/);
+ assert.equal(classify(parsed.records[0]).review,'needs-review');
+ assert.equal(summarize(parsed.records.map(r=>r.input)).volume,0);
+});
