@@ -157,3 +157,22 @@ html[data-theme="dark"] .journey-error{background:#302b25;border-color:#504436}h
 .review-workspace .assistant-answer-body .assistant-point-title{line-height:1.6;margin-bottom:5px}
 .review-workspace .assistant-answer-body .assistant-point-title strong{color:var(--ink,#29372f);font-weight:700}
 .review-workspace .assistant-answer-body li>p{margin:0;line-height:1.8}
+
+/* Keep each lesson's summary and expanded details inside one quiet boundary. */
+.review-workspace .record-content .compact-session{margin:14px 0 22px;border:1px solid var(--line,#dde4dc);border-radius:12px;background:var(--surface,#fff);box-shadow:none}
+.review-workspace .record-content .compact-session[data-expanded="true"]{border-color:#b7c7b8}
+.review-workspace .compact-session>.session-overview{padding:16px;border-radius:12px}
+.review-workspace .compact-session[data-expanded="true"]>.session-overview{background:#f5f8f2;border-radius:12px 12px 0 0}
+.review-workspace .compact-session>.session-edit-details{padding:12px 16px 18px;border-radius:0 0 12px 12px;background:var(--surface,#fff);border-top:1px solid var(--line,#dde4dc)}
+.review-workspace .compact-session>.session-edit-details>.live-record-heading{font-size:12px;color:var(--muted,#778077);padding-block:8px 14px}
+@container(max-width:440px){.review-workspace .compact-session>.session-overview{padding:12px}.review-workspace .compact-session>.session-edit-details{padding:10px 10px 14px}}
+
+.review-workspace .session-overview-date{justify-content:flex-start;text-align:left}
+.review-workspace .session-review-controls{grid-column:1/-1;grid-row:2;display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px 16px;border-top:1px solid var(--line,#dde4dc);padding-top:10px}
+.review-workspace .session-review-controls>.record-review-details{flex:1 1 220px;min-width:0;margin:0;padding:0;border:0}
+.review-workspace .session-review-controls>.record-review-details>summary{font-size:12px;padding:6px 0;color:var(--muted,#778077)}
+.review-workspace .session-attention-filter{font-size:12px;padding:6px 10px;min-height:32px;border-radius:6px;margin-left:auto;white-space:normal}
+.review-workspace .session-attention-filter[aria-pressed="true"]{background:var(--sage-light,#edf3e7);color:var(--green,#315b40)}
+.review-workspace .session-no-attention{flex-basis:100%;font-size:12px;color:var(--muted,#778077);margin:0}
+.review-workspace .session-overview[data-single-session="true"]>.session-overview-program{grid-row:3}
+.review-workspace .session-overview[data-single-session="true"]>.session-overview-note{grid-row:4}

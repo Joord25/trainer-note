@@ -852,3 +852,13 @@ test('a mixed-unit row stays pending while clean exercises on the same page are 
  const saved=await records();assert.equal(saved.length,1);assert.equal(saved[0].rawName,'BB squat');
  assert.equal((await db.doc(base).get()).data().recordCount,1);
 });
+
+test('weight-distance and right-only extraction persist and remain editable',async()=>{
+ answer=raw({measurementType:'weight_distance',sets:[{kg:6,reps:0,distanceMeters:40}]});
+ answer.records.push(raw({rawName:'right row',exerciseName:'한팔 로우',sets:[{kg:6,reps:10,leftReps:0,rightReps:10}]}).records[0]);
+ await service.startImport(uid,mid,fileId);assert.equal((await imported()).status,'ready');assert.equal((await records()).length,2);
+ const v=await imported(),row=v.rows.find(r=>r.input.measurementType==='weight_distance');
+ await service.reviewImport(uid,mid,fileId,{operation:'row',rowId:row.id,input:{...row.input,sets:[{kg:8,reps:0,distanceMeters:50}]},revision:v.revision,reason:'원본 확인'});
+ const saved=await records();assert.deepEqual(saved.find(r=>r.measurementType==='weight_distance').sets,[{kg:8,reps:0,distanceMeters:50}]);
+ assert.deepEqual(saved.find(r=>r.rawName==='right row').sets,[{kg:6,reps:10,leftReps:0,rightReps:10}]);
+});

@@ -24,3 +24,16 @@ test('changing knowledge or correction reason changes report cache',()=>{const m
 test('model input omits server-only signatures but keeps decision conditions',()=>{const c=evaluate(),model=modelJudgmentContext(c);assert.equal(model.criteria.confirmedRecordSignatures,undefined);assert.equal(model.criteria.equipment,'바벨');assert.ok(c.criteria.confirmedRecordSignatures.length);});
 
 test('unilateral performance uses weaker side, never the total or mixed counting modes',()=>{const r=[{...rec('a','2026-09-01'),sets:[{kg:40,reps:20,leftReps:12,rightReps:8}]},{...rec('b','2026-09-09'),sets:[{kg:40,reps:22,leftReps:12,rightReps:10}]}],c=validateCriteria(input,r,'근력',null),p=card(evaluate(r,c),'progress');assert.equal(p.metrics.firstReps,8);assert.equal(p.metrics.latestReps,10);assert.equal(p.metrics.reachedTarget,false);const mixed=[r[0],rec('b','2026-09-09')];assert.equal(card(evaluate(mixed,validateCriteria(input,mixed,'근력',null)),'comparison').status,'needs_information');});
+
+test('one-sided performance compares the performed side and never mixes left with right',()=>{
+ const r=[{...rec('a','2026-09-01'),sets:[{kg:40,reps:8,leftReps:0,rightReps:8}]},{...rec('b','2026-09-09'),sets:[{kg:40,reps:10,leftReps:0,rightReps:10}]}];
+ const result=evaluate(r,validateCriteria(input,r,'근력',null));
+ assert.equal(card(result,'progress').metrics.firstReps,8);assert.equal(card(result,'progress').metrics.latestReps,10);
+ const switched=[r[0],{...r[1],sets:[{kg:40,reps:10,leftReps:10,rightReps:0}]}];
+ assert.equal(card(evaluate(switched,validateCriteria(input,switched,'근력',null)),'comparison').status,'needs_information');
+});
+test('loaded distance cannot enter repetition-based judgments even under the same exercise name',()=>{
+ const loaded=records.map(r=>({...r,measurementType:'weight_distance',sets:[{kg:40,reps:0,distanceMeters:20}]}));
+ assert.throws(()=>validateCriteria(input,loaded,'근력',null));
+ assert.equal(card(evaluate(loaded,criteria()),'progress').status,'needs_information');
+});

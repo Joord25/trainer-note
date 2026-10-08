@@ -88,7 +88,7 @@ for(const kind of ['interpretations','trainingPrinciples'])test(`${kind} rules a
 });
 
 test('L/R sets persist both sides and their total without doubling the set count',async()=>{const d=db('trainer-a');await assertSucceeds(create(d,{sets:[{kg:20,reps:18,leftReps:10,rightReps:8}]}));assert.deepEqual((await getDoc(doc(d,rp))).data().sets,[{kg:20,reps:18,leftReps:10,rightReps:8}]);await assertSucceeds(updateDoc(doc(d,rp),{sets:[{kg:20,reps:20,leftReps:10,rightReps:10}],revision:2,updatedAt:serverTimestamp()}));});
-for(const [name,set]of [['wrong total',{kg:20,reps:10,leftReps:10,rightReps:8}],['missing right',{kg:20,reps:10,leftReps:10}],['fractional side',{kg:20,reps:10,leftReps:4.5,rightReps:5.5}],['empty side',{kg:20,reps:10,leftReps:0,rightReps:10}],['overflow side',{kg:20,reps:2010,leftReps:2000,rightReps:10}]])test(`reject L/R ${name}`,async()=>{await assertFails(create(db('trainer-a'),{sets:[set]}));});
+for(const [name,set]of [['wrong total',{kg:20,reps:10,leftReps:10,rightReps:8}],['missing right',{kg:20,reps:10,leftReps:10}],['fractional side',{kg:20,reps:10,leftReps:4.5,rightReps:5.5}],['both empty',{kg:20,reps:0,leftReps:0,rightReps:0}],['overflow side',{kg:20,reps:2010,leftReps:2000,rightReps:10}]])test(`reject L/R ${name}`,async()=>{await assertFails(create(db('trainer-a'),{sets:[set]}));});
 
 test('all eight distinct unilateral sets pass the rule evaluation budget',async()=>{const d=db('trainer-a');await assertSucceeds(create(d,{sets:Array.from({length:8},(_,i)=>({kg:20+i,reps:20+i,leftReps:10,rightReps:10+i}))}));});
 
@@ -168,4 +168,18 @@ test('provider billing and model metadata remain server-only even for the traine
   await assertFails(getDoc(doc(db(uid),target)));await assertFails(getDocs(collection(db(uid),'trainers/trainer-a/aiCalls')));
   await assertFails(setDoc(doc(db(uid),target),{calls:0}));
  }
+});
+
+test('weight-distance saves eight intervals including unloaded segments and owner edits',async()=>{
+ const d=db('trainer-a'),sets=Array.from({length:8},(_,i)=>({kg:i*2,reps:0,distanceMeters:40+i}));
+ await assertSucceeds(create(d,{measurementType:'weight_distance',loadType:'weighted',sets}));
+ assert.deepEqual((await getDoc(doc(d,rp))).data().sets,sets);
+ await assertSucceeds(updateDoc(doc(d,rp),{sets:[{kg:8,reps:0,distanceMeters:60}],revision:2,updatedAt:serverTimestamp()}));
+});
+for(const patch of [{loadType:'unknown'},{sets:[{kg:null,reps:0,distanceMeters:40}]},{sets:[{kg:4,reps:0,distanceMeters:0}]},{sets:[{kg:-1,reps:0,distanceMeters:40}]},{sets:[{kg:4,reps:10,distanceMeters:40}]},{sets:[{kg:4,reps:0,distanceMeters:40,durationSeconds:60}]}])test(`reject invalid weight-distance ${JSON.stringify(patch)}`,async()=>{
+ await assertFails(create(db('trainer-a'),{measurementType:'weight_distance',loadType:'weighted',sets:[{kg:4,reps:0,distanceMeters:40}],...patch}));
+});
+test('right-only and left-only records save zero for the unused side within eight-set budget',async()=>{
+ const d=db('trainer-a'),sets=Array.from({length:8},(_,i)=>({kg:10,reps:10,leftReps:i%2?10:0,rightReps:i%2?0:10}));
+ await assertSucceeds(create(d,{sets}));assert.deepEqual((await getDoc(doc(d,rp))).data().sets,sets);
 });

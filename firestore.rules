@@ -88,8 +88,7 @@ service cloud.firestore {
           let right = value.rightReps;
           return value.size() == 4
             && value.reps is int && value.reps == left + right
-            && string(left).matches('([1-9][0-9]{0,2}|1000)')
-            && string(right).matches('([1-9][0-9]{0,2}|1000)');
+            && (string(left) + '/' + string(right)).matches('(([1-9][0-9]{0,2}|1000)/(0|[1-9][0-9]{0,2}|1000)|0/([1-9][0-9]{0,2}|1000))');
         }
         function validSingleSet(value,weighted) {
           let kg = value.kg;
@@ -135,6 +134,25 @@ service cloud.firestore {
             && (size <= 5 || validMixedSet(sets[5]))
             && (size <= 6 || validMixedSet(sets[6]))
             && (size <= 7 || validMixedSet(sets[7]));
+        }
+        function validWeightDistance(value) {
+          let kg = value.kg;
+          let meters = value.distanceMeters;
+          return value == {'kg':kg,'reps':0,'distanceMeters':meters}
+            && kg is number && kg >= 0 && kg <= 2000
+            && meters is number && meters > 0 && meters <= 1000000;
+        }
+        function validWeightDistances(sets) {
+          let size = sets.size();
+          return sets is list && size > 0 && size <= 8
+            && validWeightDistance(sets[0])
+            && (size <= 1 || validWeightDistance(sets[1]))
+            && (size <= 2 || validWeightDistance(sets[2]))
+            && (size <= 3 || validWeightDistance(sets[3]))
+            && (size <= 4 || validWeightDistance(sets[4]))
+            && (size <= 5 || validWeightDistance(sets[5]))
+            && (size <= 6 || validWeightDistance(sets[6]))
+            && (size <= 7 || validWeightDistance(sets[7]));
         }
         function validDistanceTime(value) {
           let meters = value.distanceMeters;
@@ -213,8 +231,8 @@ service cloud.firestore {
           && name.size() <= 100 && name.matches('.*[^ ].*')
           && data.bodyPart in ['가슴','등','어깨','이두','삼두','하체','코어','유산소','전신','미분류']
           && data.loadType in ['weighted','bodyweight','unknown','mixed']
-          && kind in ['repetitions','distance_time','duration','distance','incline_speed_time']
-          && (kind == 'repetitions' ? validSets(data.sets,data.loadType) : data.loadType == 'unknown' && validIntervals(data.sets,data.measurementType))
+          && kind in ['repetitions','distance_time','duration','distance','weight_distance','incline_speed_time']
+          && (kind == 'repetitions' ? validSets(data.sets,data.loadType) : kind == 'weight_distance' ? data.loadType == 'weighted' && validWeightDistances(data.sets) : data.loadType == 'unknown' && validIntervals(data.sets,data.measurementType))
           && source.matches('(?s).{0,200}') && page is int
           && (sourceHash == '' ? source == '' && page == 0 : sourceHash.matches('[a-f0-9]{64}') && source.size() > 0 && page >= 1 && page <= 10000)
           && data.get('trainerNote','').matches('(?s).{0,1000}')

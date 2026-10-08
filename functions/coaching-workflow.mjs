@@ -17,7 +17,7 @@ function movement(r){const s=r.exerciseName.toLowerCase();if(r.bodyPart==='등'&
 export function changeEvidence(records){
  const evidence=[];
  for(const g of exerciseGroups(records)){
-  const metrics=g.kind==='repetitions'?[...(g.hasWeighted?['kg','volume']:[]),'sets','reps']:g.kind==='incline_speed_time'?['incline','speed','duration']:g.kind==='distance_time'?['distance','duration']:g.kind==='distance'?['distance']:['duration'];
+  const metrics=g.kind==='repetitions'?[...(g.hasWeighted?['kg','volume']:[]),'sets','reps']:g.kind==='weight_distance'?['kg','distance']:g.kind==='incline_speed_time'?['incline','speed','duration']:g.kind==='distance_time'?['distance','duration']:g.kind==='distance'?['distance']:['duration'];
   const labels={sets:['세트 수','세트'],kg:['최고 사용 중량','kg'],volume:['기록 볼륨','kg·회'],reps:['수업일 총반복','회'],incline:['시간 가중 평균 경사','%'],speed:['시간 가중 평균 속도','km/h'],duration:['기록된 운동시간','초'],distance:['기록된 거리','m']};
   for(const metric of metrics){const points=performanceDays(g.records,metric).filter(p=>p.value!==null).map(p=>({date:p.date,value:n(p.value),recordIds:p.records.map(r=>r.id),sets:p.records.flatMap(r=>r.sets),conditions:p.records.map(r=>({loadType:r.loadType,measurementType:measurementType(r),sets:r.sets,notes:r.notes??'',trainerNote:r.trainerNote??''}))}));if(!points.length)continue;
    const first=points[0],last=points.at(-1),previous=points.at(-2),peak=points.reduce((a,b)=>a.value>=b.value?a:b),[label,unit]=labels[metric];

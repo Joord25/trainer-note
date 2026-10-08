@@ -13,7 +13,7 @@ export function goalEvaluationData(records:WorkoutRecord[],allRecords:WorkoutRec
   return goal.plan[metric]?[{metric,range:goal.plan[metric]!,days,within:days.filter(d=>d.inRange).length}]:[];
  });
  const measures=goal.metrics.map(id=>{
-  const candidates=groups.filter(g=>id==='strength'?g.kind==='repetitions':id==='cardio'?g.kind!=='repetitions':id==='side'?g.records.some(r=>r.sets.some(s=>s.leftReps!==undefined)):false);
+  const candidates=groups.filter(g=>id==='strength'?g.kind==='repetitions':id==='cardio'?g.kind!=='repetitions'&&g.kind!=='weight_distance':id==='side'?g.records.some(r=>r.sets.some(s=>s.leftReps!==undefined)):false);
   const samples=candidates.map(g=>{
    const metric:PerformanceMetric=id==='side'?'left':id==='cardio'?(g.kind==='duration'||g.kind==='incline_speed_time')?'duration':'distance':g.hasWeighted?'kg':'reps';
    const days=performanceDays(g.records,metric).filter(d=>d.value!==null),first=days[0],last=days.at(-1);

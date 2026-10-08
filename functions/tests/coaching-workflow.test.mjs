@@ -76,3 +76,12 @@ test('cardio plans retain zero incline and reject missing duration or a weighted
  v.sessions[0].items[0].segments[0].durationSeconds=null;assert.throws(()=>validateCycle(v,[c],options));
  v.sessions[0].items[0].segments[0].durationSeconds=60;v.sessions[0].items[0].segments[0].kg=8;assert.throws(()=>validateCycle(v,[c],options));
 });
+
+test('loaded carries retain kg and meters through change evidence and lesson plans',()=>{
+ const rows=[{...sample[0],exerciseName:'캐리',measurementType:'weight_distance',sets:[{kg:0,reps:0,distanceMeters:20},{kg:8,reps:0,distanceMeters:20}]}];
+ const evidence=changeEvidence(rows).filter(e=>e.kind==='exercise');
+ assert.deepEqual(evidence.map(e=>e.metric),['kg','distance']);assert.deepEqual(evidence.map(e=>e.points[0].value),[8,40]);
+ const c={...candidate,exerciseName:'캐리',measurementType:'weight_distance',referenceSegments:rows[0].sets};
+ const v=valid();for(const s of v.sessions)s.items[0].segments=rows[0].sets;
+ assert.deepEqual(validateCycle(v,[c],options).sessions[0].items[0].segments,rows[0].sets);
+});

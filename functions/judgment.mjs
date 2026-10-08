@@ -1,5 +1,5 @@
 // Executable interpretation of EXPERT_JUDGMENT_PLAN.md. Draft knowledge, not validated clinical rules.
-import {exerciseNameKey} from './generated/workout-measurements.mjs';
+import {exerciseNameKey,measurementType} from './generated/workout-measurements.mjs';
 import {createHash} from 'node:crypto';
 export const KNOWLEDGE_VERSION='expert-judgment-2026-09-v1';
 export const judgmentDate=ms=>new Date(ms+9*3600000).toISOString().slice(0,10);
@@ -18,7 +18,7 @@ export function validateCriteria(input,records,goal,plan){
  if(!input||input.scope!=='general-adult'||input.conditionsConfirmed!==true)throw Error('적용 대상과 동일 수행 조건을 확인해주세요.');
  const exerciseName=text(input.exerciseName,100),equipment=text(input.equipment,100),loadBasis=text(input.loadBasis,100),side=text(input.side,100),setPurpose=text(input.setPurpose,100);
  if(!exerciseName||!equipment||!loadBasis||!side||!setPurpose)throw Error('비교할 운동·기구·중량·좌우·세트 목적을 입력해주세요.');
- const group=records.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(exerciseName)&&(r.loadType==='weighted'||r.loadType==='mixed'));if(!group.length)throw Error('비교할 중량 운동 기록이 없어요.');
+ const group=records.filter(r=>measurementType(r)==='repetitions'&&exerciseNameKey(r.exerciseName)===exerciseNameKey(exerciseName)&&(r.loadType==='weighted'||r.loadType==='mixed'));if(!group.length)throw Error('비교할 중량 운동 기록이 없어요.');
  const {loadKg,targetReps,minSessions,windowDays}=input;
  if(!Number.isFinite(loadKg)||loadKg<=0||loadKg>2000||!Number.isInteger(targetReps)||targetReps<1||targetReps>1000||!Number.isInteger(minSessions)||minSessions<2||minSessions>30||!Number.isInteger(windowDays)||windowDays<1||windowDays>365)throw Error('목표 중량·횟수와 관찰 기간을 확인해주세요.');
  const planDate=input.planDate?text(input.planDate,10):'';if(planDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(planDate)||new Date(planDate+'T00:00:00Z').toISOString().slice(0,10)!==planDate))throw Error('계획 대조 날짜를 확인해주세요.');
@@ -32,11 +32,11 @@ export function selectCases(decisions,outcomes,records,asOf){
 }
 export function evaluateJudgment({records,goal='',criteria=null,cases=[]}){
  const matching=criteria?.memberGoal===goal&&criteria?.scope==='general-adult';
- const group=matching?records.filter(r=>exerciseNameKey(r.exerciseName)===exerciseNameKey(criteria.exerciseName)&&(r.loadType==='weighted'||r.loadType==='mixed')):[];
+ const group=matching?records.filter(r=>measurementType(r)==='repetitions'&&exerciseNameKey(r.exerciseName)===exerciseNameKey(criteria.exerciseName)&&(r.loadType==='weighted'||r.loadType==='mixed')):[];
  const confirmed=group.filter(r=>criteria.confirmedRecordSignatures.some(v=>v.id===r.id&&v.signature===recordSignature(r)));
- const sideModes=new Set(group.flatMap(r=>r.sets.map(s=>s.leftReps!==undefined?'sides':'total')));
+ const sideModes=new Set(group.flatMap(r=>r.sets.map(s=>s.leftReps!==undefined?s.leftReps===0?'right-only':s.rightReps===0?'left-only':'sides':'total')));
  const comparable=group.length>0&&group.length===confirmed.length&&sideModes.size===1;
- const daily=new Map();for(const r of comparable?confirmed:[]){const reps=r.sets.filter(s=>s.kg===criteria.loadKg).map(s=>s.leftReps!==undefined?Math.min(s.leftReps,s.rightReps):s.reps);if(reps.length){const prev=daily.get(r.date);daily.set(r.date,{date:r.date,bestReps:Math.max(prev?.bestReps??0,...reps),ids:[...(prev?.ids??[]),r.id]});}}
+ const daily=new Map();for(const r of comparable?confirmed:[]){const reps=r.sets.filter(s=>s.kg===criteria.loadKg).map(s=>s.leftReps!==undefined?Math.min(...[s.leftReps,s.rightReps].filter(n=>n>0)):s.reps);if(reps.length){const prev=daily.get(r.date);daily.set(r.date,{date:r.date,bestReps:Math.max(prev?.bestReps??0,...reps),ids:[...(prev?.ids??[]),r.id]});}}
  const series=[...daily.values()].sort((a,b)=>a.date.localeCompare(b.date)),last=series.at(-1),first=series[0];
  const scopeIds=confirmed.map(r=>r.id);
  const cards=JUDGMENT_CARDS.map(card=>({...card,status:'needs_information',missingFields:[],evidenceIds:[],metrics:{},reason:''}));
