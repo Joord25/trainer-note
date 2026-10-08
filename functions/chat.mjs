@@ -1,6 +1,7 @@
 import {LOAD_CONTEXT_PROMPT} from './load-context.mjs';
 import {requestedSearchMode} from './web-search.mjs';
 import {hash} from './domain.mjs';
+import {validateDiscussionRequest} from './coaching-decisions.mjs';
 // Member-wide chat includes records, goals, guidance and conversation history.
 export const CHAT_MAX_INPUT_TOKENS=65536;
 export const CHAT_VERSION='workout-assistant-v25-capture-intent';
@@ -113,7 +114,10 @@ export function validateChatRequest(request){
   const bytes=Buffer.from(base64,'base64');if(bytes.length<10||bytes.length>375000||bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)throw Error('선택 영역 이미지 형식을 확인해주세요.');
   selection={...(kind==='screen'?{kind}:{}),page:s.page,rect:{x:s.rect.x,y:s.rect.y,width:s.rect.width,height:s.rect.height},imageHash:hash(bytes)};image={inlineData:{mimeType:'image/jpeg',data:base64}};
  }
- return {answerMode:request.answerMode??'quick',requestId:request.requestId,question:request.question.trim(),fileId,previousId,selection,image};
+ // Discussion mode is pinned to one analysis (inputKey) and one of its items; it reads member records, not a single file.
+ const discussion=validateDiscussionRequest(request.discussion);
+ if(discussion&&fileId)throw Error('분석 논의는 원본 파일을 지정하지 않고 질문해주세요.');
+ return {answerMode:request.answerMode??'quick',requestId:request.requestId,question:request.question.trim(),fileId,previousId,selection,image,...(discussion?{discussion}:{})};
 }
 export function chatSchema(records,question='',searchComplete=false){
  const brief=/(?:한|1)\s*(?:문장|줄)|(?:계산|결과)만/.test(question),mode=requestedSearchMode(question),decisions=searchComplete?['none','blocked']:mode==='required'?['search','blocked']:['off','capability'].includes(mode)?['none','blocked']:['search','none','blocked'];

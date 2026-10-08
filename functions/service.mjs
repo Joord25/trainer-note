@@ -1,5 +1,6 @@
 import {COACHING_INPUT_TOKENS} from './coaching-input.mjs';
 import {createCoachingWorkflow} from './coaching-workflow.mjs';
+import {discussionSystem,discussionSchema,validateDecisionProposal} from './coaching-decisions.mjs';
 import {aliasKey,aliasCorrection,applyExerciseAliases} from './exercise-aliases.mjs';
 import {prepareReportInput} from './report-input.mjs';
 import {withTrainingGuidance,trainingGuidanceVersion} from './training-guidance.mjs';
@@ -356,7 +357,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   if(request.chatGeneration!==(old.generation??0))throw Error('현재 대화에서 다시 생성해주세요.');
   let selection;
   if(old.selection){const attachment=await member.collection('chatAttachments').doc(doc.id).get();if(!attachment.data()?.image)throw Error('이전 캡처가 저장되지 않은 대화예요. 캡처를 다시 첨부해 질문해주세요.');selection={...old.selection,image:attachment.data().image};}
-  return chat(uid,mid,{requestId:doc.id,answerMode:old.answerMode??'quick',question:old.question,fileId:old.fileId,previousId:old.previousId,chatGeneration:old.generation??0,resumeConversation:request.resumeConversation===true,...(selection?{selection}:{})},{id,revision:request.revision});
+  return chat(uid,mid,{requestId:doc.id,answerMode:old.answerMode??'quick',question:old.question,fileId:old.fileId,previousId:old.previousId,...(old.discussion?{discussion:old.discussion}:{}),chatGeneration:old.generation??0,resumeConversation:request.resumeConversation===true,...(selection?{selection}:{})},{id,revision:request.revision});
  }
  async function chat(uid,mid,request,regeneration=null){
   const input=validateChatRequest(request),mode=chatMode(input.answerMode,input.question),generation=request.chatGeneration??0;
@@ -382,12 +383,16 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    await setPhase('thinking');
    const training=await goalFlow.goalContext(uid,mid);
    const workflow=await coachingFlow.workflowContext(uid,mid);
+   const discussion=input.discussion?await coachingFlow.discussionContext(uid,mid,input.discussion):null;
    const coaching={memberChanges:workflow.report,savedCycle:workflow.savedPlan?.plan??null,savedCycleStale:!!workflow.savedPlan&&workflow.savedPlan.inputKey!==workflow.inputKey,draftCycle:workflow.latestProposal?.plan??null};
    const analysis=a.data(),rawFacts={sourceScope:'추출된 운동 기록·수업 메모·저장된 분석/계획과 첨부 캡처. PDF 전체 본문 검색 결과는 아님.',coaching,asOf:judgmentDate(now()),programSessions:chatProgramSessions(records),sessionNotes:(await sessionNotesFor(member)).filter(n=>records.some(r=>r.date===n.date)),training,trainerInterpretations:interpretations,question:input.question,history,capture:input.selection?.kind==='screen'?input.selection:null,scope:input.fileId?{fileId:input.fileId,name:source.data().name,selection:input.selection}: '최근 회원 기록 최대120개',goal:m.data().goal,notes:m.data().notes,records,summary:summarize(selectedRecords),analysis:analysis?.status==='ready'?analysis.report:null,analysisStatus:analysis?.status??'missing',judgmentContext:analysis?.judgmentContext?modelJudgmentContext(analysis.judgmentContext):null,plan:p.data()?.program??[],savedLesson:p.data()?.lesson??null};
-   const facts=prepareChatFacts(rawFacts),answerRecords=facts.records,answerImage=['hypothetical','general'].includes(facts.scope)?null:image;
+   // Discussion mode answers from the analysis' own basis: the same eligible records, computed checks and trainer context.
+   if(discussion)Object.assign(rawFacts,{sourceScope:discussion.scope+' 분석 근거·지도 맥락 포함. PDF 전체 본문 검색 결과는 아님.',scope:'다음 수업의 방향 분석 논의',records:discussion.records.map(({id,date,rawName,exerciseName,bodyPart,loadType,sets,notes,trainerNote,sourceHash,sourcePage,status,measurementType})=>({id,date,rawName,exerciseName,bodyPart,loadType,sets,notes,trainerNote:trainerNote??'',sourceHash,sourcePage,status,measurementType:measurementType??'repetitions'})),summary:summarize(discussion.records),sessionNotes:discussion.sessionNotes,programSessions:chatProgramSessions(discussion.records),discussion:discussion.facts});
+   const facts=discussion?{...rawFacts,chatContext:{kind:'member'},history:history.map(({question,answer})=>({question,answer}))}:prepareChatFacts(rawFacts),answerRecords=facts.records,answerImage=['hypothetical','general'].includes(facts.scope)?null:image;
    const deadline=Date.now()+140000;
    const remaining=()=>{const ms=deadline-Date.now();if(ms<3000)throw Error('답변 준비 시간이 길어졌어요. 다시 시도해주세요.');return Math.min(ms,60000);};
-   const result=isPrivateImplementationOnly(input.question)?{value:PRIVATE_IMPLEMENTATION_RESULT,usage:null}:isSearchCapabilityQuestion(input.question)?{value:SEARCH_CAPABILITY_ANSWER,usage:null}:await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:CHAT_PROMPT+'\n'+mode.prompt+chatEvidencePrompt(facts),schema:chatSchema(answerRecords,input.question),parts:[{text:JSON.stringify(compactChatFacts(facts))},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
+   const result=isPrivateImplementationOnly(input.question)?{value:PRIVATE_IMPLEMENTATION_RESULT,usage:null}:isSearchCapabilityQuestion(input.question)?{value:SEARCH_CAPABILITY_ANSWER,usage:null}:await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:CHAT_PROMPT+'\n'+mode.prompt+chatEvidencePrompt(facts)+(discussion?'\n'+discussionSystem():''),schema:discussion?discussionSchema(chatSchema(answerRecords,input.question,true)):chatSchema(answerRecords,input.question),parts:[{text:JSON.stringify(compactChatFacts(facts))},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
+   const decided=discussion?validateDecisionProposal(result.value?.decisionProposal,discussion.target,{kgs:discussion.kgs}):null;
    let validated=validateChatAnswer(result.value,answerRecords,input.answerMode),webSources=[],searchSuggestions='',searchNotice='';
    const decision=searchDecision(result.value,input.question);
    if(decision.blocked&&requestedSearchMode(input.question)==='required')searchNotice='이 요청에는 웹 검색을 사용할 수 없어요.';
@@ -417,7 +422,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
     }catch(e){if(regeneration&&previousAnswer)throw e;validated={answer:'웹 검색 기능은 지원하지만 이번 검색은 완료하지 못했어요. 아직 확인한 웹 자료나 출처가 없습니다.',references:[],questions:[]};webSources=[];searchSuggestions='';searchNotice='검색을 완료하지 못한 이유: '+safeError(e);}
    }
    await setPhase('composing');
-   const answer={...validated,chatContext:facts.chatContext,answerMode:input.answerMode,contextScope:{recordCount:answerRecords.length,sessionCount:new Set(answerRecords.map(r=>r.date)).size,from:answerRecords.map(r=>r.date).sort()[0]??'',to:answerRecords.map(r=>r.date).sort().at(-1)??'',capture:!!answerImage},searchDecision:decision.blocked?'blocked':decision.requested?'search':'none',webSources,searchSuggestions,searchNotice,referenceDetails:validated.references.map(id=>{const r=records.find(r=>r.id===id);return {id,date:r.date??'',exerciseName:r.exerciseName??'',sourcePage:r.sourcePage??0};})};
+   const answer={...validated,chatContext:facts.chatContext,answerMode:input.answerMode,contextScope:{recordCount:answerRecords.length,sessionCount:new Set(answerRecords.map(r=>r.date)).size,from:answerRecords.map(r=>r.date).sort()[0]??'',to:answerRecords.map(r=>r.date).sort().at(-1)??'',capture:!!answerImage},searchDecision:decision.blocked?'blocked':decision.requested?'search':'none',webSources,searchSuggestions,searchNotice,...(discussion?{discussion:{...input.discussion,fingerprint:discussion.target.fingerprint},decisionProposal:decided.proposal,decisionNotice:decided.notice,decisionApplied:null}:{}),referenceDetails:validated.references.map(id=>{const r=answerRecords.find(r=>r.id===id)??records.find(r=>r.id===id);return {id,date:r.date??'',exerciseName:r.exerciseName??'',sourcePage:r.sourcePage??0};})};
    await db.runTransaction(async tx=>{const [parent,current]=await tx.getAll(member,ref);if(!parent.exists||current.data()?.job!==job)throw Error('대화 상태가 변경됐어요.');tx.update(ref,{...answer,model:FieldValue.delete(),status:'ready',phase:'complete',regenerationError:'',usage:result.usage,updatedAt:stamp()});});return {...answer,cached:false};
   }catch(e){await db.runTransaction(async tx=>{const [parent,current]=await tx.getAll(member,ref);if(parent.exists&&current.data()?.job===job)tx.update(ref,previousAnswer?{...previousAnswer,status:'ready',phase:'complete',regenerationError:safeError(e),updatedAt:stamp()}:{status:'error',error:safeError(e),updatedAt:stamp()});});throw e;}
  }

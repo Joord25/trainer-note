@@ -862,3 +862,31 @@ test('weight-distance and right-only extraction persist and remain editable',asy
  const saved=await records();assert.deepEqual(saved.find(r=>r.measurementType==='weight_distance').sets,[{kg:8,reps:0,distanceMeters:50}]);
  assert.deepEqual(saved.find(r=>r.rawName==='right row').sets,[{kg:6,reps:10,leftReps:0,rightReps:10}]);
 });
+
+
+test('discussion chat shares analysis basis, waits for explicit apply, and rejects retargeted follow-ups',async()=>{
+ await service.startImport(uid,mid,fileId);
+ const c=await service.workflowContext(uid,mid);
+ const report={headline:'기록 확인',directions:[{id:'direction-1',goalAspect:'resistance',kind:'keep',text:'같은 조건에서 수행 확인',reason:'기록 비교',check:'수행 여유 확인',evidenceIds:[c.evidence[0].id]}],goalReview:{summary:'근력 목표 확인',reason:'기록 기반',nextStep:'수행 확인',lenses:[]}};
+ await db.doc(base+'/changeReviews/'+c.inputKey).set({status:'ready',report,updatedAt:Timestamp.fromMillis(clock)});
+ const ctx=await service.workflowContext(uid,mid),discussion={kind:'direction',id:'direction-1',inputKey:c.inputKey,fingerprint:ctx.targetFingerprints['direction:direction-1']};
+ provider=async request=>{
+  const facts=JSON.parse(request.parts[0].text);
+  assert.equal(facts.discussion.target.fingerprint,discussion.fingerprint);
+  assert.ok(facts.discussion.programChecks);assert.match(request.system,/분석 논의 모드/);
+  assert.ok(request.schema.properties.decisionProposal);
+  return {value:{answer:'수행 여유를 확인한 뒤 방향을 정해보세요.',references:[facts.records[0].id],questions:[],searchDecision:'none',searchQuery:'',decisionProposal:{needed:true,choice:'hold',reason:'상태 확인 전 보류',text:'',actionReason:'',check:''}},usage:{inputTokens:100,outputTokens:50}};
+ };
+ const request=chatInput({fileId:'',discussion});
+ const reply=await service.chat(uid,mid,request);
+ assert.equal(reply.discussion.fingerprint,discussion.fingerprint);assert.equal(reply.decisionProposal.choice,'hold');
+ assert.equal((await db.collection(base+'/coachingDecisions').get()).size,0);
+ const applied=await service.saveCoachingDecision(uid,mid,{inputKey:c.inputKey,fingerprint:discussion.fingerprint,target:reply.decisionProposal.target,chatId:request.requestId,choice:'hold',reason:'상태 확인 전 보류',patch:null,remember:false,principle:''});
+ assert.equal(applied.decisions.length,1);assert.deepEqual(applied.report,report);
+ assert.ok((await db.doc(base+'/chats/'+request.requestId).get()).data().decisionApplied);
+ const nextReport={...report,directions:[{...report.directions[0],text:'변경된 다른 제안'}]};
+ await db.doc(base+'/changeReviews/'+c.inputKey).update({report:nextReport});
+ const callCount=calls.length;
+ await assert.rejects(service.chat(uid,mid,chatInput({fileId:'',discussion,previousId:request.requestId,requestId:'99999999-9999-4999-a999-999999999999'})),/대상 항목이 바뀌었어요/);
+ assert.equal(calls.length,callCount);
+});

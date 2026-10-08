@@ -119,3 +119,27 @@ test('trainer context saves explicitly, isolates members, invalidates reports an
  await service.generateCycle(uid,mid,{inputKey:reviewed.inputKey,options});assert.equal(inputs.at(-1).trainerContext,next.trainerContext.text);
  const cleared=await service.saveCoachingContext(uid,mid,{text:'',revision:1});assert.equal(cleared.trainerContext.text,'');assert.equal(cleared.trainerContext.revision,2);
 });
+
+
+test('pre-discussion saved proposals remain editable when no decisions exist',async()=>{
+ const c=await analyzed(),p=await service.generateCycle(uid,mid,{inputKey:c.inputKey,options});
+ const legacy={...p.plan};delete legacy.decisionsKey;
+ await db.doc(base+'/cycleProposals/'+p.proposalId).update({report:legacy});
+ const saved=await service.saveCycle(uid,mid,{inputKey:c.inputKey,proposalId:p.proposalId,revision:0,editedPlan:legacy});
+ assert.equal(saved.plan.trainerEdited,true);assert.equal(typeof saved.plan.decisionsKey,'string');
+});
+
+test('Firestore undo/recreate decisions rejects stale plans and preserves current analysis',async()=>{
+ const c=await analyzed(),fingerprint=c.targetFingerprints['direction:direction-1'];
+ const input={inputKey:c.inputKey,fingerprint,target:{kind:'direction',id:'direction-1'},choice:'agree',reason:'수행 확인',patch:null,remember:false,principle:'',chatId:''};
+ const first=await service.saveCoachingDecision(uid,mid,input);
+ const proposal=await service.generateCycle(uid,mid,{inputKey:c.inputKey,options});
+ await service.removeCoachingDecision(uid,mid,{id:first.decisions[0].id});
+ const next=await service.saveCoachingDecision(uid,mid,{...input,choice:'hold'});
+ assert.notEqual(first.decisions[0].version,next.decisions[0].version);
+ assert.equal(next.inputKey,c.inputKey);assert.deepEqual(next.report,c.report);
+ await assert.rejects(service.saveCycle(uid,mid,{inputKey:c.inputKey,proposalId:proposal.proposalId,revision:0}),/결정이 계획을 만든 뒤 바뀌었어요/);
+ const fresh=await service.generateCycle(uid,mid,{inputKey:c.inputKey,options});
+ assert.notEqual(fresh.proposalId,proposal.proposalId);
+ await service.saveCycle(uid,mid,{inputKey:c.inputKey,proposalId:fresh.proposalId,revision:0});
+});

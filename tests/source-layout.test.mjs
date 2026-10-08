@@ -51,7 +51,7 @@ test('record selector scopes cards, selection and export to the chosen original'
  const rows=[row('first','2026-01-21',1),otherRow],files=[other,file];
  const html=render(rows,{files});assert.ok(!html.includes('다른 파일 운동'));assert.equal((html.match(/data-record-file=/g)||[]).length,1);
  const all=render(rows,{files,selectedFile:'all'});assert.match(all,/다른 파일 운동/);assert.equal((all.match(/data-record-file=/g)||[]).length,2);
- assert.match(html,/AI로 다시 판독/);assert.ok(!html.includes('>다시 생성</button>'));assert.ok(!html.includes('class="bulk-selection-bar"'));
+ assert.match(html,/AI 재분석/);assert.ok(!html.includes('>다시 생성</button>'));assert.ok(!html.includes('class="bulk-selection-bar"'));
 });
 
 test('archived unparsed-only cards can be deleted and cleared interpretations no longer render',()=>{
