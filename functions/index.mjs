@@ -47,7 +47,7 @@ export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
   if(['draftGoal','listTrainingPrinciples','removeTrainingPrinciple','saveAssessmentResult','assessmentReview','saveAssessmentDecision'].includes(data.action))return await service[data.action](uid,data.memberId,data);
   if(data.action==='draftAssessment')return await service.draftAssessment(uid,data.memberId,data);
   if(data.action==='trainingGoal')return await service.saveTrainingGoal(uid,data.memberId,data);
-  if(['enableCoachingWorkflow','workflowContext','saveCoachingContext','analyzeChanges','generateCycle','cycleStatus','saveCycle','lessonContext','generateLesson','saveConnectedLesson','goalVisual','saveGoalVisualDecision','saveCoachingDecision','removeCoachingDecision'].includes(data.action))return await service[data.action](uid,data.memberId,data);
+  if(['directionConversation','converseDirection','saveDirectionSelection','enableCoachingWorkflow','workflowContext','saveCoachingContext','analyzeChanges','generateCycle','cycleStatus','saveCycle','lessonContext','generateLesson','saveConnectedLesson','goalVisual','saveGoalVisualDecision','saveCoachingDecision','removeCoachingDecision'].includes(data.action))return await service[data.action](uid,data.memberId,data);
   if(data.action==='sessionNote')return await service.saveSessionNote(uid,data.memberId,data);
   if(data.action==='interpretation'){await service.saveInterpretation(uid,data.memberId,data);return {ok:true};}
   if(data.action==='regenerateChat')return await service.regenerateChat(uid,data.memberId,data);

@@ -16,8 +16,8 @@ NSCA-load: 근지구력 목적에는 상대적으로 가벼운 부하와 많은 
 NASM-OPT: 안정화 지구력→근력 지구력→근비대→최대근력→파워의 5단계는 조정 가능한 프로그램 틀. 모든 회원에게 순서·고급 기법을 강제하지 않는다. ACSM 일반 지침과 NASM 단계별 예시의 수치가 다르면 평균하거나 단일 정답으로 합치지 않는다.
 앱 적용 원칙: 마이마운틴/러닝/로잉 등 유산소는 종목·기구·경사·속도·저항·운동/휴식 시간·중단 사유를 함께 읽는다. 서로 대체 가능해도 평가 기록을 동등하게 환산하지 않는다. 인터벌 구간 수를 라운드로 추정하거나 심폐 기록을 근비대/파워 증거로 쓰지 않는다. bodyPart=유산소는 트레이너 지정 분류로 존중한다. 에어 바이크는 복근 동작과 머신 이름이 겹친다. 코어·맨몸 반복 기록을 유산소로 바꾸지 않고 기구·측정 방식과 지정 부위를 우선한다. 자료가 없는 RPE·RIR·1RM·VO2max를 만들지 않는다. 관련성이 확인된 다음 조정/확인 사항만 간결하게 제안하며 일반 지침을 썼을 때는 근거 문장에 기관명과 연도/자료명을 짧게 밝힌다. 통증이 있는 회원에게 고부하·폭발적 훈련을 자동 처방하지 않는다.
 `;
-const goalKinds=new Set(['member-changes','cycle-plan']);
-const kinds=new Set(['member-changes','cycle-plan','analysis-and-plan','goal-design','goal-visual','connected-lesson','assessment','assessment-review','assistant-chat']);
+const goalKinds=new Set(['direction-discussion','member-changes','cycle-plan']);
+const kinds=new Set(['direction-discussion','member-changes','cycle-plan','analysis-and-plan','goal-design','goal-visual','connected-lesson','assessment','assessment-review','assistant-chat']);
 export function withTrainingGuidance(kind,request){
  // Chat uses question-specific evidence. Blanket institution summaries caused irrelevant citations and prescriptions.
  if(kind==='assistant-chat'||!kinds.has(kind))return request;

@@ -54,7 +54,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
  async function paid(uid,kind,request,maxOutputTokens){
   const callStarted=now(),billingModel=request.model??MODEL;
   request=withTrainingGuidance(kind,request);
-  const maxInputTokens=['member-changes','cycle-plan'].includes(kind)?(limits.coachingInputTokens??COACHING_INPUT_TOKENS):kind==='assistant-chat'?(limits.chatInputTokens??CHAT_MAX_INPUT_TOKENS):limits.maxInputTokens;
+  const maxInputTokens=['member-changes','cycle-plan','direction-discussion'].includes(kind)?(limits.coachingInputTokens??COACHING_INPUT_TOKENS):kind==='assistant-chat'?(limits.chatInputTokens??CHAT_MAX_INPUT_TOKENS):limits.maxInputTokens;
   const key=randomUUID(),dates=dateKeys(now()),usage=db.doc(`trainers/${uid}/aiUsage/${dates.month}`),daily=db.doc(`trainers/${uid}/aiDaily/${dates.day}`),global=db.doc(`aiGlobalUsage/${dates.month}`),globalShard=global.collection('shards').doc(String(parseInt(key.slice(0,8),16)%64).padStart(2,'0')),call=db.doc(`trainers/${uid}/aiCalls/${key}`),searchReserve=request.searchQuery!==undefined?SEARCH_QUERY_MICROS*SEARCH_RESERVE_QUERIES:0,reserve=costMicros(maxInputTokens,maxOutputTokens,billingModel)+searchReserve;
   await db.runTransaction(async tx=>{
    const [u,d]=await tx.getAll(usage,daily),uv=u.data()||{},dv=d.data()||{};

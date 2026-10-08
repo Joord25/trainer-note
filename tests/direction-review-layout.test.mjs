@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+const require=createRequire(import.meta.url);
+for(const ext of ['.ts','.tsx'])require.extensions[ext]=(module,file)=>module._compile(ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText,file);
+const {DirectionReview}=require('../src/components/direction-review.tsx');
+const {DirectionConversation}=require('../src/components/direction-conversation.tsx');
+const noop=()=>{};
+test('conversation input follows checks and precedes the editable direction list',()=>{
+ const conversation=React.createElement(DirectionConversation,{memberId:'m',inputKey:'a',discussionKey:'b',online:true,directions:[],onApply:async()=>{}});
+ const html=renderToStaticMarkup(React.createElement(DirectionReview,{conversation,goal:'근력',directions:[],chosen:{'manual-1':'트레이너가 직접 쓴 방향'},trainerContext:{text:'',revision:0},review:{summary:'상단 요약 유지',reason:'근거 설명',nextStep:'우선 방향',references:[],lenses:[{id:'muscles',label:'큰 근육군',status:'recorded',observation:'하체 기록',interpretation:'목표와 연결',question:'별도 질문',recordIds:[],references:[]}]},onToggle:noop,onEdit:noop,onAnalyze:noop,onGoal:noop,onOriginal:noop,onPlan:noop,onBack:noop,canAnalyze:true}));
+ assert.ok(html.indexOf('운동 구성 점검')<html.indexOf('지도 의도나 의견을 들려주세요'));
+ assert.ok(html.indexOf('지도 의도나 의견을 들려주세요')<html.indexOf('다음 수업에 반영할 방향'));
+ assert.match(html,/상단 요약 유지/);assert.match(html,/트레이너가 직접 쓴 방향/);assert.match(html,/수업 방향 1 삭제/);
+ assert.ok(!html.includes('다음 수업 전 확인'));assert.ok(!html.includes('이 판단 논의하기'));assert.ok(!html.includes('지도 메모 저장'));
+ assert.match(html,/기록에서 확인한 것/);assert.match(html,/목표에 비춰 본 해석/);assert.match(html,/<dialog/);
+});
