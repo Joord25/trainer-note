@@ -76,3 +76,15 @@ test('trainer edits save without AI, preserve source and options, and survive re
  assert.equal((await service.workflowContext(uid,mid)).savedPlan.revision,1);
  assert.deepEqual(calls,['member-changes','cycle-plan']);
 });
+
+test('explicit member-change reanalysis bypasses cache while reopening stays free',async()=>{
+ const first=await analyzed();
+ await service.analyzeChanges(uid,mid,{inputKey:first.inputKey});
+ assert.deepEqual(calls,['member-changes']);
+ const refreshed=await service.analyzeChanges(uid,mid,{inputKey:first.inputKey,retry:true});
+ assert.equal(refreshed.status,'ready');assert.ok(refreshed.report);
+ assert.deepEqual(calls,['member-changes','member-changes']);
+ await service.workflowContext(uid,mid);
+ await service.analyzeChanges(uid,mid,{inputKey:first.inputKey});
+ assert.equal(calls.length,2);
+});

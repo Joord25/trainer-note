@@ -25,7 +25,6 @@
 .record-unified-toolbar{display:flex!important;flex-wrap:nowrap!important;align-items:center;gap:6px!important;min-width:0;padding:8px!important}
 .record-unified-toolbar>.workout-select-trigger{flex:1;min-width:0;width:0}
 .record-unified-toolbar>.workout-select-trigger>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.record-unified-toolbar .record-reread{flex-shrink:0;font-size:12px;padding:7px 9px;white-space:nowrap}
 .record-unified-toolbar>.bulk-compact-select,.record-unified-toolbar>.icon-button,.record-unified-toolbar>.analysis-actions{flex-shrink:0}
 .delete-scope-options{border:1px solid var(--line);border-radius:10px;margin:16px 0;padding:12px}
 .delete-scope-options label{display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer}
