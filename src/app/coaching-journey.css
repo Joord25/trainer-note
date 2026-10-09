@@ -80,7 +80,7 @@
 .journey-error-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}.coaching-journey .journey-error-actions>button{font-size:12px;font-weight:500;line-height:1.5;min-height:36px;padding:8px 12px;background:var(--surface,#fff);color:var(--ink,#24302a);border:1px solid var(--line,#dce3db);border-radius:7px;box-shadow:none}.journey-error-actions>button:hover{border-color:#94ac99;background:var(--surface-alt,#f4f7f2)}.journey-error-actions>button:focus-visible{outline:2px solid #64856d;outline-offset:3px}.journey-error-actions details{font-size:11px;color:var(--muted,#69766d)}.journey-error-actions summary{cursor:pointer}.journey-error-actions details>span{display:block;margin-top:4px}
 html[data-theme="dark"] .journey-error{background:#302b25;border-color:#504436}html[data-theme="dark"] .journey-error-icon{background:#44372a;color:#d6af82}
 
-.plan-view-toolbar{scroll-margin-top:20px}.plan-view-toolbar:empty{height:0}.coaching-journey .plan-view-toolbar>button{padding:6px 0;margin:0 0 16px;border:0;background:transparent;box-shadow:none;color:var(--muted,#69766d);font-size:12px}.plan-view-toolbar>button:hover{text-decoration:underline}
+.coaching-journey .plan-settings-toggle{flex:none;min-height:36px;padding:0;border:0;background:transparent;box-shadow:none;color:var(--muted,#69766d);font-size:12px;white-space:nowrap}.plan-settings-toggle:hover{text-decoration:underline}
 
 .set-load-control{display:flex;gap:6px;min-width:0;align-items:center}.set-load-control>label{flex:1;min-width:0}.set-load-control>select{width:64px;flex:0 0 64px;padding:7px 4px;border:1px solid var(--line);border-radius:6px;background:var(--surface,#fff);color:inherit;font:inherit;font-size:12px}
 
