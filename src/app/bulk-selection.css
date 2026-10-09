@@ -93,4 +93,9 @@
 .session-info-panel .record-page-overview{display:block;padding:12px 0 0;margin:0}.session-info-panel .page-date{flex-wrap:wrap}.session-info-panel .record-page-total{margin-top:12px;justify-content:flex-start}
 
 .session-overview-date{min-width:0;max-width:100%}
-.session-overview-source{display:block;width:100%;min-width:0;color:#75816f;font-size:12px;font-weight:400;line-height:1.5;overflow-wrap:anywhere}
+.session-overview-source{display:block;min-width:0;color:#75816f;font-size:12px;font-weight:400;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.session-overview-heading{grid-column:1;grid-row:1;min-width:0;display:flex;align-items:baseline;gap:12px}
+.session-overview-heading .session-overview-date,.review-workspace .session-overview-heading .session-overview-date{flex-direction:row;flex-wrap:nowrap;align-items:baseline;gap:8px;flex-shrink:0;white-space:nowrap}
+.session-source-link{width:auto;max-width:100%;padding:2px 0;border:0;border-radius:2px;background:transparent;color:#365d45;text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.session-source-link:hover{color:#203e2b;background:#eef4e8}
