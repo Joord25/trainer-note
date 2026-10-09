@@ -33,3 +33,15 @@ export async function inspectSourceFile(file:File):Promise<{id:string;contentTyp
   const digest=await crypto.subtle.digest('SHA-256',bytes);
   return {id:Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join(''),contentType};
 }
+
+export type ExistingSource = {id:string;name:string;status:string;originalRemoved:boolean};
+export class DuplicateSourceError extends Error {
+  readonly existing:ExistingSource;
+  constructor(id:string,source:{name:string;displayName?:string;status:string;originalRemoved?:boolean}) {
+    const name=sourceDisplayName(source.name,source.displayName);
+    const detail=source.originalRemoved?'원본은 정리됐지만 연결된 기록이 남아 있어요.':source.status==='uploading'?'이전 업로드가 완료되지 않았어요. 목록에서 저장 확인을 눌러주세요.':source.status==='deleting'?'이 파일의 삭제가 진행 중이에요. 삭제를 마친 뒤 다시 올려주세요.':'파일명이 달라도 내용이 같아 다시 저장하지 않았어요.';
+    super(`기존 파일 ‘${name}’과 내용이 같아요. ${detail}`);
+    this.name='DuplicateSourceError';
+    this.existing={id,name,status:source.status,originalRemoved:source.originalRemoved===true};
+  }
+}

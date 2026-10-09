@@ -4,7 +4,7 @@ import {deleteObject, getBlob, getMetadata, getStorage, ref, uploadBytesResumabl
 import {manageSource} from './server-ai';
 import {getClientAuth} from "./firebase-client";
 
-import {MAX_SOURCE_BYTES,inspectSourceFile,sourceObjectName,sourceDisplayName,type SourceContentType} from "./source-file";
+import {MAX_SOURCE_BYTES,inspectSourceFile,sourceObjectName,sourceDisplayName,DuplicateSourceError,type SourceContentType} from "./source-file";
 export const storageEnabled = process.env.NEXT_PUBLIC_STORAGE_ENABLED === "true";
 export type MemberFile = {sourceName?:string; originalRemoved?:boolean; deletionOperation?:string; id: string; name: string; size: number; contentType: SourceContentType; status: "uploading" | "ready" | "deleting"; createdAt: Timestamp | null; pending: boolean};
 class FileActionError extends Error {}
@@ -30,14 +30,25 @@ export async function uploadMemberFile(memberId: string, file: File, progress: (
   const {id,contentType}=inspected;
   initial.check(); signal.throwIfAborted();
   const s = scope(memberId,id,contentType);
-  await runTransaction(s.db, async tx => {
+  const resuming=await runTransaction(s.db, async tx => {
     const member = await tx.get(s.member), existing = await tx.get(s.file!);
     if (!member.exists()) throw new FileActionError("회원이 삭제됐어요. 목록을 다시 확인해주세요.");
-    if (existing.exists()) throw new FileActionError("이미 연결된 파일이에요. 저장 확인이 필요한 파일은 목록에서 확인해주세요.");
+    if (existing.exists()) {
+      const data=existing.data();
+      // Retry the same bytes after an interrupted upload without reserving/counting twice.
+      if(data.status==='uploading'&&!data.originalRemoved)return true;
+      throw new DuplicateSourceError(id,{name:data.name,displayName:data.displayName,status:data.status,originalRemoved:data.originalRemoved});
+    }
     tx.set(s.file!, {name:file.name, size:file.size, contentType, status:"uploading", createdAt:serverTimestamp(), updatedAt:serverTimestamp()});
     tx.update(s.member, {fileCount:(member.data().fileCount ?? 0)+1, lastFileId:id, updatedAt:serverTimestamp()});
+    return false;
   });
   s.check(); signal.throwIfAborted();
+  if(resuming){
+    // Bytes may already be stored and only confirmation failed. Storage forbids overwrites.
+    try{await finalizeMemberFile(memberId,id,contentType);s.check();signal.throwIfAborted();progress(100);return id;}
+    catch(error){if((error as {code?:string})?.code!=='storage/object-not-found')throw error;}
+  }
   const task = uploadBytesResumable(s.object!, file, {contentType,cacheControl:"private, max-age=0, no-store"});
   const cancel = () => task.cancel(); signal.addEventListener("abort",cancel,{once:true});
   try {
@@ -66,7 +77,7 @@ export async function deleteMemberFile(memberId: string, id: string, _contentTyp
   await manageSource(memberId,id,'delete');
 }
 export function fileError(error: unknown) {
-  if (error instanceof FileActionError) return error.message;
+  if (error instanceof FileActionError || error instanceof DuplicateSourceError) return error.message;
   const code = (error as {code?:string})?.code;
   if (code === "storage/object-not-found") return "파일 업로드가 완료되지 않았어요. 이 항목을 삭제한 뒤 다시 올려주세요.";
   if (code === "storage/canceled" || (error instanceof DOMException && error.name === "AbortError")) return "업로드를 중단했어요. 목록에서 저장 상태를 확인하거나 삭제할 수 있어요.";

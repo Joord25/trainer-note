@@ -1,4 +1,6 @@
 "use client";
+import {WorkspaceToast} from "./workspace-toast";
+import {uploadSummaryText} from "../lib/upload-result";
 import {AnalysisControlsMenu} from './analysis-controls-menu';
 import {AutoHideAnalysisTabs} from './auto-hide-analysis-tabs';
 import {RegionExerciseList} from './region-exercise-list';
@@ -127,7 +129,7 @@ export function LiveAnalysisWorkspace({memberId,memberName,goal,online,uploadReq
 
  <header className="review-titlebar"><button className="review-back" onClick={onBack} aria-label="회원 목록으로 돌아가기" title="회원 목록으로 돌아가기"><Icon name="back" size={18}/><span>돌아가기</span></button><h1 title={`${memberName} · 운동 기록`}>{memberName} · 운동 기록</h1><div className="review-title-actions"><button aria-label="훈련 목표 설정" className="review-goal-button" onClick={()=>setGoalOpen(true)}><Icon name="target" size={16}/> 훈련 목표</button><div className="segmented review-view-mode" aria-label="화면 구성"><button aria-pressed={mode===2} className={mode===2?'selected':''} onClick={closeRightPanel}>2뷰</button><button aria-pressed={mode===3} className={mode===3?'selected':''} title="원본 · 회원 변화 · 분석 자료와 AI 도우미" onClick={()=>{setMode(3);setSourceHidden(false);}}>3뷰</button></div></div></header>
 
- {uploadNotice&&<p className="file-error" role="status">{uploadNotice}</p>}
+ <WorkspaceToast message={uploadNotice} onClose={()=>setUploadNotice('')}/>
  <ResizableReviewColumns mode={mode} sourceHidden={sourceHidden} assistantOnly={assistantOnly}>
  <section className="review-original" aria-label="원본 일지" hidden={sourceHidden}>
   {files.length?<ContinuousSourceViewer onUpload={()=>setUpload(true)} onCollapse={()=>{setSourceHidden(true);setSelectionMode(false);}} onToggleThumbnails={()=>setThumbnailsOpen(v=>!v)} onNotice={setUploadNotice} online={online&&serverAiEnabled} beforeDelete={()=>{if(dirty.current||planDirty.current){setUploadNotice("작성 중인 내용을 먼저 저장하거나 취소해주세요.");return false;}return true;}} onDeleteBusy={v=>onUnsavedChange?.(v||dirty.current||planDirty.current)} memberId={memberId} files={files} selectedFile={originalFile||selectedFile} sourcePage={sourcePage} jumpRequest={jumpRequest} thumbnailsOpen={thumbnailsOpen} onNavigate={(id,page)=>{if(fromOriginal(id,page)===false)return false;original(id,page);return true;}} onPageClick={fromOriginal}/>:<div className="empty-state"><Icon name="upload" size={30}/><h3>일지를 올려주세요</h3><p>PDF·PNG·JPEG를 한 화면에서 볼 수 있어요.</p><button className="primary" onClick={()=>setUpload(true)}>일지 추가</button></div>}
@@ -143,7 +145,7 @@ export function LiveAnalysisWorkspace({memberId,memberName,goal,online,uploadReq
  {selectionMode&&<ScreenCapture onCancel={()=>setSelectionMode(false)} onCapture={v=>{setSelection(v);setSelectionMode(false);openAssistant();}}/>}
  {goalOpen&&!goalLoaded&&<GoalLoadingDialog error={goalError} onRetry={()=>setGoalRetry(v=>v+1)} onClose={()=>setGoalOpen(false)}/>}
  {goalOpen&&goalLoaded&&<TrainingGoalDialog memberId={memberId} initial={trainingGoal} legacyGoal={goal} online={online} onClose={()=>setGoalOpen(false)} onSaved={upload=>{setGoalOpen(false);if(upload&&!records.length&&!files.length)setUpload(true);}}/>}
- {upload&&<UploadDialog onClose={()=>setUpload(false)}><MemberFiles memberId={memberId} memberName={memberName} online={online} onUploaded={(id,result)=>{setUploadNotice(result.failed?`${result.uploaded}개 업로드 완료 · ${result.failed}개 실패. 일지 추가에서 실패한 파일을 다시 올려주세요.`:'');setSelectedFile('all');setOriginalFile(id);setSelectedRow('');setSourcePage(1);setSourceHidden(false);setJumpRequest(v=>v+1);setOriginalRequest(v=>v+1);setReviewing(true);setPane('source');setTab('summary');setUpload(false);}}/></UploadDialog>}
+ {upload&&<UploadDialog onClose={()=>setUpload(false)}><MemberFiles memberId={memberId} memberName={memberName} online={online} onUploaded={(id,result)=>{setUploadNotice(uploadSummaryText(result));setSelectedFile('all');setOriginalFile(id);setSelectedRow('');setSourcePage(1);setSourceHidden(false);setJumpRequest(v=>v+1);setOriginalRequest(v=>v+1);setReviewing(true);setPane('source');setTab('summary');setUpload(false);}}/></UploadDialog>}
  </div>;
 }
 function UploadDialog({onClose,children}:{onClose:()=>void;children:React.ReactNode}){const ref=useRef<HTMLDialogElement>(null);useEffect(()=>{const old=document.activeElement as HTMLElement|null;ref.current?.showModal();return()=>old?.focus();},[]);return <dialog ref={ref} className="live-upload-dialog" onCancel={e=>{e.preventDefault();onClose();}}><div className="dialog-title"><div><h2>일지를 올리면 기록부터 확인해요</h2><p>읽은 결과는 저장하므로 다시 열 때 재판독하지 않아요.</p></div><button className="icon-button" aria-label="업로드 닫기" onClick={onClose}><Icon name="close"/></button></div>{children}</dialog>;}
