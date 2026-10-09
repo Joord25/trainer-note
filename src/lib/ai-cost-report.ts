@@ -1,0 +1,9 @@
+export type UsagePurpose='all'|'production'|'development'|'unclassified';
+export type UsageStats={calls:number;settledCalls:number;completedCalls:number;failedCalls:number;pendingCalls:number;usedMicros:number;reservedMicros:number;inputTokens:number;outputTokens:number;uncertainCalls:number;uncertainMicros:number;searchMicros:number;durationMs:number;timedCalls:number;averageMicros:number|null;averageDurationMs:number|null};
+export type UsageRow=UsageStats&{id:string;label:string};
+export type UsageReport={month:string;purpose:UsagePurpose;totals:UsageStats;sources:Record<Exclude<UsagePurpose,'all'>,UsageStats>;rows:UsageRow[];breakdowns:Record<UsagePurpose,{totals:UsageStats;rows:UsageRow[]}>;trackingPurpose:'production'|'development';partial:boolean;scannedCalls:number;limit:number;monthly:{calls:number;usedMicros:number;reservedMicros:number};unattributedMicros:number;unattributedCalls:number;asOf:string};
+export const purposeLabels:Record<UsagePurpose,string>={all:'전체',production:'실사용',development:'개발·테스트',unclassified:'구분 없음'};
+export const currentUsageMonth=()=>new Date(Date.now()+9*3600000).toISOString().slice(0,7);
+export function usageMonths(current=currentUsageMonth()){const [year,month]=current.split('-').map(Number);return Array.from({length:24},(_,i)=>{const d=new Date(Date.UTC(year,month-1-i,1));return d.toISOString().slice(0,7);});}
+export function formatUsageMoney(micros:number|null,wonRate:number|null=null){if(micros===null)return '—';return wonRate?`약 ₩${(micros/1e6*wonRate).toLocaleString('ko-KR',{maximumFractionDigits:2})}`:`$${(micros/1e6).toFixed(4)}`;}
+export function estimateUsage(rows:UsageRow[],counts:Record<string,number>){let micros=0;const missing:string[]=[];for(const [id,count]of Object.entries(counts)){if(!Number.isFinite(count)||count<=0)continue;const row=rows.find(row=>row.id===id);if(!row||row.averageMicros===null){missing.push(id);continue;}micros+=row.averageMicros*count;}return {micros,missing};}

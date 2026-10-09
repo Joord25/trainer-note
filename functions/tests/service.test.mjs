@@ -925,3 +925,13 @@ test('nutrition topic survives the server history window and explicit exercise r
  await service.chat(uid,mid,chatInput({question:'현재 운동 기록을 분석해줘',fileId:'',previousId,requestId:'nutrition-back-to-records'}));
  assert.ok(JSON.parse(calls.at(-1).parts[0].text).records.length>0);
 });
+
+test('paid calls freeze their usage purpose at reservation, including failed calls',async()=>{
+ const settings=db.doc(`trainers/${uid}/usageSettings/current`);await settings.set({purpose:'development'});
+ let release,start;const started=new Promise(resolve=>{start=resolve;});const hold=new Promise(resolve=>{release=resolve;});
+ provider=async()=>{start();await hold;return {value:raw(),usage:{inputTokens:100,outputTokens:20}};};
+ const pending=service.startImport(uid,mid,fileId);await started;await settings.set({purpose:'production'});release();await pending;
+ const logged=await db.collection(`trainers/${uid}/aiCalls`).get();assert.equal(logged.size,1);assert.equal(logged.docs[0].data().purpose,'development');assert.equal(logged.docs[0].data().status,'complete');
+ provider=async()=>{throw Object.assign(Error('preflight'),{notBillable:true});};await assert.rejects(()=>service.chat(uid,mid,chatInput({fileId:'',requestId:'usage-purpose-failure',question:'스쿼트란?'})));
+ const failed=(await db.collection(`trainers/${uid}/aiCalls`).get()).docs.map(d=>d.data()).find(v=>v.status==='failed');assert.equal(failed.purpose,'production');assert.equal(failed.estimatedMicros,0);
+});

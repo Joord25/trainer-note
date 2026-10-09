@@ -1,0 +1,36 @@
+"use client";
+import {useEffect,useState} from 'react';
+import {aiMessage,readUsageReport,setUsagePurpose} from '../lib/server-ai';
+import {currentUsageMonth,usageMonths,purposeLabels,formatUsageMoney,estimateUsage,type UsageReport,type UsagePurpose,type UsageRow} from '../lib/ai-cost-report';
+const scenarios=[['extraction','판독'],['analysis','분석'],['chat-quick','채팅 · 기본'],['chat-deep','채팅 · 심층'],['planning','수업 계획']] as const;
+export function AiCostPanel(){
+ const [month,setMonth]=useState(currentUsageMonth),[report,setReport]=useState<UsageReport|null>(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[saving,setSaving]=useState(false),[saveError,setSaveError]=useState('');
+ useEffect(()=>{let active=true;setReport(null);setError('');readUsageReport(month,'all').then(value=>{if(active)setReport(value);}).catch(e=>{if(active)setError(aiMessage(e));});return()=>{active=false;};},[month,refresh]);
+ async function changePurpose(purpose:'production'|'development'){if(saving)return;setSaving(true);setSaveError('');try{await setUsagePurpose(purpose);setReport(value=>value?{...value,trackingPurpose:purpose}:value);}catch(e){setSaveError(aiMessage(e));}finally{setSaving(false);}}
+ return <section className="ai-cost-panel"><div className="cost-heading"><div><h3>AI 이용량과 비용</h3><p>이 계정의 앱 내 사용량 · 한국 시간 기준</p></div><button disabled={!report&&!error} onClick={()=>setRefresh(v=>v+1)}>새로고침</button></div>
+  <label className="cost-month">조회 월<select aria-label="AI 비용 조회 월" value={month} onChange={e=>setMonth(e.target.value)}>{usageMonths().map(value=><option key={value} value={value}>{value.replace('-','년 ')}월</option>)}</select></label>
+  {error?<div role="alert" className="file-error">{error}<button onClick={()=>setRefresh(v=>v+1)}>다시 불러오기</button></div>:!report?<p role="status">기능별 사용량을 불러오고 있어요…</p>:<><AiCostReportView report={report}/>
+   <fieldset className="cost-tracking"><legend>앞으로 발생하는 요청 구분</legend><label><input type="checkbox" checked={report.trackingPurpose==='development'} disabled={saving} onChange={e=>void changePurpose(e.target.checked?'development':'production')}/>이 계정의 새 AI 요청을 개발·테스트로 집계</label><p>판독·자동 분석을 포함한 이 계정 전체에 적용됩니다. 기존 기록의 구분은 바꾸지 않아요.</p><p role="status">{saving?'구분을 저장하고 있어요…':`새 요청은 ‘${purposeLabels[report.trackingPurpose]}’로 집계됩니다.`}</p>{saveError&&<p role="alert" className="file-error">{saveError}</p>}</fieldset>
+  </>}
+ </section>;
+}
+export function AiCostReportView({report}:{report:UsageReport}){
+ const [purpose,setPurpose]=useState<UsagePurpose>('all'),[rate,setRate]=useState(''),[counts,setCounts]=useState<Record<string,number>>({});
+ const selected=report.breakdowns[purpose],{totals,rows}=selected,wonRate=rate!==''&&Number(rate)>0&&Number(rate)<=100000?Number(rate):null,money=(value:number|null)=>formatUsageMoney(value,wonRate);
+ const projection=estimateUsage(rows,counts),hasScenario=Object.values(counts).some(value=>value>0),hasGap=report.partial||report.unattributedCalls>0||report.unattributedMicros>0;
+ return <>
+  <p className="cost-note">앱 서버에 기록된 AI 호출의 추정 비용입니다. 외부 테스트 스크립트·다른 계정·저장소 비용은 포함하지 않아 Google 청구액과 다를 수 있어요.</p>
+  <div className="cost-filters" aria-label="AI 사용 구분">{(Object.keys(purposeLabels) as UsagePurpose[]).map(value=><button key={value} aria-pressed={purpose===value} onClick={()=>setPurpose(value)}>{purposeLabels[value]}</button>)}</div>
+  <div className="cost-summary"><div><span>예상 API 비용</span><strong>{money(totals.usedMicros)}</strong></div><div><span>정산된 API 호출</span><strong>{totals.settledCalls.toLocaleString()}<small>회</small></strong></div><div><span>호출 1회 평균</span><strong>{money(totals.averageMicros)}</strong></div></div>
+  <div className="cost-currency"><label>원화로 환산<input aria-label="원화 환산 환율" type="number" min="1" max="100000" placeholder="1달러당 원" value={rate} onChange={e=>setRate(e.target.value)}/></label><span>{wonRate?`직접 입력한 환율 $1 = ${wonRate.toLocaleString()}원`:'미입력 시 USD · 실시간 환율 아님'}</span></div>
+  {hasGap&&<p className="cost-notice" role="status">{report.partial?`호출이 많아 ${report.limit.toLocaleString()}건만 분류했습니다. 아래 표는 일부 집계입니다.`:'월 합계 중 상세 호출 기록으로 연결되지 않은 비용이 있습니다.'} 월 전체 기록: {report.monthly.calls.toLocaleString()}회 · {money(report.monthly.usedMicros)}. 분류되지 않은 금액 {money(report.unattributedMicros)}.</p>}
+  {totals.uncertainCalls>0&&<p className="cost-notice">사용량 응답을 받지 못한 {totals.uncertainCalls}회는 보수적 추정액 {money(totals.uncertainMicros)}을 포함합니다. 평균 비용에도 영향을 줍니다.</p>}
+  <div className="cost-table-scroll" role="region" aria-label="기능별 AI 비용" tabIndex={0}><table><caption>기능별 비용 · {purposeLabels[purpose]}</caption><thead><tr><th scope="col">기능</th><th scope="col">정산 호출</th><th scope="col">실패</th><th scope="col">예상 비용</th><th scope="col">1회 평균</th></tr></thead><tbody>{rows.length?rows.map(row=><CostRow key={row.id} row={row} money={money}/>):<tr><td colSpan={5}>이 구분에 해당하는 호출이 없어요.</td></tr>}</tbody></table></div>
+  <p className="cost-note">입력 {totals.inputTokens.toLocaleString()} · 출력 {totals.outputTokens.toLocaleString()} 토큰. 처리 중 {totals.pendingCalls}회 · 예약액 {money(totals.reservedMicros)}은 위 비용과 평균에서 제외합니다.</p>
+  <details className="cost-projection"><summary>사용량을 가정해 비용 계산</summary><p>선택한 월·구분의 API 호출 평균을 사용합니다. 실패 비용도 포함되며 판독 1장·질문 1건의 가격과는 다릅니다. 검색·재시도는 별도 호출이에요.</p><div className="cost-scenario-inputs">{scenarios.map(([id,label])=><label key={id}>{label}<span><input aria-label={`${label} 예상 API 호출 수`} type="number" min="0" max="1000000" step="1" placeholder="0" value={counts[id]??''} onChange={e=>setCounts(value=>({...value,[id]:Math.min(1000000,Math.max(0,Math.floor(Number(e.target.value)||0)))}))}/>회</span></label>)}</div><output aria-live="polite">{report.partial?'일부 집계에서는 예측을 제공하지 않아요.':!hasScenario?'예상 호출 수를 입력해주세요.':projection.missing.length?'선택한 구분에 평균을 낼 호출 기록이 없는 기능이 있어요.':`입력한 사용량의 예상 비용 ${money(projection.micros)}`}</output><p>입력한 기능만 합산합니다. 자료 길이·모드·검색 사용 여부에 따라 실제 비용은 달라져요.</p></details>
+  <details className="cost-method"><summary>집계 범위와 계산 기준</summary><ul><li>실패를 포함해 정산된 API 호출의 비용 합계 ÷ 정산 호출 수로 평균을 계산합니다. 저장된 결과를 다시 보는 동작에는 새 AI 호출이 없습니다.</li><li>호출 당시 기록된 토큰 단가와 검색 비용 추정치를 사용합니다. 무료 할당량·크레딧·세금·환율·서버·저장소 비용은 제외합니다.</li><li>‘구분 없음’은 개발용 여부가 기록되지 않은 과거 호출입니다. 실제 사용으로 임의 분류하지 않습니다.</li><li>앱 서버를 거치지 않은 개발 테스트 스크립트와 다른 계정의 비용은 포함되지 않습니다. Firebase 프로젝트 전체 청구액과는 다릅니다.</li></ul></details>
+ </>;
+}
+function CostRow({row,money}:{row:UsageRow;money:(value:number|null)=>string}){
+ return <tr><th scope="row"><details><summary>{row.label}</summary><p>입력 {row.inputTokens.toLocaleString()} · 출력 {row.outputTokens.toLocaleString()} 토큰</p><p>처리 중 {row.pendingCalls}회 · 불확실한 추정 {row.uncertainCalls}회</p>{row.averageDurationMs!==null&&<p>평균 {(row.averageDurationMs/1000).toFixed(1)}초</p>}{row.searchMicros>0&&<p>비용 중 검색 {money(row.searchMicros)}</p>}</details></th><td>{row.settledCalls.toLocaleString()}회</td><td>{row.failedCalls.toLocaleString()}회</td><td>{money(row.usedMicros)}</td><td>{money(row.averageMicros)}</td></tr>;
+}

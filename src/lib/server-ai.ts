@@ -51,3 +51,6 @@ export function listenChatSessions(mid:string,cb:(v:ChatSession[])=>void,error:(
 export async function readChatCapture(mid:string,id:string){const s=scope(),snapshot=await getDoc(doc(s.db,'trainers',s.uid,'members',mid,'chatAttachments',id));return snapshot.data()?.image as string|undefined;}
 
 export async function callAccount(data:Record<string,unknown>){const s=scope();return (await httpsCallable<Record<string,unknown>,{status:string;message?:string;receiptId?:string}>(getFunctions(s.app,'us-central1'),'trainerAccount',{timeout:60000})(data)).data;}
+
+export async function readUsageReport(month:string,purpose:import('./ai-cost-report').UsagePurpose){const s=scope();return (await httpsCallable<Record<string,unknown>,import('./ai-cost-report').UsageReport>(getFunctions(s.app,'us-central1'),'trainerUsage',{timeout:60000})({action:'report',month,purpose})).data;}
+export async function setUsagePurpose(purpose:'production'|'development'){const s=scope();return (await httpsCallable<Record<string,unknown>,{purpose:'production'|'development'}>(getFunctions(s.app,'us-central1'),'trainerUsage',{timeout:60000})({action:'setPurpose',purpose})).data;}

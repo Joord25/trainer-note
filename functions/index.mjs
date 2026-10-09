@@ -1,3 +1,4 @@
+import {createUsageReporting} from './usage-report.mjs';
 import {createRecordDeletion} from './record-deletion.mjs';
 import {createSourceManagement} from './source-management.mjs';
 import {createRequestGuard} from './request-guard.mjs';
@@ -20,6 +21,7 @@ const db=getFirestore(),secret=defineSecret('TRAINER_NOTE_GEMINI_API_KEY');
 const region='us-central1',options={region,maxInstances:3,minInstances:0,concurrency:4,memory:'512MiB',timeoutSeconds:180,secrets:[secret]};
 const accountService=createAccountService({db,auth:getAuth(),bucket:getStorage().bucket(`${process.env.GCLOUD_PROJECT}.firebasestorage.app`),enqueue:async(data,delay,id)=>{try{await getFunctions().taskQueue(`locations/${region}/functions/purgeTrainerAccount`).enqueue(data,{id,scheduleDelaySeconds:delay,dispatchDeadlineSeconds:540});}catch(e){if(e.code!=='functions/task-already-exists')throw e;}}});
 const requestGuard=createRequestGuard({db});
+const usageReporting=createUsageReporting({db});
 const manageSource=createSourceManagement({db,bucket:getStorage().bucket(`${process.env.GCLOUD_PROJECT}.firebasestorage.app`)});
 const deletionPending=async uid=>(await db.doc(`accountDeletions/${uid}`).get()).exists;
 const gemini=createGemini({apiKey:()=>secret.value()});
@@ -99,3 +101,18 @@ export const trainerAccount=onCall({region,enforceAppCheck:true,maxInstances:3,t
  }catch(e){throw new HttpsError('failed-precondition',e.message);}
 });
 export const purgeTrainerAccount=onTaskDispatched({region,timeoutSeconds:540,memory:'512MiB',maxInstances:2,retryConfig:{maxAttempts:10,minBackoffSeconds:60,maxBackoffSeconds:3600},rateLimits:{maxConcurrentDispatches:1}},async request=>accountService.finishDeletion(request.data));
+
+// Account-scoped summaries only. Raw prompts, member records and provider configuration never leave the server.
+export const trainerUsage=onCall({region,enforceAppCheck:true,maxInstances:3,memory:'256MiB',timeoutSeconds:60},async request=>{
+ if(!request.auth)throw new HttpsError('unauthenticated','로그인이 필요해요.');
+ const uid=request.auth.uid,data=request.data;
+ if(!data||typeof data!=='object'||Array.isArray(data)||Buffer.byteLength(JSON.stringify(data))>1000)throw new HttpsError('invalid-argument','이용량 요청을 확인해주세요.');
+ if(await deletionPending(uid))throw new HttpsError('permission-denied','회원탈퇴 처리 중이에요.');
+ const release=await requestGuard.acquire(uid);
+ try{
+  if(data.action==='report')return await usageReporting.report(uid,data);
+  if(data.action==='setPurpose')return await usageReporting.setPurpose(uid,data);
+  throw Error('지원하지 않는 요청이에요.');
+ }catch(e){throw new HttpsError('failed-precondition',safeError(e));}
+ finally{try{await release();}catch{console.error('trainerUsage request lease release failed; lease will expire');}}
+});
