@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
+import {sourceDisplayName} from "../lib/source-file";
 import {SavedRecordImport} from "./saved-record-import";
 import {serverAiEnabled,listenImports,type SavedImport} from "../lib/server-ai";
 import {AiRecordImport} from "./ai-record-import";
@@ -40,9 +41,9 @@ export function MemberFiles({memberId,memberName,online,onUploaded}:{memberId:st
     let count=0,lastId='';const errors:string[]=[];
     for(let i=0;i<list.length;i++){
       if(abort.signal.aborted||!alive.current)break;
-      const file=list[i];setUpload({name:file.name,progress:0,index:i+1,total:list.length});
-      try{lastId=await uploadMemberFile(memberId,file,value=>{if(alive.current)setUpload({name:file.name,progress:value,index:i+1,total:list.length});},abort.signal);count++;}
-      catch(e){errors.push(file.name+": "+fileError(e));}
+      const file=list[i],name=sourceDisplayName(file.name);setUpload({name,progress:0,index:i+1,total:list.length});
+      try{lastId=await uploadMemberFile(memberId,file,value=>{if(alive.current)setUpload({name,progress:value,index:i+1,total:list.length});},abort.signal);count++;}
+      catch(e){errors.push(name+": "+fileError(e));}
     }
     working.current=false;controller.current=null;
     if(alive.current){setUpload(null);setError(errors.join("\n"));if(count){setNotice(`${count}개 파일을 저장했어요.`);if(errors.length)setCompletedUpload({id:lastId,uploaded:count,failed:errors.length});else onUploaded?.(lastId,{uploaded:count,failed:0});}}

@@ -1,3 +1,13 @@
+// Finder can expose a slash in a date as a colon in the browser's File.name.
+// Normalize only a trailing month/day label for display; keep stored names intact.
+export function sourceDisplayName(name:string,displayName?:string):string {
+  if(displayName)return displayName;
+  return name.replace(/(^|\s)(0?[1-9]|1[0-2]):(0?[1-9]|[12]\d|3[01])(?=\.(?:pdf|png|jpe?g)$)/i,(match,prefix,month,day)=>{
+    const days=[31,29,31,30,31,30,31,31,30,31,30,31];
+    return Number(day)<=days[Number(month)-1]?`${prefix}${month}/${day}`:match;
+  });
+}
+
 export const MAX_SOURCE_BYTES = 50 * 1024 * 1024;
 export type SourceContentType = "application/pdf" | "image/png" | "image/jpeg";
 export function sourceObjectName(contentType:SourceContentType) {

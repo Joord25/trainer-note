@@ -4,7 +4,7 @@ import {deleteObject, getBlob, getMetadata, getStorage, ref, uploadBytesResumabl
 import {manageSource} from './server-ai';
 import {getClientAuth} from "./firebase-client";
 
-import {MAX_SOURCE_BYTES,inspectSourceFile,sourceObjectName,type SourceContentType} from "./source-file";
+import {MAX_SOURCE_BYTES,inspectSourceFile,sourceObjectName,sourceDisplayName,type SourceContentType} from "./source-file";
 export const storageEnabled = process.env.NEXT_PUBLIC_STORAGE_ENABLED === "true";
 export type MemberFile = {sourceName?:string; originalRemoved?:boolean; deletionOperation?:string; id: string; name: string; size: number; contentType: SourceContentType; status: "uploading" | "ready" | "deleting"; createdAt: Timestamp | null; pending: boolean};
 class FileActionError extends Error {}
@@ -20,7 +20,7 @@ function scope(memberId: string, fileId?: string, contentType:SourceContentType=
 }
 export function listenMemberFiles(memberId: string, onData: (files: MemberFile[], cached: boolean) => void, onError: (error: unknown) => void) {
   const s = scope(memberId);
-  return onSnapshot(query(s.files, orderBy("createdAt", "desc")), {includeMetadataChanges: true}, snapshot => onData(snapshot.docs.map(d => ({id:d.id, name:d.data().displayName||d.data().name, sourceName:d.data().name, originalRemoved:d.data().originalRemoved===true, deletionOperation:d.data().deletionOperation, size:d.data().size, contentType:d.data().contentType, status:d.data().status, createdAt:d.data().createdAt ?? null, pending:d.metadata.hasPendingWrites})), snapshot.metadata.fromCache), onError);
+  return onSnapshot(query(s.files, orderBy("createdAt", "desc")), {includeMetadataChanges: true}, snapshot => onData(snapshot.docs.map(d => ({id:d.id, name:sourceDisplayName(d.data().name,d.data().displayName), sourceName:d.data().name, originalRemoved:d.data().originalRemoved===true, deletionOperation:d.data().deletionOperation, size:d.data().size, contentType:d.data().contentType, status:d.data().status, createdAt:d.data().createdAt ?? null, pending:d.metadata.hasPendingWrites})), snapshot.metadata.fromCache), onError);
 }
 export async function uploadMemberFile(memberId: string, file: File, progress: (value: number) => void, signal: AbortSignal) {
   if (!storageEnabled) throw new FileActionError("파일 저장 기능을 준비하고 있어요.");
