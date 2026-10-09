@@ -890,3 +890,20 @@ test('discussion chat shares analysis basis, waits for explicit apply, and rejec
  await assert.rejects(service.chat(uid,mid,chatInput({fileId:'',discussion,previousId:request.requestId,requestId:'99999999-9999-4999-a999-999999999999'})),/대상 항목이 바뀌었어요/);
  assert.equal(calls.length,callCount);
 });
+
+
+test('meal planning uses focused instructions in both modes and normal coaching keeps its original context',async()=>{
+ const {chatMode,CHAT_PROMPT}=await import('../chat.mjs');
+ provider=async()=>plainAnswer();
+ for(const [i,answerMode] of ['quick','deep'].entries()){
+  const question='하루 식단 짜줘';
+  await service.chat(uid,mid,chatInput({fileId:'',question,answerMode,requestId:`meal-mode-test-00000${i}`}));
+  const expected=chatMode(answerMode,question);
+  assert.notEqual(expected.systemPrompt,CHAT_PROMPT);
+  assert.ok(calls.at(-1).system.startsWith(expected.systemPrompt));
+  assert.equal(calls.at(-1).model,expected.model);
+  assert.equal(JSON.parse(calls.at(-1).parts[0].text).question,question);
+ }
+ await service.chat(uid,mid,chatInput({fileId:'',question:'스쿼트 세트를 늘릴까?',requestId:'normal-coaching-test-01'}));
+ assert.ok(calls.at(-1).system.startsWith(CHAT_PROMPT));
+});

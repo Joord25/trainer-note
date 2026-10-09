@@ -11,7 +11,7 @@ import {ASSESSMENT_PROMPT,ASSESSMENT_SCHEMA,ASSESSMENT_SOURCES,assessmentRequest
 import {validateTrainingGoal} from './generated/training-goals.mjs';
 import {currentReviewAlertKeys} from './generated/review-alerts.mjs';
 import {requestedSearchMode,SEARCH_QUERY_MICROS,SEARCH_RESERVE_QUERIES,SEARCH_REVIEW_PROMPT,SEARCH_REVIEW_SCHEMA,validatePublicQuery,searchDecision,isAllowedReview,isSearchCapabilityQuestion,SEARCH_CAPABILITY_ANSWER} from './web-search.mjs';
-import {CHAT_VERSION,CHAT_MAX_INPUT_TOKENS,chatMode,prepareChatFacts,containsPrivateImplementation,isPrivateImplementationOnly,PRIVATE_IMPLEMENTATION_RESULT,CHAT_PROMPT,chatEvidencePrompt,validateChatRequest,chatSchema,validateChatAnswer,compactChatFacts,chatProgramSessions,CHAT_SYNTHESIS_PROMPT} from './chat.mjs';
+import {CHAT_VERSION,CHAT_MAX_INPUT_TOKENS,chatMode,prepareChatFacts,containsPrivateImplementation,isPrivateImplementationOnly,PRIVATE_IMPLEMENTATION_RESULT,chatEvidencePrompt,validateChatRequest,chatSchema,validateChatAnswer,compactChatFacts,chatProgramSessions,CHAT_SYNTHESIS_PROMPT} from './chat.mjs';
 import {evaluateJudgment,selectCases,validateCriteria,modelJudgmentContext,judgmentResponseSchema,judgmentDate} from './judgment.mjs';
 import {randomUUID} from 'node:crypto';
 import {FieldValue,Timestamp} from 'firebase-admin/firestore';
@@ -391,7 +391,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    const facts=discussion?{...rawFacts,chatContext:{kind:'member'},history:history.map(({question,answer})=>({question,answer}))}:prepareChatFacts(rawFacts),answerRecords=facts.records,answerImage=['hypothetical','general'].includes(facts.scope)?null:image;
    const deadline=Date.now()+140000;
    const remaining=()=>{const ms=deadline-Date.now();if(ms<3000)throw Error('답변 준비 시간이 길어졌어요. 다시 시도해주세요.');return Math.min(ms,60000);};
-   const result=isPrivateImplementationOnly(input.question)?{value:PRIVATE_IMPLEMENTATION_RESULT,usage:null}:isSearchCapabilityQuestion(input.question)?{value:SEARCH_CAPABILITY_ANSWER,usage:null}:await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:CHAT_PROMPT+'\n'+mode.prompt+chatEvidencePrompt(facts)+(discussion?'\n'+discussionSystem():''),schema:discussion?discussionSchema(chatSchema(answerRecords,input.question,true)):chatSchema(answerRecords,input.question),parts:[{text:JSON.stringify(compactChatFacts(facts))},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
+   const result=isPrivateImplementationOnly(input.question)?{value:PRIVATE_IMPLEMENTATION_RESULT,usage:null}:isSearchCapabilityQuestion(input.question)?{value:SEARCH_CAPABILITY_ANSWER,usage:null}:await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:mode.systemPrompt+'\n'+mode.prompt+chatEvidencePrompt(facts)+(discussion?'\n'+discussionSystem():''),schema:discussion?discussionSchema(chatSchema(answerRecords,input.question,true)):chatSchema(answerRecords,input.question),parts:[{text:JSON.stringify(compactChatFacts(facts))},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
    const decided=discussion?validateDecisionProposal(result.value?.decisionProposal,discussion.target,{kgs:discussion.kgs}):null;
    let validated=validateChatAnswer(result.value,answerRecords,input.answerMode),webSources=[],searchSuggestions='',searchNotice='';
    const decision=searchDecision(result.value,input.question);
@@ -412,7 +412,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
      // Public search stays isolated. Only this private, non-search request joins
      // grounded sources with member context; it never sends member data to Search.
      try{
-      const merged=await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:CHAT_PROMPT+'\n'+mode.prompt+chatEvidencePrompt(facts)+'\n'+CHAT_SYNTHESIS_PROMPT,schema:chatSchema(answerRecords,input.question,true),parts:[{text:JSON.stringify({...compactChatFacts(facts),publicResearch:search.value})},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
+      const merged=await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:mode.systemPrompt+'\n'+mode.prompt+chatEvidencePrompt(facts)+'\n'+CHAT_SYNTHESIS_PROMPT,schema:chatSchema(answerRecords,input.question,true),parts:[{text:JSON.stringify({...compactChatFacts(facts),publicResearch:search.value})},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
       if(merged.value.searchDecision!=='none')throw Error('검색 후 답변 상태 오류');
       const combined=validateChatAnswer(merged.value,answerRecords,input.answerMode);
       if([...combined.answer.matchAll(/\[웹(\d+)\]/g)].some(m=>Number(m[1])<1||Number(m[1])>webSources.length))throw Error('검색 출처 번호 오류');

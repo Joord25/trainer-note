@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {validateChatRequest,validateChatAnswer,chatSchema,compactChatFacts} from '../chat.mjs';
+import {validateChatRequest,validateChatAnswer,chatSchema,compactChatFacts,chatMode} from '../chat.mjs';
 const request={requestId:'11111111-1111-4111-a111-111111111111',question:'이번 기록은 어때?',fileId:'a'.repeat(64)};
 test('chat rejects unbounded question, invalid source and foreign path traversal',()=>{for(const v of [{question:''},{question:'a'.repeat(1201)},{fileId:'../other'},{previousId:'../other'},{requestId:'x'}])assert.throws(()=>validateChatRequest({...request,...v}));});
 test('selected image requires valid source/page/normalized bounds and bounded JPEG bytes',()=>{const s={page:1,rect:{x:0,y:0,width:.5,height:.5},image:'data:image/jpeg;base64,'+Buffer.from([255,216,255,...new Array(20).fill(0)]).toString('base64')};assert.ok(validateChatRequest({...request,selection:s}).image);for(const patch of [{page:0},{rect:{...s.rect,x:.8}},{image:'https://example.com/private.jpg'},{image:'data:image/jpeg;base64,'+'x'.repeat(500000)}])assert.throws(()=>validateChatRequest({...request,selection:{...s,...patch}}));});
@@ -201,4 +201,13 @@ test('search synthesis preserves the requested brief format without searching ag
  assert.deepEqual(schema.properties.searchDecision.enum,['none','blocked']);
  assert.equal(schema.properties.points,undefined);
  assert.equal(schema.properties.closing,undefined);
+});
+
+
+test('meal-specific system text is filtered without blocking an ordinary meal example',()=>{
+ const mode=chatMode('quick','하루 식단 짜줘');
+ const line=mode.systemPrompt.split('\n').find(v=>v.startsWith('이번 요청은 식단 작성이다.'));
+ assert.ok(line);
+ assert.match(validateChatAnswer({answer:line,references:[],questions:[]},[]).answer,/내부 모델과 설정/);
+ assert.equal(validateChatAnswer({answer:'밥 200g과 달걀 2개, 채소를 함께 구성한 예시예요.',references:[],questions:[]},[]).answer,'밥 200g과 달걀 2개, 채소를 함께 구성한 예시예요.');
 });
