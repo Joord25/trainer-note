@@ -29,7 +29,7 @@ export function DirectionConversation({request=callAi,memberId,inputKey,discussi
  const latest=state.messages.at(-1),draft=latest?.mode==='draft'&&latest.directions.length?latest:null;
  // A returned draft cannot overwrite edits made while it was being generated or since it was reviewed.
  const draftChanged=!!draft&&JSON.stringify(draft.basedOnDirections)!==JSON.stringify(directions.filter(d=>d.text.trim()));
- return <section className="direction-conversation" aria-label="분석을 함께 살펴보기"><div className="goal-section-heading"><h3>분석을 함께 살펴볼까요?</h3><small>선택 · 대화 없이 방향을 직접 수정해도 돼요</small></div>
+ return <section className="direction-conversation" aria-label="분석을 함께 살펴보기">
   <div className="direction-opening"><span className="direction-ai-mark" aria-hidden="true">AI</span><p>위 분석에서 실제 지도 의도와 다르게 읽힌 부분이 있나요? 지금 구성을 선택한 이유나 고민을 알려주시면, 회원 목표와 기록을 함께 보며 다음 방향을 정리할게요.</p></div>
   {!!state.messages.length&&<div ref={dialogue} className="direction-dialogue" aria-label="이 분석의 대화 기록">{state.messages.map((m,i)=><div className="direction-exchange" key={m.id}>{i<state.messages.length-2?<details><summary>{m.mode==='draft'?'방향 초안 정리':m.question}</summary><div className="direction-reply"><AnswerText text={m.answer}/></div>{!!m.references.length&&<GuidanceNote sources={m.references}/>}</details>:<><p className="direction-question"><small>트레이너</small>{m.question}</p><div className="direction-reply"><small>AI 코칭 의견</small><AnswerText text={m.answer}/>{!!m.references.length&&<GuidanceNote sources={m.references}/>}</div></>}</div>)}</div>}
   {(busy||state.processing)&&<p role="status">{busy?'목표와 기록을 함께 검토하고 있어요…':'앞선 답변을 불러오고 있어요…'}</p>}
