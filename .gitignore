@@ -20,3 +20,6 @@ prototypes/
 
 # Firebase Hosting upload cache
 .firebase/
+
+# macOS local folder metadata
+.DS_Store
