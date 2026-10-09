@@ -17,7 +17,20 @@ export function AnswerText({text,sources=[]}:{text:string;sources?:WebSource[]})
  let paragraph:string[]=[],items:{number?:number;text:string;details:string[]}[]=[];
  function flushParagraph(){if(paragraph.length){blocks.push(<p key={blocks.length}>{inline(paragraph.join('\n'))}</p>);paragraph=[];}}
  function flushList(){if(items.length){const ordered=items[0].number!==undefined,children=items.map((item,i)=><li key={i} value={item.number}>{item.details.length?<><div className="assistant-point-title">{inline(item.text)}</div><p>{inline(item.details.join('\n'))}</p></>:inline(item.text)}</li>);blocks.push(ordered?<ol key={blocks.length} start={items[0].number}>{children}</ol>:<ul key={blocks.length}>{children}</ul>);items=[];}}
- for(const raw of lines){const line=raw.trim(),heading=/^#{1,4}\s+(.+)$/.exec(line),item=/^(?:(\d{1,2})[.)]|[-*•])\s+(.+)$/.exec(line);
+ function tableCells(raw:string):string[]|null{
+  const line=raw.trim().replace(/^\\\|/,'|');
+  if(!line.includes('|'))return null;
+  const cells=line.split(/(?<!\\)\|/).map(v=>v.trim().replace(/\\\|/g,'|'));
+  if(cells[0]==='')cells.shift();if(cells.at(-1)==='')cells.pop();
+  return cells.length>=2&&cells.length<=12?cells:null;
+ }
+ for(let index=0;index<lines.length;index++){const raw=lines[index],header=tableCells(raw),divider=tableCells(lines[index+1]??'');
+  if(header&&divider?.length===header.length&&divider.every(v=>/^:?-{3,}:?$/.test(v))){
+   flushParagraph();flushList();const rows:string[][]=[];index++;
+   while(index+1<lines.length){const row=tableCells(lines[index+1]);if(!row||row.length!==header.length)break;rows.push(row);index++;}
+   blocks.push(<div className="assistant-table-scroll" key={blocks.length} role="region" aria-label="답변 표" tabIndex={0}><table><thead><tr>{header.map((cell,i)=><th scope="col" key={i}>{inline(cell)}</th>)}</tr></thead><tbody>{rows.map((row,i)=><tr key={i}>{row.map((cell,j)=><td key={j}>{inline(cell)}</td>)}</tr>)}</tbody></table></div>);continue;
+  }
+  const line=raw.trim(),heading=/^#{1,4}\s+(.+)$/.exec(line),item=/^(?:(\d{1,2})[.)]|[-*•])\s+(.+)$/.exec(line);
   if(!line){flushParagraph();}
   else if(heading){flushParagraph();flushList();blocks.push(<h4 key={blocks.length}>{inline(heading[1])}</h4>);}
   else if(item){flushParagraph();const number=item[1]?Number(item[1]):undefined;if(items.length&&(items[0].number===undefined)!==(number===undefined))flushList();items.push({number,text:item[2],details:[]});}

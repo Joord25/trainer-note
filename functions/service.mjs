@@ -360,7 +360,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
   return chat(uid,mid,{requestId:doc.id,answerMode:old.answerMode??'quick',question:old.question,fileId:old.fileId,previousId:old.previousId,...(old.discussion?{discussion:old.discussion}:{}),chatGeneration:old.generation??0,resumeConversation:request.resumeConversation===true,...(selection?{selection}:{})},{id,revision:request.revision});
  }
  async function chat(uid,mid,request,regeneration=null){
-  const input=validateChatRequest(request),mode=chatMode(input.answerMode,input.question),generation=request.chatGeneration??0;
+  const input=validateChatRequest(request),generation=request.chatGeneration??0;
   if(!Number.isSafeInteger(generation)||generation<0)throw Error('대화 상태를 다시 확인해주세요.');
   const {image,...storedInput}=input,member=memberRef(uid,mid),state=member.collection('chatState').doc('current'),ref=member.collection('chats').doc(input.requestId),payloadHash=hash({...storedInput,version:CHAT_VERSION});
   const [m,allRecords,a,p,source,importSnap]=await Promise.all([member.get(),recordsFor(member),member.collection('analysis').doc('current').get(),member.collection('plans').doc('current').get(),input.fileId?member.collection('files').doc(input.fileId).get():null,input.fileId?member.collection('imports').doc(input.fileId).get():null]);
@@ -389,9 +389,10 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
    // Discussion mode answers from the analysis' own basis: the same eligible records, computed checks and trainer context.
    if(discussion)Object.assign(rawFacts,{sourceScope:discussion.scope+' 분석 근거·지도 맥락 포함. PDF 전체 본문 검색 결과는 아님.',scope:'다음 수업의 방향 분석 논의',records:discussion.records.map(({id,date,rawName,exerciseName,bodyPart,loadType,sets,notes,trainerNote,sourceHash,sourcePage,status,measurementType})=>({id,date,rawName,exerciseName,bodyPart,loadType,sets,notes,trainerNote:trainerNote??'',sourceHash,sourcePage,status,measurementType:measurementType??'repetitions'})),summary:summarize(discussion.records),sessionNotes:discussion.sessionNotes,programSessions:chatProgramSessions(discussion.records),discussion:discussion.facts});
    const facts=discussion?{...rawFacts,chatContext:{kind:'member'},history:history.map(({question,answer})=>({question,answer}))}:prepareChatFacts(rawFacts),answerRecords=facts.records,answerImage=['hypothetical','general'].includes(facts.scope)?null:image;
+   const mode=chatMode(input.answerMode,input.question,facts.chatContext);
    const deadline=Date.now()+140000;
    const remaining=()=>{const ms=deadline-Date.now();if(ms<3000)throw Error('답변 준비 시간이 길어졌어요. 다시 시도해주세요.');return Math.min(ms,60000);};
-   const result=isPrivateImplementationOnly(input.question)?{value:PRIVATE_IMPLEMENTATION_RESULT,usage:null}:isSearchCapabilityQuestion(input.question)?{value:SEARCH_CAPABILITY_ANSWER,usage:null}:await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:mode.systemPrompt+'\n'+mode.prompt+chatEvidencePrompt(facts)+(discussion?'\n'+discussionSystem():''),schema:discussion?discussionSchema(chatSchema(answerRecords,input.question,true)):chatSchema(answerRecords,input.question),parts:[{text:JSON.stringify(compactChatFacts(facts))},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
+   const result=isPrivateImplementationOnly(input.question)?{value:PRIVATE_IMPLEMENTATION_RESULT,usage:null}:isSearchCapabilityQuestion(input.question)?{value:SEARCH_CAPABILITY_ANSWER,usage:null}:await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:mode.systemPrompt+'\n'+mode.prompt+chatEvidencePrompt(facts)+(discussion?'\n'+discussionSystem():''),schema:discussion?discussionSchema(chatSchema(answerRecords,input.question,true,facts.chatContext)):chatSchema(answerRecords,input.question,false,facts.chatContext),parts:[{text:JSON.stringify(compactChatFacts(facts))},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
    const decided=discussion?validateDecisionProposal(result.value?.decisionProposal,discussion.target,{kgs:discussion.kgs}):null;
    let validated=validateChatAnswer(result.value,answerRecords,input.answerMode),webSources=[],searchSuggestions='',searchNotice='';
    const decision=searchDecision(result.value,input.question);
@@ -412,7 +413,7 @@ export function createService({db,readSource,model,enqueue,now=()=>Date.now(),li
      // Public search stays isolated. Only this private, non-search request joins
      // grounded sources with member context; it never sends member data to Search.
      try{
-      const merged=await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:mode.systemPrompt+'\n'+mode.prompt+chatEvidencePrompt(facts)+'\n'+CHAT_SYNTHESIS_PROMPT,schema:chatSchema(answerRecords,input.question,true),parts:[{text:JSON.stringify({...compactChatFacts(facts),publicResearch:search.value})},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
+      const merged=await paid(uid,'assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:mode.systemPrompt+'\n'+mode.prompt+chatEvidencePrompt(facts)+'\n'+CHAT_SYNTHESIS_PROMPT,schema:chatSchema(answerRecords,input.question,true,facts.chatContext),parts:[{text:JSON.stringify({...compactChatFacts(facts),publicResearch:search.value})},...(answerImage?[answerImage]:[])],timeoutMs:remaining()},mode.maxOutputTokens);
       if(merged.value.searchDecision!=='none')throw Error('검색 후 답변 상태 오류');
       const combined=validateChatAnswer(merged.value,answerRecords,input.answerMode);
       if([...combined.answer.matchAll(/\[웹(\d+)\]/g)].some(m=>Number(m[1])<1||Number(m[1])>webSources.length))throw Error('검색 출처 번호 오류');

@@ -29,3 +29,17 @@ if(process.env.ASSISTANT_PREVIEW_INPUT&&process.env.ASSISTANT_PREVIEW_OUTPUT){
  const escape=t=>t.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
  writeFileSync(process.env.ASSISTANT_PREVIEW_OUTPUT,`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI 도우미 답변 검증</title><style>${css}\nbody{padding:28px;background:#fff}main.review-workspace{display:block;max-width:900px;margin:auto;height:auto;min-height:0;border:0}.assistant-turn{margin:0}.preview-caption{font-size:12px;color:#748276;margin-bottom:18px}@media(max-width:500px){body{padding:16px}}</style><main class="review-workspace"><p class="preview-caption">실제 생성한 심층 답변 · 가상 사례 · 수정한 화면 표시 코드</p><article class="assistant-turn"><div class="assistant-question"><p>${escape(result.question)}</p></div><div class="assistant-answer"><small class="assistant-mode-label">심층</small>${render(result.answer)}</div></article></main></html>`);
 }
+
+
+test('Markdown tables render with headers and rows, including legacy escaped leading pipes',()=>{
+ const html=render('식단 예시예요.\n\n   \\| 끼니 | 메뉴 |\n   \\| --- | --- |\n   \\| 첫 끼 | **밥**과 달걀 |\n   \\| 두 번째 끼 | 두부 |\n\n필요할 때 간식을 추가해요.');
+ assert.equal((html.match(/<table>/g)||[]).length,1);
+ assert.equal((html.match(/<th scope="col"/g)||[]).length,2);
+ assert.equal((html.match(/<td>/g)||[]).length,4);
+ assert.match(html,/<strong>밥<\/strong>/);assert.match(html,/<\/table><\/div><p>필요할 때/);
+});
+test('table cells keep HTML inert and non-table pipes stay prose',()=>{
+ const html=render('| 끼니 | 메뉴 |\n| --- | --- |\n| 첫 끼 | <img src=x onerror=alert(1)> |');
+ assert.ok(!html.includes('<img'));assert.match(html,/&lt;img/);
+ assert.ok(!render('밥 | 면 중 선택').includes('<table>'));
+});

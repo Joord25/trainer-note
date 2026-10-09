@@ -225,3 +225,11 @@ html[data-theme="dark"] .journey-error{background:#302b25;border-color:#504436}h
 .direction-composer .assistant-compose-actions button.primary:hover{background:#244a32}
 
 @media(max-width:640px){.direction-conversation{padding:12px}.direction-dialogue{padding:10px}}
+
+.review-workspace .assistant-table-scroll{max-width:100%;overflow-x:auto;margin:14px 0 18px;border:1px solid var(--line,#dfe6df);border-radius:12px;overscroll-behavior-x:contain}
+.review-workspace .assistant-table-scroll:focus-visible{outline:2px solid var(--primary,#315c44);outline-offset:2px}
+.review-workspace .assistant-table-scroll table{width:100%;min-width:420px;border-collapse:collapse;font-size:inherit;line-height:1.65;table-layout:auto}
+.review-workspace .assistant-table-scroll :is(th,td){padding:12px 14px;text-align:left;vertical-align:top;white-space:pre-wrap;overflow-wrap:anywhere;border-bottom:1px solid var(--line,#dfe6df)}
+.review-workspace .assistant-table-scroll th{background:var(--sage-light,#eef3e9);color:var(--ink,#29372f);font-weight:650}
+.review-workspace .assistant-table-scroll tr:last-child td{border-bottom:0}
+.review-workspace .assistant-table-scroll :is(th,td)+:is(th,td){border-left:1px solid var(--line,#dfe6df)}

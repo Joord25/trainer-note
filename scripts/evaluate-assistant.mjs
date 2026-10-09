@@ -53,9 +53,9 @@ let thoughtTokens=0;
 const gemini=createGemini({apiKey:()=>key,fetcher:async(url,options)=>{const response=await fetch(url,options);if(url.endsWith(':generateContent'))thoughtTokens=(await response.clone().json()).usageMetadata?.thoughtsTokenCount??0;return response;}}),output=await mkdtemp(join(tmpdir(),'trainer-assistant-eval-')),results=[];
 console.log('Evaluation output:',output);
 for(const c of selected)for(const answerMode of ['quick','deep']){
- const mode=chatMode(answerMode,c.question),started=Date.now();
+ const mode=chatMode(answerMode,c.question,c.facts.chatContext),started=Date.now();
  try{
-  const result=await gemini(withTrainingGuidance('assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:mode.systemPrompt+'\n'+mode.prompt+chatEvidencePrompt(c.facts),schema:chatSchema(c.facts.records,c.question),parts:[{text:JSON.stringify(c.facts)}],maxInputTokens:CHAT_MAX_INPUT_TOKENS,maxOutputTokens:mode.maxOutputTokens,timeoutMs:60000}));
+  const result=await gemini(withTrainingGuidance('assistant-chat',{model:mode.model,thinkingLevel:mode.thinkingLevel,system:mode.systemPrompt+'\n'+mode.prompt+chatEvidencePrompt(c.facts),schema:chatSchema(c.facts.records,c.question,false,c.facts.chatContext),parts:[{text:JSON.stringify(c.facts)}],maxInputTokens:CHAT_MAX_INPUT_TOKENS,maxOutputTokens:mode.maxOutputTokens,timeoutMs:60000}));
   const answer=validateChatAnswer(result.value,c.facts.records,answerMode);
   results.push({id:c.id,answerMode,seconds:(Date.now()-started)/1000,question:c.question,rubric:c.rubric,raw:result.value,answer:answer.answer,usage:result.usage,thoughtTokens,thinkingLevel:mode.thinkingLevel});
   console.log(c.id,answerMode,'received',answer.answer.length,'characters');

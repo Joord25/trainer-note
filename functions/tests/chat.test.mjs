@@ -211,3 +211,53 @@ test('meal-specific system text is filtered without blocking an ordinary meal ex
  assert.match(validateChatAnswer({answer:line,references:[],questions:[]},[]).answer,/내부 모델과 설정/);
  assert.equal(validateChatAnswer({answer:'밥 200g과 달걀 2개, 채소를 함께 구성한 예시예요.',references:[],questions:[]},[]).answer,'밥 200g과 달걀 2개, 채소를 함께 구성한 예시예요.');
 });
+
+
+test('nutrition follow-ups retain user constraints and format without workout context',async()=>{
+ const {prepareChatFacts}=await import('../chat.mjs');let history=[];
+ const initial='회원의 등록 목표는 "다이어트(체지방 감소)"입니다. 식단·영양 상담을 이어가고 싶어요. 식사 패턴·선호·알레르기부터 확인해주세요.';
+ const questions=[initial,'하루 2회 집에서, 없음, 불규칙이지만 규칙적으로 먹으려 노력중','혹시 표로 만들어줄수있어? 정리해서 보기 쉽게','아니 식단....','양은 그대로 두고 더 간단히 정리해줘','두부로 바꿔줘'];
+ for(const [i,question] of questions.entries()){
+  const facts=prepareChatFacts({question,history,goal:'근비대',records:[{id:'workout-sentinel'}],training:{currentGoal:'근비대'},analysis:{summary:'workout-sentinel'},notes:'workout-sentinel'});
+  assert.equal(facts.scope,'nutrition');assert.deepEqual(facts.records,[]);
+  assert.equal(facts.nutrition.conditions.goal,'다이어트(체지방 감소)');
+  assert.ok(!JSON.stringify(facts).includes('workout-sentinel'));
+  if(i>0){assert.equal(facts.nutrition.conditions.mealsPerDay,2);assert.equal(facts.nutrition.conditions.location,'집');}
+  if(i>=2)assert.equal(facts.chatContext.format,'table');
+  assert.ok(chatMode('quick',question,facts.chatContext).systemPrompt.includes('이번 요청은 식단 작성이다.'));
+  history=[...history,{question,answer:i===2?'잘못된 운동 기록 답변':'식단 상담',usesRecords:i===2,chatContext:facts.chatContext}].slice(-3);
+ }
+ const changed=prepareChatFacts({question:'이제 하루 3끼 집에서 먹는 걸로 바꿀게',history,records:[]});
+ assert.equal(changed.nutrition.conditions.mealsPerDay,3);
+ const exercise=prepareChatFacts({question:'현재 운동 기록을 분석해줘',history,records:[{id:'restored'}]});
+ assert.equal(exercise.chatContext.kind,'member');assert.equal(exercise.records[0].id,'restored');assert.equal(exercise.history.length,0);
+ const fresh=prepareChatFacts({question:'표로 정리해줘',history:[],records:[{id:'new-member'}]});
+ assert.equal(fresh.chatContext.kind,'member');
+});
+test('legacy nutrition messages recover from user statements, excluding contaminated AI answers',async()=>{
+ const {prepareChatFacts}=await import('../chat.mjs');
+ const history=[{question:'등록 목표는 "체지방 감소"입니다. 식단 상담을 하고 싶어',answer:'근비대 세 끼 추천',chatContext:{kind:'member'},usesRecords:true},{question:'하루 2회 집에서, 없음',answer:'식사는 세 끼',chatContext:{kind:'member'},usesRecords:true},{question:'표로 정리해줘',answer:'스쿼트 20kg',chatContext:{kind:'member'},usesRecords:true}];
+ const facts=prepareChatFacts({question:'아니 식단...',history,goal:'근비대',records:[{id:'unrelated'}]});
+ assert.deepEqual(facts.nutrition.conditions,{goal:'체지방 감소',mealsPerDay:2,location:'집'});
+ assert.equal(facts.chatContext.format,'table');assert.deepEqual(facts.history,[]);assert.deepEqual(facts.records,[]);
+});
+
+test('nutrition table schema and serializer require real bounded rows and escape cell delimiters',()=>{
+ const schema=chatSchema([],'표로 정리해줘',false,{kind:'nutrition',format:'table'});
+ assert.ok(schema.required.includes('nutritionTable'));assert.equal(schema.properties.points,undefined);
+ const value={answer:'두 끼 예시입니다.',nutritionTable:[{meal:'첫 끼',menu:'밥 | 두부\n채소',alternative:'달걀로 변경'}],references:[],questions:[]};
+ const result=validateChatAnswer(value,[]);
+ assert.ok(result.answer.includes('| 첫 끼 | 밥 \\| 두부 채소 | 달걀로 변경 |'));
+ for(const rows of [[],[{}],[{meal:'첫 끼',menu:'x'.repeat(601),alternative:'두부'}]])assert.throws(()=>validateChatAnswer({...value,nutritionTable:rows},[]));
+ assert.equal(chatSchema([],'기록 표').properties.nutritionTable,undefined);
+});
+test('nutrition preserves meal timing follow-ups and resets a separate case',async()=>{
+ const {prepareChatFacts}=await import('../chat.mjs');
+ const first=prepareChatFacts({question:'식단을 하루 2끼로 집에서 먹을 거야',history:[],goal:'체지방 감소',records:[]});
+ assert.equal(first.nutrition.conditions.mealsPerDay,2);
+ const history=[{question:first.question,answer:'두 끼 예시',chatContext:first.chatContext}];
+ const followup=prepareChatFacts({question:'수업 전에 먹어도 돼?',history,records:[]});
+ assert.equal(followup.scope,'nutrition');assert.equal(followup.nutrition.conditions.mealsPerDay,2);
+ const separate=prepareChatFacts({question:'다른 회원 식단이야. 하루 3끼를 먹어',history,goal:'체지방 감소',records:[]});
+ assert.equal(separate.nutrition.conditions.goal,undefined);assert.equal(separate.nutrition.conditions.location,undefined);assert.equal(separate.nutrition.conditions.mealsPerDay,3);
+});

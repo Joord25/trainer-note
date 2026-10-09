@@ -907,3 +907,21 @@ test('meal planning uses focused instructions in both modes and normal coaching 
  await service.chat(uid,mid,chatInput({fileId:'',question:'스쿼트 세트를 늘릴까?',requestId:'normal-coaching-test-01'}));
  assert.ok(calls.at(-1).system.startsWith(CHAT_PROMPT));
 });
+
+
+test('nutrition topic survives the server history window and explicit exercise requests restore records',async()=>{
+ await service.startImport(uid,mid,fileId);calls=[];provider=async()=>plainAnswer();let previousId='';
+ const questions=['등록 목표는 "체지방 감소"입니다. 식단 상담 전에 식사 패턴부터 확인해주세요.','하루 2회 집에서, 없음','표로 정리해줘','아니 식단...','조금 간단하게 정리해줘'];
+ for(const [i,question] of questions.entries()){
+  const requestId=`nutrition-history-turn-0${i}`;
+  await service.chat(uid,mid,chatInput({question,fileId:'',previousId,requestId}));
+  const facts=JSON.parse(calls.at(-1).parts[0].text);
+  assert.equal(facts.scope,'nutrition');assert.deepEqual(facts.records,[]);assert.equal(facts.training,undefined);
+  assert.equal(facts.nutrition.conditions.goal,'체지방 감소');
+  if(i>0)assert.equal(facts.nutrition.conditions.mealsPerDay,2);
+  if(i>1)assert.equal(facts.nutrition.requestedFormat,'table');
+  assert.ok(calls.at(-1).system.includes('이번 요청은 식단 작성이다.'));previousId=requestId;
+ }
+ await service.chat(uid,mid,chatInput({question:'현재 운동 기록을 분석해줘',fileId:'',previousId,requestId:'nutrition-back-to-records'}));
+ assert.ok(JSON.parse(calls.at(-1).parts[0].text).records.length>0);
+});

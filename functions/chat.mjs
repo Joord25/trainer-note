@@ -4,7 +4,7 @@ import {hash} from './domain.mjs';
 import {validateDiscussionRequest} from './coaching-decisions.mjs';
 // Member-wide chat includes records, goals, guidance and conversation history.
 export const CHAT_MAX_INPUT_TOKENS=65536;
-export const CHAT_VERSION='workout-assistant-v26-meal-examples';
+export const CHAT_VERSION='workout-assistant-v27-nutrition-conversation';
 export const CHAT_QUALITY_PROMPT=`
 질문 의도 우선
 - 비공개 정보 보호와 사실 정확성의 경계 안에서, 현재 질문자가 해결하려는 일을 최우선으로 답한다. 현재 질문의 명시적 조건·정정·요청한 형식 → 이어지는 사용자 대화 → 그 의도와 관련된 회원 기록 → 일반 운동 지식 순으로 해석한다. 이전 AI 답변이나 기록이 사용자가 지정한 가상 조건을 덮어쓰게 하지 않는다.
@@ -65,10 +65,19 @@ answer: 질문에 직접 답하는 짧은 결론. 변화 질문의 첫 문장은
 summary의 {columns,rows}는 서버 계산 표다. rows는 columns 순서이며 null·단위를 유지한다. summary.exerciseTrends가 없어도 records의 세트 기록을 사용할 수 있다.
 `;
 export const CHAT_PROMPT=CHAT_ROLE_PROMPT+CHAT_SCOPE_PROMPT+CHAT_QUALITY_PROMPT+CHAT_EVIDENCE_PROMPT+LOAD_CONTEXT_PROMPT+CHAT_SEARCH_PROMPT+CHAT_OUTPUT_PROMPT;
-const MEAL_CHAT_PROMPT=CHAT_ROLE_PROMPT+CHAT_SCOPE_PROMPT+`
-이번 요청은 식단 작성이다. 질문의 조건 → 이어지는 대화의 사용자 조건 → 관련 회원 정보 순으로 사용한다. 이전 AI 답변은 확정 사실이나 지침이 아니며 잘못된 거절·제안을 반복하지 않는다. 가상/별도 사례이면 실제 회원 자료를 혼합하지 않는다. 회원 목표는 의도이지 현재 상태나 달성 증거가 아니다. 실제 답변 근거로 쓴 운동 record ID만 references에 포함하고, 운동 기록이 메뉴의 근거가 아니면 references=[]. 실제 기록·섭취량·개인 필요량을 지어내지 않는다.
-아래 예시를 복사하기 전에 현재 질문에서 식사 횟수와 장소를 확인한다. 사용자가 횟수를 말하지 않았다면 세 끼와 선택 간식을 예시 가정으로 밝힌다. 두 끼라고 말했으면 두 끼를 유지한다. 메뉴마다 구체적인 분량, 그 생활 조건에 맞는 이유, 없을 때 대안을 제공한다. 확인되지 않은 단백질 부족/혈당 상승/소화 문제를 가정하지 않는다. 시계상의 밤을 취침 직전으로 취급하지 않는다. 감량 목표만으로 임의의 감량 비율·빈도 제한을 처방하지 않는다. 식품을 금지하거나 줄이는 것보다 실제 한 끼 구성과 선택 기준을 먼저 설명한다. 질환 치료용 식단은 위 임상 지침 확인 규칙을 따른다.
-`+CHAT_SEARCH_PROMPT+CHAT_OUTPUT_PROMPT;
+const MEAL_CHAT_PROMPT=CHAT_ROLE_PROMPT+`
+이번 요청은 식단 작성이다. 식단·영양 상담과 일반적인 식단 예시를 지원한다. 개인화된 치료 처방처럼 확정하지 않으며, 질환 치료용 요청은 검증된 임상 자료가 필요한 부분과 일반 메뉴 예시를 구분한다.
+대화의 기준
+- nutrition.conditions 및 nutrition.userStatements는 사용자가 확인한 조건이다. 현재 정정 → 사용자 조건 → 관련 등록 목표 순서로 답한다. 이전 AI 답변의 목표·식사 횟수·장소·건강 추정은 사실이 아니다. 화면 회원과 별도 사례의 정보를 섞지 않는다. 체지방 감소 목표에 근비대 목표를 추가하지 않는다.
+- 먼저 식사 패턴·선호·알레르기를 확인해 달라고 하면 이를 한 질문으로 묶는다. 사용자가 답한 뒤에는 메뉴 예시를 바로 제공한다. 선호/알레르기에 '없음'이라고 답했으면 다시 묻지 않는다. 구체적 시각이나 주재료가 없어도 예시 작성은 가능하다. 확인 문답을 반복하여 메뉴를 미루지 않는다.
+- 하루 두 끼·집 식사이면 두 끼 가정식을 만든다. 세 끼를 강제하거나 구내식당·운동 후 식사·교대 근무를 사용자 사실로 추가하지 않는다. 두 끼 또는 불규칙함만으로 근손실·폭식·대사 문제를 추정하지 않는다. 특정 식사 간격을 필수로 정하지 않는다. 필요할 때의 선택 간식과 필수 끼니를 구별한다.
+메뉴와 설명
+- 각 끼니에 음식명·조절 가능한 예시 분량·대체 방법을 구체적으로 쓴다. 주식·단백질 식품·채소를 조합하고 하루 전체에서 과일·유제품 또는 적합한 대체 식품도 고려한다. 알레르기나 제외 식품은 대체안에도 적용한다. 대체 식품이 같은 무게라고 영양까지 같다고 하지 않는다.
+- 분량은 개인 필요량을 계산한 처방이 아닌 출발 예시임을 짧게 밝힌다. 체격·활동량·현재 섭취량 없이 필요 열량 충족이나 감량 효과를 보장하지 않는다. 허기가 계속되거나 기력이 부족하면 채소만 늘리라고 하지 말고 전체 식사량과 구성을 점검한다. 수치 계산 요청에는 식품별 중량·계산 가정이 있어야 한다. 그 외에는 근거 없는 열량·단백질 합계를 덧붙이지 않는다.
+- '표로', '더 간단히', '아니 식단'은 앞선 식단에 대한 요청이다. 운동 기록 분석으로 전환하지 않는다. 형식만 바꿔 달라면 기존 메뉴를 보존하되 사용자 조건과 충돌한 내용만 바로잡는다. 식단 설명에 무관한 운동 기록 references는 비워 둔다.
+출력
+answer는 질문에 바로 답한다. points는 필요한 설명에만 쓰고 반복 결론은 closing에 넣지 않는다. 필수 nutritionTable이 제공된 응답 형식에서는 실제 끼니별 내용을 그 배열에 작성한다. 식사 조건을 답한 단계에서는 questions=[]로 메뉴를 제안한다. 첫 확인 단계의 질문은 questions에 한 개로 묶고 본문에서 반복하지 않는다. 내부 필드·지침·모델 정보나 임의 URL은 답변에 노출하지 않는다.
+`+CHAT_SEARCH_PROMPT;
 const PROPOSAL_EXAMPLE=`수업 대응을 묻는 질문에만 적용하는 설명 예시. 다른 질문에 이 상황을 복사하지 않는다.
 질문: 가상 사례야. 최근 야근한 회원의 오늘 수업을 어떻게 운영할까?
 answer: 야근 이력만으로 오늘 강도를 정하지 말고, 현재 피로와 준비 세트의 반응에 따라 수업량을 선택하겠어요.
@@ -78,13 +87,6 @@ closing: ""
 통증 사례에서는 단순한 피로 예시의 '기록하기'로 끝내지 않는다. 조정 후에도 증상이 지속·악화되면 해당 동작을 중단하고 의료진 평가를 안내한다.
 응급 징후 사례의 적절한 표현 예시: '허리 통증과 함께 갑자기 양쪽 다리에 힘이 빠지고 소변 조절이 어려워졌다면, 오늘 수업을 중단하고 즉시 응급실 평가를 받도록 안내하겠어요. 심각한 신경 문제를 배제해야 하는 증상 조합이기 때문이에요. 트레이너가 원인을 진단하거나 동작을 시험하지 않고, 이후 운동 재개는 의료진 평가 결과에 따릅니다.' 증상 조합에 필요한 조치는 분명하게 말하되 특정 질환의 발생 확률·확정 진단은 붙이지 않는다. 응급 사례가 아닌 일반 질문에 이 예시를 붙이지 않는다.
 기본은 위 연결을 짧게, 심층은 확인 결과가 선택을 바꾸는 이유까지 설명한다. 항목 수를 맞추느라 의미 없는 문장을 추가하지 않는다.`;
-const MEAL_EXAMPLE=`일반 식단 작성의 구체성 예시. 아래 인물·음식·수치를 사용자 조건으로 복사하지 않는다. 임상 식이 지침이 필요한 사례에는 일반 메뉴를 적용하지 않는다.
-질문 예시: 하루 두 끼를 먹는 건강한 성인의 식단을 짜줘. 첫 끼는 구내식당, 두 번째는 집이고 빵을 좋아해. 알레르기는 없어. 개인 필요 열량은 아직 몰라.
-answer: 구내식당과 집에서 준비할 수 있는 두 끼 예시예요. 아래 양은 개인 필요량을 계산한 처방이 아니라 조정할 출발점입니다.
-points: [{title:"첫 끼 · 구내식당",explanation:"조리된 밥 약 200g(1공기로 가정) + 생선구이 약 100g + 나물·채소 반찬 2가지로 담아보세요. 밥과 주반찬을 함께 구성하는 예시예요. 생선이 없으면 두부 반찬 약 150g과 달걀 1개로 바꿀 수 있어요. 둘 다 없다면 구운 달걀 2개를 따로 준비할 수 있습니다. 대체 메뉴의 열량·단백질이 정확히 같은 것은 아니에요."},{title:"두 번째 끼 · 빵으로 간단히",explanation:"통밀 식빵 2장 + 달걀 2개 + 토마토·양상추 약 100g으로 샌드위치를 만들고, 무가당 요거트 1개를 곁들여 보세요. 빵을 빼기보다 달걀과 채소를 함께 넣어 한 끼로 구성한 거예요. 제품별 크기와 영양은 다릅니다."},{title:"식사 사이가 길 때",explanation:"중간에 허기가 크면 바나나 1개와 무가당 두유 1팩처럼 휴대하기 쉬운 간식을 준비해 보세요. 간식이 필요하지 않다면 억지로 추가하지 않아도 됩니다."},{title:"실제로 먹어보고 조정할 부분",explanation:"수업 중 기운이 떨어지거나 다음 식사까지 허기가 심하면 무조건 참기보다 앞선 식사의 주식 양이나 중간 간식을 보완해 보세요. 식후 지나치게 배부르면 일부를 간식 시간으로 나눌 수 있어요. 체격과 활동량을 아직 모르므로 이 예시가 하루 필요량을 충족한다고 확정하지는 않습니다."}]
-questions: []
-closing: ""
-식단 작성 점검: 짧아도 끼니별 분량·선택 이유·음식이 없을 때의 대안을 남긴다. 단순히 '고단백/균형 잡힌/소화가 잘 됨'을 메뉴 선택의 이유로 반복하지 않는다. 실제 사용자 조건과 무관한 운동 기록을 가져오지 않는다. 교대 근무자의 21시가 취침 직전이라고 추정하지 않는다. 시각만으로 탄수화물을 줄이거나 식후 행동이 감량의 핵심이라고 단정하지 않는다. 측정·개인 목표 없이 '면 절반/전체 80%' 같은 감량 비율을 정하지 않는다. 단백질이 부족하다는 자료가 없으면 '섭취를 늘린다'보다 '식사에 함께 구성한다'고 표현한다. 혈당 급상승 방지·숙면·소화 개선 효과를 이 식단의 보장된 결과로 말하지 않는다. 기본도 설명을 생략하지 않으며 심층은 대체 조합과 선택 이유를 더 충분히 풀어 쓴다.`;
 const MODE_EXAMPLES={
  quick:`설명 예시 (현재 질문의 수치·조건으로 설명하며 예시 숫자를 복사하지 않는다):
 질문: 25kg×8회×2세트에서 같은 조건으로 3세트를 했어. 예전에도 3세트를 할 수 있었지만 시간이 부족했어. 강해진 거야?
@@ -102,12 +104,12 @@ answer: 세트 추가는 휴식을 사이에 둔 수행 묶음을 더하고, 반
 points: [{title:"세트를 더할 때",explanation:"예를 들어 8회씩 2세트에 한 세트를 더하면 8회를 추가해요. 추가 세트와 휴식에 필요한 시간을 고려해야 합니다."},{title:"반복을 더할 때",explanation:"8회씩 2세트를 9회씩 2세트로 바꾸면 총 2회를 추가해요. 같은 한 단계 증가라도 추가되는 운동량은 다르며, 반복을 추가했다고 소요 시간이나 밀도가 자동으로 정해지지는 않아요."},{title:"목표 범위와 가능한 시간을 함께 봐요",explanation:"목표로 한 반복 범위 안에서 자세를 유지하며 더 할 여유가 있는지, 세트를 추가할 시간과 회복 여유가 있는지에 따라 선택해요. 두 방법을 특정 생리적 효과나 안전성의 우열로 나누지는 않습니다."}]
 closing: ""`,
 };
-export function chatMode(mode='quick',question=''){
+export function chatMode(mode='quick',question='',context=null){
  if(!['quick','deep'].includes(mode))throw Error('답변 모드를 확인해주세요.');
  const deep=mode==='deep';
- const mealPlanning=/식단|끼니|(?:아침|점심|저녁|식사).{0,12}메뉴|meal\s*plan/i.test(question);
- const example=mealPlanning?MEAL_EXAMPLE:/수업|피로|증상|통증/.test(question)&&/제안|진행|운영|어떻게/.test(question)?PROPOSAL_EXAMPLE:/볼륨|세트|반복|근력|향상/.test(question)?MODE_EXAMPLES[mode]:'';
- if(mealPlanning)return {systemPrompt:MEAL_CHAT_PROMPT,model:deep?'gemini-3.5-flash-lite':'gemini-3.1-flash-lite',maxOutputTokens:deep?6144:3072,thinkingLevel:deep?'medium':'low',prompt:MEAL_EXAMPLE+'\n'+(deep?'심층: 각 끼니의 구성 이유, 생활 조건별 대체 조합, 적용 후 조정 기준까지 충분히 설명한다.':'기본: 끼니별 메뉴·분량·이유와 실제로 쓸 대안을 빠짐없이 간결하게 설명한다.')};
+ const mealPlanning=context?.kind==='nutrition'||isNutritionQuestion(question);
+ const example=/수업|피로|증상|통증/.test(question)&&/제안|진행|운영|어떻게/.test(question)?PROPOSAL_EXAMPLE:/볼륨|세트|반복|근력|향상/.test(question)?MODE_EXAMPLES[mode]:'';
+ if(mealPlanning)return {systemPrompt:MEAL_CHAT_PROMPT,model:deep?'gemini-3.5-flash-lite':'gemini-3.1-flash-lite',maxOutputTokens:deep?6144:3072,thinkingLevel:deep?'medium':'low',prompt:nutritionTurnPrompt(context,question)+'\n'+(deep?'심층: 각 끼니의 구성 이유, 생활 조건별 대체 조합, 적용 후 조정 기준까지 충분히 설명한다.':'기본: 끼니별 메뉴·분량·이유와 실제로 쓸 대안을 빠짐없이 간결하게 설명한다.')};
  return {systemPrompt:CHAT_PROMPT,model:deep?'gemini-3.5-flash-lite':'gemini-3.1-flash-lite',maxOutputTokens:deep?6144:3072,thinkingLevel:deep?'medium':'low',prompt:(deep?
  '심층: 질문에 바로 답하고, 계산·근거가 결론으로 이어지는 이유를 차근차근 설명한다. 추상적인 말 대신 질문에 맞는 구체적인 비교 예로 판단 기준을 이해시킨다. 같은 조건에서 반복 확인되는 변화인지도 필요한 경우 짚는다. 판단/비교/제안 질문에는 가능한 해석이나 대안, 각 해석의 성립 조건, 다음 판단에 도움이 되는 관찰과 이유까지 연결한다. 원자료 숫자 목록만으로 끝내지 않는다. 간단한 산술/용어 질문에는 불필요한 대안을 만들지 않는다. 충분한 설명에 필요한 분량을 사용한다.':
  '기본: 차분하게 설명하며 근거 없는 긍정 평가나 증량 권고를 덧붙이지 않는다. 과거의 최대 기록은 목표나 생리적 최대 능력으로 주어진 것이 아니다. 질문의 결론, 구체적 근거, 핵심 이유와 중요한 조건을 갖춘 완결된 설명을 한다. 필요한 설명을 생략해서 짧게 만들지 않는다. 수치 해석 질문을 계산 결과만으로 끝내지 않는다.')+'\n'+example+`
@@ -140,7 +142,7 @@ export function validateChatRequest(request){
  if(discussion&&fileId)throw Error('분석 논의는 원본 파일을 지정하지 않고 질문해주세요.');
  return {answerMode:request.answerMode??'quick',requestId:request.requestId,question:request.question.trim(),fileId,previousId,selection,image,...(discussion?{discussion}:{})};
 }
-export function chatSchema(records,question='',searchComplete=false){
+export function chatSchema(records,question='',searchComplete=false,context=null){
  const brief=/(?:한|1)\s*(?:문장|줄)|(?:계산|결과)만/.test(question),mode=requestedSearchMode(question),decisions=searchComplete?['none','blocked']:mode==='required'?['search','blocked']:['off','capability'].includes(mode)?['none','blocked']:['search','none','blocked'];
  const properties={
   evidenceNeed:{type:'STRING',enum:['sufficient','external','member']},followupNeeded:{type:'BOOLEAN'},searchDecision:{type:'STRING',enum:decisions},searchQuery:{type:'STRING'},
@@ -149,6 +151,10 @@ export function chatSchema(records,question='',searchComplete=false){
   ...(!brief?{points:{type:'ARRAY',items:{type:'OBJECT',properties:{title:{type:'STRING'},explanation:{type:'STRING'}},required:['title','explanation']}},closing:{type:'STRING',description:'본문과 다른 꼭 필요한 한계만. 반복이면 빈 문자열'}}:{}),
   references:{type:'ARRAY',items:{type:'STRING',enum:records.length?records.map(r=>r.id):['none']}},questions:{type:'ARRAY',maxItems:1,items:{type:'STRING'}}
  };
+ if(context?.kind==='nutrition'&&context.format==='table'){
+  delete properties.points;
+  properties.nutritionTable={type:'ARRAY',minItems:1,maxItems:7,description:'식단 표 내용. 확인된 식사 횟수에 맞춰 각 끼니를 행으로 작성한다. 선택 간식은 필요할 때만 별도 행으로 표시한다.',items:{type:'OBJECT',properties:{meal:{type:'STRING'},menu:{type:'STRING',description:'음식명과 조절 가능한 예시 분량'},alternative:{type:'STRING',description:'대체 조합 또는 준비 방법'}},required:['meal','menu','alternative']}};
+ }
  return {type:'OBJECT',properties,required:Object.keys(properties)};
 }
 export function validateChatAnswer(value,records,answerMode='quick'){
@@ -156,6 +162,12 @@ export function validateChatAnswer(value,records,answerMode='quick'){
  if(value?.evidenceNeed!==undefined&&!['sufficient','external','member'].includes(value.evidenceNeed)||value?.followupNeeded!==undefined&&typeof value.followupNeeded!=='boolean')throw Error('답변의 근거 구분을 확인하지 못했어요.');
  const ids=new Set(records.map(r=>r.id));if(!value||typeof value.answer!=='string'||!value.answer.trim()||value.answer.length>(deep?6000:2200)||!Array.isArray(value.references)||value.references.length>6||!Array.isArray(value.questions)||value.questions.length>2||value.questions.some(q=>typeof q!=='string'||q.length>300))throw Error('도우미 답변 형식을 확인하지 못했어요.');
  let answer=value.answer.trim();
+ if(value.nutritionTable!==undefined){
+  const rows=value.nutritionTable;
+  if(!Array.isArray(rows)||!rows.length||rows.length>7||rows.some(row=>!row||['meal','menu','alternative'].some(key=>typeof row[key]!=='string'||!row[key].trim()||row[key].length>600)))throw Error('식단 표의 내용을 확인하지 못했어요.');
+  const cell=text=>text.trim().replace(/\r?\n/g,' ').replace(/\|/g,'\\|');
+  answer+='\n\n| 끼니 | 메뉴와 예시 분량 | 대체·준비 방법 |\n| --- | --- | --- |\n'+rows.map(row=>'| '+[row.meal,row.menu,row.alternative].map(cell).join(' | ')+' |').join('\n');
+ }
  if(value.questionFacts!==undefined&&(!Array.isArray(value.questionFacts)||value.questionFacts.length>5||value.questionFacts.some(v=>typeof v!=='string'||v.length>400)))throw Error('질문의 조건을 확인하지 못했어요.');
  if(value.points!==undefined){
   if(!Array.isArray(value.points)||value.points.length>6||value.points.some(p=>!p||typeof p.title!=='string'||!p.title.trim()||p.title.length>100||/[\r\n]/.test(p.title)||typeof p.explanation!=='string'||!p.explanation.trim()||p.explanation.length>1200))throw Error('답변 항목을 확인하지 못했어요.');
@@ -236,7 +248,58 @@ function nextChatContext(question,previous){
  if(/일반(?:적인)?\s*(?:운동\s*)?(?:지식|원리|개념).{0,15}(?:설명|알려)|(?:기록과|회원과).{0,8}(?:상관없이|무관하게)|기록\s*(?:없이|말고).{0,15}(?:설명|알려)/.test(question))return {kind:'general',question};
  return previous;
 }
+// Nutrition is a conversation topic, independent of whether this turn repeats "식단".
+function isNutritionQuestion(question=''){
+ return /식단|영양|끼니|식사|알레르기|meal\s*plan|(?:운동|수업)\s*(?:전|후).{0,15}(?:먹|간식)|하루\s*[1-6]\s*회.{0,15}(?:집에서|먹)/i.test(question);
+}
+function leavesNutrition(question=''){
+ if(isNutritionQuestion(question))return false;
+ return requestsMemberContext(question)||/(?:운동|수업|훈련|스쿼트|프레스|벤치|로우|근력|세트|반복|중량|볼륨|통증|앱|업로드|로그인|PDF|코딩|정치|날씨)/i.test(question)||/새(?:로운)?\s*주제|다른\s*(?:주제|질문)/.test(question);
+}
+function nutritionTurnPrompt(context,question){
+ const format=context?.format==='table'||/표로|표\s*(?:형태|형식)/.test(question);
+ return `현재 대화의 주제는 식단·영양이다. 마지막 문장의 표현만 보고 운동 기록으로 전환하지 않는다. 사용자의 최근 정정이 이전 AI 답변보다 우선이다. 조건 확인만 요청하면 질문 하나로 묶고 메뉴를 미리 만들지 않는다. 조건에 답한 뒤에는 그 조건 그대로 메뉴를 제안한다. 식단에서 이미 답한 선호·알레르기를 관성적으로 되묻지 않는다. 이전 AI가 잘못 붙인 근비대 목표나 세 끼 권고를 반복하지 않는다. `+(format?`사용자는 식단을 표로 정리하도록 요청했다. answer는 짧은 도입만 쓰고, 실제 표의 내용은 필수 nutritionTable 배열에 각 끼니별 meal(끼니), menu(메뉴와 예시 분량), alternative(대체·준비 방법)로 채운다. 표는 서버가 화면 형식으로 변환한다. 꼭 필요한 조정 기준만 closing에 짧게 쓴다. 앞선 메뉴가 사용자 조건을 어겼다면 확인된 조건으로 바로잡고 표로 정리한다. 새 운동 분석이나 운동 기록표는 만들지 않는다.`:`각 끼니의 메뉴·분량·대체 방법을 구체적으로 제안한다. 정보 확인 단계에서 표나 식단을 미리 만들 필요는 없다.`);
+}
+function resolveNutritionContext(facts){
+ let context=null;
+ const advance=(question,saved)=>{
+  if(leavesNutrition(question)){context=null;return;}
+  if(saved?.kind==='nutrition'&&Array.isArray(saved.userStatements)){
+   context={kind:'nutrition',userStatements:saved.userStatements.filter(v=>typeof v==='string'&&v.length<=1200).slice(-16),format:saved.format==='table'?'table':'prose',separateCase:saved.separateCase===true,conditions:{...(typeof saved.conditions?.goal==='string'&&saved.conditions.goal.length<=200?{goal:saved.conditions.goal}:{}),...(Number.isInteger(saved.conditions?.mealsPerDay)&&saved.conditions.mealsPerDay>=1&&saved.conditions.mealsPerDay<=6?{mealsPerDay:saved.conditions.mealsPerDay}:{}),...(['집','외부'].includes(saved.conditions?.location)?{location:saved.conditions.location}:{})}};
+  }
+  if(!context&&!isNutritionQuestion(question))return;
+  if(!context||/새(?:로운)?\s*(?:식단|사례)|다른\s*회원/.test(question))context={kind:'nutrition',userStatements:[],format:'prose',separateCase:false};
+  if(isHypothetical(question)||/다른\s*회원|별도(?:의)?\s*사례/.test(question))context.separateCase=true;
+  if(context.userStatements.at(-1)!==question)context.userStatements.push(question);
+  context.userStatements=context.userStatements.slice(-16);
+  if(/표로|표\s*(?:형태|형식)/.test(question))context.format='table';
+  if(/표\s*말고|글로|문장으로/.test(question))context.format='prose';
+ };
+ for(const turn of facts.history??[])advance(turn.question,turn.chatContext);
+ advance(facts.question);
+ if(!context)return null;
+ const conditions={...context.conditions};
+ for(const statement of context.userStatements){
+  const goal=/(?:등록\s*)?목표는?\s*["“]([^"”]{1,200})["”]/.exec(statement);
+  if(goal)conditions.goal=goal[1];
+  const count=/(?:하루\s*)?([1-6])\s*(?:끼|회)(?:\s*(?:식사|먹)|[ ,·를은는으로]|$)/.exec(statement);
+  if(count)conditions.mealsPerDay=Number(count[1]);
+  if(/집에서|집밥|가정식/.test(statement)&&!/구내식당|회사|직장|외식|편의점/.test(statement))conditions.location='집';
+  if(/구내식당|회사에서|직장에서|편의점/.test(statement)&&!/집에서|집밥|가정식/.test(statement))conditions.location='외부';
+ }
+ context.conditions=conditions;
+ return context;
+}
 export function prepareChatFacts(facts){
+ const nutrition=resolveNutritionContext(facts);
+ if(nutrition){
+  const conditions={...nutrition.conditions};
+  if(!conditions.goal&&!nutrition.separateCase&&typeof facts.goal==='string')conditions.goal=facts.goal;
+  return {question:facts.question,asOf:facts.asOf,scope:'nutrition',chatContext:nutrition,nutrition:{userStatements:nutrition.userStatements,conditions,requestedFormat:nutrition.format},records:[],history:(facts.history??[]).filter(t=>t.chatContext?.kind==='nutrition'&&!t.usesRecords).slice(-3).map(({question,answer})=>({question,answer})),sourceScope:'식단·영양 대화. 사용자가 확인한 조건과 등록 목표만 사용한다. 운동 분석의 파생 목표·기록·이전 AI의 추정을 식단 조건으로 사용하지 않는다.'};
+ }
+ return prepareBaseChatFacts({...facts,history:(facts.history??[]).filter(t=>t.chatContext?.kind!=='nutrition')});
+}
+function prepareBaseChatFacts(facts){
  let context=null,exampleHistory=[];const memberHistory=[];
  for(const turn of facts.history??[]){
   const saved=turn.chatContext;
