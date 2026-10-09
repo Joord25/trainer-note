@@ -48,7 +48,7 @@ test('project report aggregates accounts and reconciles legacy plus sharded ledg
  await db.doc('aiGlobalUsage/2026-10').set({usedMicros:100,reservedMicros:10});await db.doc('aiGlobalUsage/2026-10/shards/01').set({usedMicros:350,reservedMicros:20});
  await db.doc('unrelated/a/aiCalls/x').set({month:'2026-10',estimatedMicros:10000,status:'complete'});
  const result=await createUsageReporting({db,now}).report(uid,{month:'2026-10'},{project:true});
- assert.equal(result.scope,'project');assert.equal(result.totals.usedMicros,400);assert.equal(result.totals.calls,2);assert.equal(result.monthly.usedMicros,450);assert.equal(result.monthly.reservedMicros,30);assert.equal(result.monthly.calls,null);assert.equal(result.unattributedMicros,50);assert.ok(!JSON.stringify(result).includes('second-owner'));
+ assert.equal(result.scope,'project');assert.equal(result.totals.usedMicros,400);assert.equal(result.totals.calls,2);assert.equal(result.monthly.usedMicros,450);assert.equal(result.monthly.reservedMicros,30);assert.equal(result.monthly.calls,null);assert.equal(result.unattributedMicros,50);assert.equal(result.accounts.length,2);assert.equal(result.accounts[0].uid,'second-owner');
 });
 
 test('usage access fails closed, rejects forged identity, and revokes without a new token',async()=>{
@@ -63,4 +63,27 @@ test('usage access fails closed, rejects forged identity, and revokes without a 
  assert.equal(reads,0);assert.equal(writes,0);
  await access(admin,{action:'report'});await access(admin,{action:'setPurpose',uid:'other'});assert.equal(reads,1);assert.equal(writes,1);
  await db.doc('systemAccess/billing').set({uids:[]});await assert.rejects(()=>access(admin,{action:'report'}),{code:'permission-denied'});
+});
+
+
+test('account breakdowns reconcile by purpose and trust paths rather than payload owners',async()=>{
+ await write('same-id',{purpose:'production',estimatedMicros:120,uid:'second-owner',prompt:'PRIVATE_PROMPT',memberId:'PRIVATE_MEMBER'});
+ await write('failed',{purpose:'development',status:'failed',estimatedMicros:80,usageUncertain:true});
+ await write('same-id',{estimatedMicros:300},'second-owner');
+ await write('pending',{purpose:'production',status:'reserved',reservedMicros:700},'second-owner');
+ await write('past',{month:'2026-09',estimatedMicros:99999},'second-owner');
+ const auth={getUsers:async ids=>{assert.deepEqual(new Set(ids.map(x=>x.uid)),new Set([uid,'second-owner']));return {users:[{uid,displayName:'Operator',email:'operator@example.test',customClaims:{private:'PRIVATE_CLAIM'}}]};}};
+ const result=await createUsageReporting({db,auth,now}).report(uid,{},{project:true});
+ const owner=result.accounts.find(a=>a.uid===uid),second=result.accounts.find(a=>a.uid==='second-owner');
+ assert.equal(owner.email,'operator@example.test');assert.equal(owner.displayName,'Operator');assert.equal(second.email,null);
+ assert.equal(owner.breakdowns.all.totals.usedMicros,200);assert.equal(owner.breakdowns.development.totals.failedCalls,1);
+ assert.equal(second.breakdowns.all.totals.usedMicros,300);assert.equal(second.breakdowns.production.totals.reservedMicros,700);
+ for(const purpose of ['all','production','development','unclassified'])for(const field of ['usedMicros','settledCalls','failedCalls','reservedMicros','inputTokens'])assert.equal(result.accounts.reduce((n,a)=>n+a.breakdowns[purpose].totals[field],0),result.breakdowns[purpose].totals[field]);
+ assert.ok(!JSON.stringify(result).includes('PRIVATE_'));
+ const empty=await createUsageReporting({db,auth:{getUsers:()=>{throw Error('must not query empty accounts');}},now}).report(uid,{month:'2026-08'},{project:true});assert.deepEqual(empty.accounts,[]);assert.equal(empty.accountNamesUnavailable,false);
+});
+test('account name lookup failure preserves costs and partial reports stay explicit',async()=>{
+ await write('a',{});await write('b',{},'second-owner');
+ const report=await createUsageReporting({db,auth:{getUsers:async()=>{throw Error('unavailable');}},now,limit:1}).report(uid,{},{project:true});
+ assert.equal(report.partial,true);assert.equal(report.accountNamesUnavailable,true);assert.equal(report.accounts.length,1);assert.equal(report.accounts[0].breakdowns.all.totals.usedMicros,report.totals.usedMicros);assert.equal(report.accounts[0].email,null);
 });

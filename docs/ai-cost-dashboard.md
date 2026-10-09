@@ -1,11 +1,11 @@
 # AI usage and cost dashboard — 2026-10-10
 
-Settings → 관리자 비용 is available only to the operator and shows project-wide application AI calls by Korean calendar month (last 24 months), feature, and purpose. It is an application ledger, not a Google invoice integration. Storage, Firestore, Functions, and scripts calling Gemini directly are excluded. Free quotas, credits and taxes are not deducted. The optional KRW rate is manually entered, not a live exchange rate.
+Settings → 관리자 비용 is available only to the operator and shows project-wide application AI calls by Korean calendar month (last 24 months), feature, purpose, and trainer account. It is an application ledger, not a Google invoice integration. Storage, Firestore, Functions, and scripts calling Gemini directly are excluded. Free quotas, credits and taxes are not deducted. The optional KRW rate is manually entered, not a live exchange rate.
 
 ## Measurement
 
 - `trainerUsage` is authenticated, App Check enforced, deletion-lock aware and protected by the existing request guard. The authenticated UID must be in the server-managed `systemAccess/billing.uids` allowlist and have a verified email. The access action returns only a boolean. Every report and purpose change checks the allowlist again, so revocation takes effect without refreshing an ID token. No client can read or write the allowlist.
-- Reads the `aiCalls` collection group for one month, keeping only canonical trainer-ledger paths; reconciles with the legacy `aiGlobalUsage/{month}` document plus its shards. Reads the operator’s tracking setting. The `month` collection-group index is deployed with this change. Returns aggregate counts, tokens, durations and estimated micro-USD only, never member data, prompts or raw model configuration.
+- Reads the `aiCalls` collection group for one month, keeping only canonical trainer-ledger paths; reconciles with the legacy `aiGlobalUsage/{month}` document plus its shards. Reads the operator’s tracking setting. The `month` collection-group index is deployed with this change. Returns aggregate counts, tokens, durations and estimated micro-USD, plus trainer UID/name/email for the administrator account list; never member data, prompts or raw model configuration.
 - Completed and failed calls contribute to settled counts and average cost. Reserved calls appear separately and do not inflate spent cost or average. Unknown provider usage keeps the existing conservative charge and is explicitly flagged.
 - Features include extraction, record analysis, goal/assessment, planning, direction discussion, basic/deep chat, and search/safety. Unknown historical models/kinds remain in a labeled fallback category.
 - A question or uploaded page may produce multiple API calls. Search and retries are separate calls. The scenario calculator uses API-call counts and observed averages, not a claimed price per user, question or page. Missing samples produce no estimate.
@@ -32,3 +32,11 @@ Firebase and AI Studio can display costs for the same Google Cloud project and G
 This dashboard is an operational estimate, not a billing sync. External scripts bypassing the app ledger remain outside the report even with project-wide aggregation. The user's administrator account was resolved through Firebase Auth and its UID was provisioned in a private allowlist; no email or UID is embedded in the public client bundle.
 
 Admin revision validation: 102 targeted emulator/client tests cover access denial, forged role/UID inputs, verified-email checks, immediate revocation, project aggregation, legacy plus sharded totals, and rules blocking raw usage and allowlist access.
+
+## Account breakdowns
+
+The administrator sees a cost-sorted account table and can select an account for its feature totals, purpose filters and scenario estimates. Whole-project mode remains the default. Only accounts with calls in the selected month's scanned ledger appear; an absent account is not a claim of zero historical cost. Account identity is derived from canonical document paths, ignoring any payload UID. Account sums reconcile to the same scanned project totals for every purpose. Global legacy/unattributed charges stay project-only; partial scans are also flagged when an account is selected.
+
+Names and emails are resolved server-side through Firebase Auth in batches of up to 100. Missing/deleted identities retain UID-labelled ledger totals. Lookup failures preserve aggregates with a visible notice. Account and purpose selections reuse the loaded report without additional reads or AI calls. Existing administrator authorization remains unchanged; no ordinary account receives this data.
+
+Account breakdown validation: 104 targeted emulator/client tests passed, including per-account/purpose reconciliation, forged payload ownership, missing identities, lookup failures, partial scans, and existing administrator/rules protections. TypeScript checking passed.

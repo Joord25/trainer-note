@@ -22,7 +22,7 @@ const db=getFirestore(),secret=defineSecret('TRAINER_NOTE_GEMINI_API_KEY');
 const region='us-central1',options={region,maxInstances:3,minInstances:0,concurrency:4,memory:'512MiB',timeoutSeconds:180,secrets:[secret]};
 const accountService=createAccountService({db,auth:getAuth(),bucket:getStorage().bucket(`${process.env.GCLOUD_PROJECT}.firebasestorage.app`),enqueue:async(data,delay,id)=>{try{await getFunctions().taskQueue(`locations/${region}/functions/purgeTrainerAccount`).enqueue(data,{id,scheduleDelaySeconds:delay,dispatchDeadlineSeconds:540});}catch(e){if(e.code!=='functions/task-already-exists')throw e;}}});
 const requestGuard=createRequestGuard({db});
-const usageReporting=createUsageReporting({db});
+const usageReporting=createUsageReporting({db,auth:getAuth()});
 const usageAccess=createUsageAccess({db,reporting:usageReporting});
 const manageSource=createSourceManagement({db,bucket:getStorage().bucket(`${process.env.GCLOUD_PROJECT}.firebasestorage.app`)});
 const deletionPending=async uid=>(await db.doc(`accountDeletions/${uid}`).get()).exists;
