@@ -1,7 +1,6 @@
 "use client";
 import {isCardioWorkout} from '../lib/cardio-distribution';
 import {measurementType} from '../lib/workout-measurements';
-import {aiUsagePolicyLabel} from '../lib/ai-usage-policy';
 import {useEffect,useRef,useState} from 'react';
 import {ChartRecordHover} from './chart-record-hover';
 import {Icon} from './icons';
@@ -9,7 +8,7 @@ import {BodyMap} from './body-map';
 import {RecordEditor} from './member-records';
 import {partDefinitions,type Insights} from './workout-insights';
 import {listenWorkouts,type WorkoutRecord} from '../lib/workout-records';
-import {aiMessage,callAi,listenAiDocument,listenUsage,type Analysis,type SavedPlan,type PlanRow,type AiUsage} from '../lib/server-ai';
+import {aiMessage,callAi,listenAiDocument,type Analysis,type SavedPlan,type PlanRow} from '../lib/server-ai';
 export function bodyStats(records:WorkoutRecord[]):Insights{
  records=records.filter(r=>measurementType(r)==='repetitions'&&!isCardioWorkout(r));
  const parts=partDefinitions.map(p=>{const matching=records.filter(r=>r.bodyPart===p.label);return {...p,sets:matching.reduce((n,r)=>n+r.sets.length,0),occurrences:matching.length,sessionDates:[...new Set(matching.map(r=>r.date))],exercises:[...new Set(matching.map(r=>r.exerciseName))],percent:0};});
@@ -18,9 +17,9 @@ export function bodyStats(records:WorkoutRecord[]):Insights{
  return {parts,totalSets,unknownSets:totalSets-classified,sessionCount:new Set(records.map(r=>r.date)).size,top:[...parts].sort((a,b)=>b.sets-a.sets)[0]};
 }
 export function MemberAnalysis({memberId,memberName,online}:{memberId:string;memberName:string;online:boolean}){
- const [analysis,setAnalysis]=useState<Analysis|null>(null),[plan,setPlan]=useState<SavedPlan|null>(null),[records,setRecords]=useState<WorkoutRecord[]>([]),[usage,setUsage]=useState<AiUsage>({}),[error,setError]=useState(''),[busy,setBusy]=useState(false),[tab,setTab]=useState('report'),[editor,setEditor]=useState<WorkoutRecord|null>(null),[loaded,setLoaded]=useState(false);
+ const [analysis,setAnalysis]=useState<Analysis|null>(null),[plan,setPlan]=useState<SavedPlan|null>(null),[records,setRecords]=useState<WorkoutRecord[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[tab,setTab]=useState('report'),[editor,setEditor]=useState<WorkoutRecord|null>(null),[loaded,setLoaded]=useState(false);
  const requested=useRef(false);
- useEffect(()=>{const fail=(e:unknown)=>setError(aiMessage(e));const offs=[listenAiDocument<Analysis>(memberId,'analysis',v=>{setAnalysis(v);setLoaded(true);},fail),listenAiDocument<SavedPlan>(memberId,'plans',setPlan,fail),listenWorkouts(memberId,v=>setRecords(v.filter(r=>!r.pending)),fail),listenUsage(setUsage,fail)];return()=>offs.forEach(f=>f());},[memberId]);
+ useEffect(()=>{const fail=(e:unknown)=>setError(aiMessage(e));const offs=[listenAiDocument<Analysis>(memberId,'analysis',v=>{setAnalysis(v);setLoaded(true);},fail),listenAiDocument<SavedPlan>(memberId,'plans',setPlan,fail),listenWorkouts(memberId,v=>setRecords(v.filter(r=>!r.pending)),fail)];return()=>offs.forEach(f=>f());},[memberId]);
  useEffect(()=>{if(!loaded||analysis||!records.length||requested.current||!online)return;requested.current=true;void callAi({action:'report',memberId}).catch(e=>setError(aiMessage(e)));},[loaded,analysis,records.length,online,memberId]);
  async function retry(){setBusy(true);setError('');try{await callAi({action:'report',memberId,retry:true});}catch(e){setError(aiMessage(e));}finally{setBusy(false);}}
  const [now,setNow]=useState(Date.now());useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(timer);},[]);
@@ -38,7 +37,7 @@ export function MemberAnalysis({memberId,memberName,online}:{memberId:string;mem
  {tab==='trend'&&<ActualTrend records={records}/>}
  <div hidden={tab!=='plan'}><SavedLessonPlan memberId={memberId} plan={plan} draft={report?.program??[]} fingerprint={analysis?.fingerprint??''} online={online} onEvidence={openRecord}/></div>
  </div><p className="record-help">AI 종합 의견은 최근 {analysis?.scopeLimit??120}개 운동 항목을 기준으로 해요. 통계·부위 분포에는 저장된 전체 기록을 표시해요. 자동 반영 수치는 트레이너 확인 전의 잠정 기록입니다.</p>
- <details className="ai-usage"><summary>무료 베타 · 이번 달 AI 이용량</summary><div><strong>예상 모델 원가 ${((usage.usedMicros??0)/1e6).toFixed(4)}</strong><p>입력 {(usage.inputTokens??0).toLocaleString()} · 출력 {(usage.outputTokens??0).toLocaleString()} 토큰 · 요청 {usage.calls??0}회</p><p>{aiUsagePolicyLabel} · 사용량 집계 중. 서버·저장소 비용 별도.</p>{!!usage.reservedMicros&&<p>처리 중 비용 예약 ${((usage.reservedMicros??0)/1e6).toFixed(4)}</p>}</div></details>{error&&<p className="file-error" role="alert">{error}</p>}
+ {error&&<p className="file-error" role="alert">{error}</p>}
  {editor&&<RecordEditor memberId={memberId} memberName={memberName} existing={editor} online={online} onClose={()=>setEditor(null)} onSaved={()=>setEditor(null)}/>}
  </section>;
 }

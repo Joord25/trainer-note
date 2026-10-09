@@ -42,3 +42,25 @@ test('purpose setting affects only owner future tracking and leaves old calls un
  assert.equal((await service.report(uid,{})).trackingPurpose,'development');assert.equal((await service.report(uid,{})).sources.unclassified.calls,1);assert.equal((await db.doc('trainers/someone-else/usageSettings/current').get()).exists,false);
  await assert.rejects(()=>service.setPurpose(uid,{purpose:'all'}));
 });
+
+test('project report aggregates accounts and reconciles legacy plus sharded ledger',async()=>{
+ await write('one',{estimatedMicros:100});await write('two',{estimatedMicros:300},'second-owner');await write('past',{month:'2026-09',estimatedMicros:999},'second-owner');
+ await db.doc('aiGlobalUsage/2026-10').set({usedMicros:100,reservedMicros:10});await db.doc('aiGlobalUsage/2026-10/shards/01').set({usedMicros:350,reservedMicros:20});
+ await db.doc('unrelated/a/aiCalls/x').set({month:'2026-10',estimatedMicros:10000,status:'complete'});
+ const result=await createUsageReporting({db,now}).report(uid,{month:'2026-10'},{project:true});
+ assert.equal(result.scope,'project');assert.equal(result.totals.usedMicros,400);assert.equal(result.totals.calls,2);assert.equal(result.monthly.usedMicros,450);assert.equal(result.monthly.reservedMicros,30);assert.equal(result.monthly.calls,null);assert.equal(result.unattributedMicros,50);assert.ok(!JSON.stringify(result).includes('second-owner'));
+});
+
+test('usage access fails closed, rejects forged identity, and revokes without a new token',async()=>{
+ const {createUsageAccess}=await import('../usage-access.mjs');let reads=0,writes=0;
+ const access=createUsageAccess({db,reporting:{report:async(owner,data,options)=>{reads++;assert.equal(owner,uid);assert.equal(options.project,true);return {ok:true};},setPurpose:async owner=>{writes++;assert.equal(owner,uid);return {ok:true};}}});
+ const admin={uid,token:{email_verified:true}},ordinary={uid:'other',token:{email_verified:true,admin:true}};
+ await assert.rejects(()=>access(null,{action:'report'}),{code:'unauthenticated'});
+ assert.deepEqual(await access(admin,{action:'access'}),{admin:false});
+ await db.doc('systemAccess/billing').set({uids:[uid]});
+ assert.deepEqual(await access(admin,{action:'access'}),{admin:true});
+ for(const actor of [ordinary,{...admin,token:{email_verified:false}}])for(const action of ['report','setPurpose'])await assert.rejects(()=>access(actor,{action,uid,admin:true}),{code:'permission-denied'});
+ assert.equal(reads,0);assert.equal(writes,0);
+ await access(admin,{action:'report'});await access(admin,{action:'setPurpose',uid:'other'});assert.equal(reads,1);assert.equal(writes,1);
+ await db.doc('systemAccess/billing').set({uids:[]});await assert.rejects(()=>access(admin,{action:'report'}),{code:'permission-denied'});
+});

@@ -269,7 +269,7 @@ service cloud.firestore {
       }
     }
     match /trainers/{uid}/{kind}/{id} {
-      allow read: if kind in ['aiUsage','aiDaily','interpretations','trainingPrinciples'] && isOwner(uid);
+      allow read: if kind in ['interpretations','trainingPrinciples'] && isOwner(uid);
       allow write: if false;
     }
     match /{document=**} { allow read, write: if false; }

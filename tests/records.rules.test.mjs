@@ -70,8 +70,8 @@ for(const kind of ['goalProposals','assessmentResults','assessmentResultHistory'
  const target=path+'/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{status:'ready'}));
  await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(setDoc(doc(db('trainer-a'),target),{status:'ready'}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
 });
-for(const kind of ['aiUsage','aiDaily'])test(`${kind} cannot be reset or forged by client`,async()=>{
- const target='trainers/trainer-a/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{calls:5}));await assertSucceeds(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(updateDoc(doc(db('trainer-a'),target),{calls:0}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
+for(const kind of ['aiUsage','aiDaily'])test(`${kind} is server-only, including owner reads`,async()=>{
+ const target='trainers/trainer-a/'+kind+'/current';await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{calls:5}));await assertFails(getDoc(doc(db('trainer-a'),target)));await assertFails(getDoc(doc(db('trainer-b'),target)));await assertFails(updateDoc(doc(db('trainer-a'),target),{calls:0}));await assertFails(deleteDoc(doc(db('trainer-a'),target)));
 });
 
 for(const kind of ['distance_time','duration','distance'])test(`${kind} supports eight intervals and owner revisions`,async()=>{
@@ -182,4 +182,11 @@ for(const patch of [{loadType:'unknown'},{sets:[{kg:null,reps:0,distanceMeters:4
 test('right-only and left-only records save zero for the unused side within eight-set budget',async()=>{
  const d=db('trainer-a'),sets=Array.from({length:8},(_,i)=>({kg:10,reps:10,leftReps:i%2?10:0,rightReps:i%2?0:10}));
  await assertSucceeds(create(d,{sets}));assert.deepEqual((await getDoc(doc(d,rp))).data().sets,sets);
+});
+
+test('billing allowlist and tracking settings cannot be read or forged by any client',async()=>{
+ for(const target of ['systemAccess/billing','trainers/trainer-a/usageSettings/current']){
+  await env.withSecurityRulesDisabled(async c=>setDoc(doc(c.firestore(),target),{uids:['trainer-a'],purpose:'development'}));
+  for(const uid of [null,'trainer-a','trainer-b']){await assertFails(getDoc(doc(db(uid),target)));await assertFails(setDoc(doc(db(uid),target),{uids:[uid]}));}
+ }
 });

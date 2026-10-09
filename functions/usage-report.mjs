@@ -27,12 +27,15 @@ export function summarizeUsage(calls,{purpose='all'}={}){
 }
 export function createUsageReporting({db,now=()=>Date.now(),limit=USAGE_REPORT_LIMIT}){
  function validateMonth(month){const current=usageMonth(now());if(typeof month!=='string'||!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month))throw Error('조회할 월을 확인해주세요.');const serial=m=>Number(m.slice(0,4))*12+Number(m.slice(5));if(serial(month)>serial(current)||serial(current)-serial(month)>23)throw Error('최근 24개월 내 사용량을 선택해주세요.');return month;}
- async function report(uid,input={}){
+ async function report(uid,input={},{project=false}={}){
   const month=validateMonth(input.month??usageMonth(now())),purpose=input.purpose??'all';
   if(!['all','production','development','unclassified'].includes(purpose))throw Error('사용 구분을 확인해주세요.');
-  const [logs,monthly,settings]=await Promise.all([db.collection(`trainers/${uid}/aiCalls`).where('month','==',month).limit(limit+1).get(),db.doc(`trainers/${uid}/aiUsage/${month}`).get(),db.doc(`trainers/${uid}/usageSettings/current`).get()]);
-  const values=logs.docs.slice(0,limit).map(d=>d.data()),all=summarizeUsage(values),summary=monthly.data()??{};
-  return {month,purpose,...summarizeUsage(values,{purpose}),breakdowns:Object.fromEntries(['all','production','development','unclassified'].map(p=>{const {totals,rows}=summarizeUsage(values,{purpose:p});return [p,{totals,rows}];})),trackingPurpose:validPurpose(settings.data()?.purpose)?settings.data().purpose:'production',partial:logs.size>limit,scannedCalls:values.length,limit,monthly:{calls:number(summary.calls),usedMicros:number(summary.usedMicros),reservedMicros:number(summary.reservedMicros)},unattributedMicros:Math.max(0,number(summary.usedMicros)-all.totals.usedMicros),unattributedCalls:Math.max(0,number(summary.calls)-all.totals.calls),asOf:new Date(now()).toISOString()};
+  const calls=project?db.collectionGroup('aiCalls'):db.collection(`trainers/${uid}/aiCalls`);
+  const global=db.doc(`aiGlobalUsage/${month}`);
+  const [logs,monthly,settings,shards]=await Promise.all([calls.where('month','==',month).limit(limit+1).get(),(project?global:db.doc(`trainers/${uid}/aiUsage/${month}`)).get(),db.doc(`trainers/${uid}/usageSettings/current`).get(),project?global.collection('shards').get():null]);
+  const values=logs.docs.slice(0,limit).filter(d=>!project||/^trainers\/[^/]+\/aiCalls\/[^/]+$/.test(d.ref.path)).map(d=>d.data()),all=summarizeUsage(values),summary=monthly.data()??{};
+  if(project)for(const shard of shards.docs){summary.usedMicros=number(summary.usedMicros)+number(shard.data().usedMicros);summary.reservedMicros=number(summary.reservedMicros)+number(shard.data().reservedMicros);}
+  return {scope:project?'project':'account',month,purpose,...summarizeUsage(values,{purpose}),breakdowns:Object.fromEntries(['all','production','development','unclassified'].map(p=>{const {totals,rows}=summarizeUsage(values,{purpose:p});return [p,{totals,rows}];})),trackingPurpose:validPurpose(settings.data()?.purpose)?settings.data().purpose:'production',partial:logs.size>limit,scannedCalls:values.length,limit,monthly:{calls:project?null:number(summary.calls),usedMicros:number(summary.usedMicros),reservedMicros:number(summary.reservedMicros)},unattributedMicros:Math.max(0,number(summary.usedMicros)-all.totals.usedMicros),unattributedCalls:project?0:Math.max(0,number(summary.calls)-all.totals.calls),asOf:new Date(now()).toISOString()};
  }
  async function setPurpose(uid,input={}){if(!validPurpose(input.purpose))throw Error('실사용 또는 개발·테스트를 선택해주세요.');await db.doc(`trainers/${uid}/usageSettings/current`).set({purpose:input.purpose,updatedAt:FieldValue.serverTimestamp()});return {purpose:input.purpose};}
  return {report,setPurpose};

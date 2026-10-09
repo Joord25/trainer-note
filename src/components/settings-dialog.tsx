@@ -5,12 +5,13 @@ import {AccountControl,useTrainer} from './auth-gate';
 import {getClientAuth} from '../lib/firebase-client';
 import {Icon} from './icons';
 import {defaultDisplayPreferences,type DisplayPreferences} from '../lib/display-preferences';
-import {serverAiEnabled,aiMessage,callAccount} from '../lib/server-ai';
+import {serverAiEnabled,aiMessage,callAccount,readUsageAccess} from '../lib/server-ai';
 import {AiCostPanel} from './ai-cost-panel';
-const tabs=[['display','화면 설정','panel'],['account','계정','users'],['usage','AI 이용량','spark'],['feedback','개선 의견','edit']] as const;
+const tabs=[['display','화면 설정','panel'],['account','계정','users'],['usage','관리자 비용','spark'],['feedback','개선 의견','edit']] as const;
 export function SettingsDialog({open,onClose,preferences:p,onChange,saveError,beforeLogout}:{open:boolean;onClose:()=>void;preferences:DisplayPreferences;onChange:(patch:Partial<DisplayPreferences>)=>void;saveError:string;beforeLogout:()=>boolean}){
  const user=useTrainer(),dialog=useRef<HTMLDialogElement>(null),feedbackId=useRef('');
- const [tab,setTab]=useState<string>('display');
+ const [tab,setTab]=useState<string>('display'),[usageAdmin,setUsageAdmin]=useState(false);
+ useEffect(()=>{let active=true;setUsageAdmin(false);if(open&&serverAiEnabled)void readUsageAccess().then(value=>{if(active)setUsageAdmin(value.admin);}).catch(()=>{});return()=>{active=false;};},[open,user.uid]);
  const [topic,setTopic]=useState('회원 홈'),[message,setMessage]=useState(''),[contact,setContact]=useState(user.email||''),[sending,setSending]=useState(false),[receipt,setReceipt]=useState(''),[feedbackError,setFeedbackError]=useState('');
  const [deleting,setDeleting]=useState(false),[confirmDelete,setConfirmDelete]=useState(false),[deleteText,setDeleteText]=useState(''),[deleteError,setDeleteError]=useState('');
  useEffect(()=>{if(!open){dialog.current?.close();return;}const previous=document.activeElement as HTMLElement|null;dialog.current?.showModal();return()=>{dialog.current?.close();previous?.focus();};},[open]);
@@ -24,7 +25,7 @@ export function SettingsDialog({open,onClose,preferences:p,onChange,saveError,be
  const editFeedback=()=>{feedbackId.current='';setReceipt('');setFeedbackError('');};
  return <dialog ref={dialog} className="settings-dialog" aria-labelledby="settings-title" onCancel={e=>{e.preventDefault();if(!deleting)onClose();}}>
   <header className="settings-header"><h2 id="settings-title">설정</h2><button className="icon-button" disabled={deleting} aria-label="설정 닫기" onClick={onClose}><Icon name="close" size={22}/></button></header>
-  <div className="settings-layout"><nav className="settings-nav" aria-label="설정 메뉴">{tabs.map(([id,label,icon])=><button key={id} disabled={deleting} aria-current={tab===id?'page':undefined} onClick={()=>setTab(id)}><Icon name={icon} size={19}/><span>{label}</span></button>)}</nav><div className="settings-content">
+  <div className="settings-layout"><nav className="settings-nav" aria-label="설정 메뉴">{tabs.filter(([id])=>id!=='usage'||usageAdmin).map(([id,label,icon])=><button key={id} disabled={deleting} aria-current={tab===id?'page':undefined} onClick={()=>setTab(id)}><Icon name={icon} size={19}/><span>{label}</span></button>)}</nav><div className="settings-content">
   {tab==='display'&&<section><h3>화면 설정</h3>
    <div className="settings-row"><strong>테마</strong><div className="segmented" aria-label="테마">{(['light','dark','system'] as const).map((v,i)=><button key={v} aria-pressed={p.theme===v} className={p.theme===v?'selected':''} onClick={()=>onChange({theme:v})}>{['라이트','다크','시스템'][i]}</button>)}</div></div>
    <div className="settings-row"><strong>글꼴</strong><div className="segmented" aria-label="글꼴">{(['original','system'] as const).map((v,i)=><button key={v} aria-pressed={p.font===v} className={p.font===v?'selected':''} onClick={()=>onChange({font:v})}>{['기존 글꼴','시스템 글꼴'][i]}</button>)}</div></div>
@@ -44,7 +45,7 @@ export function SettingsDialog({open,onClose,preferences:p,onChange,saveError,be
     {!confirmDelete?<button className="danger" onClick={()=>setConfirmDelete(true)}>회원탈퇴</button>:<><p><strong>{user.email}</strong> 계정에서 탈퇴합니다. Google 계정 자체는 삭제되지 않습니다.</p><label className="settings-field">확인을 위해 ‘탈퇴’ 입력<input aria-label="탈퇴 확인" value={deleteText} onChange={e=>setDeleteText(e.target.value)} autoComplete="off" disabled={deleting}/></label><p className="settings-note">Google 재인증 후 접근을 해제합니다. 진행 중인 작업이 끝나면 기록과 파일을 몇 분 내 삭제하며, 삭제 실패 시 서버에서 재시도합니다.</p><div className="settings-feedback-actions"><button disabled={deleting} onClick={()=>{setConfirmDelete(false);setDeleteText('');}}>취소</button><button className="danger" disabled={deleting||deleteText!=='탈퇴'} onClick={()=>void removeAccount()}>{deleting?'탈퇴 처리 중…':'Google 확인 후 탈퇴'}</button></div></>}
     {deleteError&&<p className="file-error" role="alert">{deleteError}</p>}
    </div></section>}
-  {open&&tab==='usage'&&(serverAiEnabled?<AiCostPanel key={user.uid}/>:<p>AI 서버 연결을 준비하고 있어요.</p>)}
+  {open&&usageAdmin&&tab==='usage'&&(serverAiEnabled?<AiCostPanel key={user.uid}/>:<p>AI 서버 연결을 준비하고 있어요.</p>)}
   {tab==='feedback'&&<section><h3>개선 의견</h3><label className="settings-field">관련 화면<select value={topic} disabled={sending} onChange={e=>{setTopic(e.target.value);editFeedback();}}>{['회원 홈','기록 수정','진행 분석','다음 수업','AI 도우미','업로드','설정','기타'].map(v=><option key={v}>{v}</option>)}</select></label><label className="settings-field">의견<textarea rows={5} maxLength={2000} disabled={sending} value={message} onChange={e=>{setMessage(e.target.value);editFeedback();}} placeholder="불편했던 상황과 기대한 동작을 알려주세요."/></label><label className="settings-field">답장 받을 연락처 · 선택<input maxLength={150} disabled={sending} value={contact} onChange={e=>{setContact(e.target.value);editFeedback();}}/></label><p className="settings-note">작성한 내용과 연락처를 개발자 문의함으로 전송합니다. 회원 기록·캡처는 자동 첨부하지 않아요.</p><button className="primary" disabled={!message.trim()||sending} onClick={()=>void sendFeedback()}>{sending?'전송 중…':'개발자에게 전송'}</button>{receipt&&<p className="settings-note" role="status">접수 완료 · {receipt.slice(0,8)}</p>}{feedbackError&&<p className="file-error" role="alert">{feedbackError}</p>}</section>}
   </div></div></dialog>;
 }

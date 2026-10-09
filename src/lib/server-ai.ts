@@ -54,3 +54,5 @@ export async function callAccount(data:Record<string,unknown>){const s=scope();r
 
 export async function readUsageReport(month:string,purpose:import('./ai-cost-report').UsagePurpose){const s=scope();return (await httpsCallable<Record<string,unknown>,import('./ai-cost-report').UsageReport>(getFunctions(s.app,'us-central1'),'trainerUsage',{timeout:60000})({action:'report',month,purpose})).data;}
 export async function setUsagePurpose(purpose:'production'|'development'){const s=scope();return (await httpsCallable<Record<string,unknown>,{purpose:'production'|'development'}>(getFunctions(s.app,'us-central1'),'trainerUsage',{timeout:60000})({action:'setPurpose',purpose})).data;}
+
+export async function readUsageAccess(){const s=scope();return (await httpsCallable<Record<string,unknown>,{admin:boolean}>(getFunctions(s.app,'us-central1'),'trainerUsage',{timeout:60000})({action:'access'})).data;}
