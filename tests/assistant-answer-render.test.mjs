@@ -14,7 +14,7 @@ const render=text=>renderToStaticMarkup(React.createElement(AnswerText,{text}));
 test('numbered titles and their indented explanations remain in one ordered list',()=>{
  const html=render('결론입니다.\n\n1. **운동량**\n   첫 설명입니다.\n   같은 항목의 다음 줄입니다.\n\n2. **해석**\n   두 번째 설명입니다.\n\n마지막 문단입니다.');
  assert.equal((html.match(/<ol/g)||[]).length,1);assert.equal((html.match(/<li/g)||[]).length,2);
- assert.match(html,/<li value="1"><div class="assistant-point-title"><strong>운동량<\/strong><\/div><p>첫 설명입니다\.\n같은 항목의 다음 줄입니다\.<\/p><\/li>/);
+ assert.match(html,/<li value="1"><div class="assistant-point-title"><strong[^>]*>운동량<\/strong><\/div><p>첫 설명입니다\.\n같은 항목의 다음 줄입니다\.<\/p><\/li>/);
  assert.match(html,/<\/ol><p>마지막 문단입니다\.<\/p>/);
 });
 test('legacy paragraphs, decimal measurements and model-supplied HTML stay intact and inert',()=>{
@@ -36,7 +36,7 @@ test('Markdown tables render with headers and rows, including legacy escaped lea
  assert.equal((html.match(/<table>/g)||[]).length,1);
  assert.equal((html.match(/<th scope="col"/g)||[]).length,2);
  assert.equal((html.match(/<td>/g)||[]).length,4);
- assert.match(html,/<strong>밥<\/strong>/);assert.match(html,/<\/table><\/div><p>필요할 때/);
+ assert.match(html,/<strong[^>]*>밥<\/strong>/);assert.match(html,/<\/table><\/div><p>필요할 때/);
 });
 test('table cells keep HTML inert and non-table pipes stay prose',()=>{
  const html=render('| 끼니 | 메뉴 |\n| --- | --- |\n| 첫 끼 | <img src=x onerror=alert(1)> |');

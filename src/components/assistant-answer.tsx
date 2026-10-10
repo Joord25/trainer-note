@@ -7,7 +7,7 @@ function safeSource(source:WebSource){try{const url=new URL(source.url);return u
 // Render a small, text-only Markdown subset; model HTML and arbitrary links stay inert.
 export function AnswerText({text,sources=[]}:{text:string;sources?:WebSource[]}){
  function inline(value:string):ReactNode[]{return value.split(/(\*\*[^*\n]+\*\*|\[웹\d+\])/g).map((part,i)=>{
-  if(part.startsWith('**')&&part.endsWith('**'))return <strong key={i}>{part.slice(2,-2)}</strong>;
+  if(part.startsWith('**')&&part.endsWith('**'))return <strong className={part.length<=52?'answer-key-point':undefined} key={i}>{part.slice(2,-2)}</strong>;
   const match=/^\[웹(\d+)\]$/.exec(part),source=match?sources[Number(match[1])-1]:null;
   return source&&safeSource(source)?<a className="assistant-inline-source" key={i} href={source.url} title={source.title} target="_blank" rel="noopener noreferrer">{part}</a>:part;
  });}

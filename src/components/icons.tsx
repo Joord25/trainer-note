@@ -1,5 +1,6 @@
 export function Icon({name, size=20}:{name:string;size?:number}) {
 const paths:Record<string,React.ReactNode>={
+sort:<><path d="M4 6h16M7 12h10M10 18h4"/></>,
 folder:<><path d="M3 7V5h6l2 2h10v13H3V7Z"/></>,
 'eye-off':<><path d="m3 3 18 18M10 5c5-1 9 4 11 7a18 18 0 0 1-4 4M6 6a20 20 0 0 0-5 6s4 7 11 7a12 12 0 0 0 5-1M10 10a3 3 0 0 0 4 4"/></>,
 help:<><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .3c0 1.7-2.5 2-2.5 3.7M12 16.5h.01"/></>,
