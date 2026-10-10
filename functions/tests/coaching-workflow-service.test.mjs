@@ -159,3 +159,20 @@ test('inline dialogue on real Firestore: duplicate send, explicit selection, sta
  await assert.rejects(service.saveCycle(uid,mid,{...scope,proposalId:p.proposalId,revision:0}),/수업 방향/);
  assert.equal((await service.workflowContext(uid,mid)).inputKey,c.inputKey);
 });
+
+
+test('reopening saved workflow restores results and plan without more model calls; another member has none',async()=>{
+ const c=await analyzed();
+ const p=await service.generateCycle(uid,mid,{inputKey:c.inputKey,options});
+ await service.saveCycle(uid,mid,{inputKey:c.inputKey,proposalId:p.proposalId,revision:0});
+ const before=[...calls];
+ for(let i=0;i<3;i++){
+  const reopened=await service.workflowContext(uid,mid);
+  assert.equal(reopened.status,'ready');assert.deepEqual(reopened.report,c.report);
+  assert.deepEqual(reopened.savedPlan.plan,p.plan);
+ }
+ await db.doc('trainers/workflow-test/members/other').set({name:'다른 회원',goal:'',notes:''});
+ const other=await service.workflowContext(uid,'other');
+ assert.equal(other.report,null);assert.equal(other.savedPlan,null);
+ assert.deepEqual(calls,before);
+});
