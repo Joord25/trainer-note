@@ -61,18 +61,18 @@
 [data-theme=dark]{--model-trigger-background:#000}
 
 /* Continuous report: reserve boxes for editable workspaces, not reading sections. */
-.review-workspace .journey-brief .region-change-card{border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;padding:26px 0 30px;margin:0}
+.review-workspace :is(.journey-brief,.journey-direction) .region-change-card{border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;box-shadow:none;padding:26px 0 30px;margin:0}
 .review-workspace .journey-brief .region-cards{display:block}
 .review-workspace .journey-brief .region-next{border-bottom:0}
-.review-workspace .journey-brief .region-change-card h3{margin:0 0 16px}
-.review-workspace .journey-brief .region-change-card header h3{margin:0}
-.review-workspace .journey-brief .region-change-card header{margin-bottom:16px}
+.review-workspace :is(.journey-brief,.journey-direction) .region-change-card h3{margin:0 0 16px}
+.review-workspace :is(.journey-brief,.journey-direction) .region-change-card header h3{margin:0}
+.review-workspace :is(.journey-brief,.journey-direction) .region-change-card header{margin-bottom:16px}
 .review-workspace .report-key-point{background:var(--reading-marker);color:inherit;padding:1px 3px;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 .review-workspace .brief-chart figcaption strong{padding:1px 4px;line-height:1.6}
 .review-workspace .assistant-answer-body .answer-key-point{padding:1px 3px}
 
-.review-workspace .journey-brief .goal-review-heading{align-items:center;margin-bottom:16px}
-.review-workspace .journey-brief .goal-review-heading>h3{margin:0}
+.review-workspace :is(.journey-brief,.journey-direction) .goal-review-heading{align-items:center;margin-bottom:16px}
+.review-workspace :is(.journey-brief,.journey-direction) .goal-review-heading>h3{margin:0}
 
 /* Keep the summary focused on the trend and the context of one selected lesson. */
 .review-workspace .progress-summary .ps-goal{padding:0 0 16px;font-size:12px;gap:8px;flex-wrap:nowrap}
@@ -109,3 +109,237 @@
 html[data-theme="dark"] .ps-session-detail{background:var(--field)}
 /* A wider 2-view panel should not magnify the chart and its axis labels. */
 .progress-summary .ps-chart>.chart-record-hover{max-width:680px;margin-inline:auto}
+
+/* Work navigation reads as tabs; action buttons keep their separate treatment. */
+.review-workspace.review-workspace .review-tabs{gap:20px}
+.review-workspace.review-workspace .review-tab-item,
+.review-workspace.review-workspace .review-tab-item:is(:hover,[data-active=true]){border:0;border-radius:0;background:transparent;box-shadow:none}
+.review-workspace.review-workspace .review-tab-item>button:not(.review-pending-count){position:relative;padding-inline:2px;background:transparent;border-radius:0;color:var(--muted);font-weight:500}
+.review-workspace.review-workspace .review-tab-item>button:not(.review-pending-count):hover{color:var(--ink)}
+.review-workspace.review-workspace .review-tab-item>button[aria-current=page]{color:var(--green);font-weight:600}
+.review-workspace.review-workspace .review-tab-item>button[aria-current=page]::after{content:'';position:absolute;inset:auto 2px 0;height:2px;background:currentColor}
+.review-workspace.review-workspace .review-tab-item>button:focus-visible{outline-offset:-2px}
+.review-workspace.review-workspace .review-tab-item>.review-pending-count{margin-inline:5px 0;min-width:20px;min-height:20px;padding:2px 5px;font-size:10px}
+@media(max-width:600px){.review-workspace.review-workspace .review-tabs{gap:14px}}
+
+/* Panel entry points use the same text controls as the panel header. */
+.review-workspace .review-panel-shortcuts{margin-left:auto;gap:8px}
+.review-workspace .review-panel-shortcuts+.workspace-menu-host{margin-left:8px}
+.review-workspace.review-workspace :is(.review-panel-shortcuts>button,.right-panel-tabs>button[aria-pressed],.right-panel-tabs .analysis-controls-trigger){height:var(--review-pane-control-height);min-height:36px;padding:8px 12px;box-sizing:border-box;font-size:var(--workspace-control);line-height:1.4;border:1px solid transparent;border-radius:8px;white-space:nowrap}
+.review-workspace.review-workspace .review-panel-shortcuts>button{background:transparent;color:var(--muted);font-weight:400}
+.review-workspace.review-workspace .review-panel-shortcuts>button:hover{background:var(--soft,#f3f6f1);color:var(--ink)}
+
+
+.performance-series-legend{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 16px;font-size:11px;color:var(--muted)}
+.performance-series-legend span{display:inline-flex;align-items:center;gap:6px}
+.performance-series-legend i{width:18px;border-top:2px solid}
+.chart-record-tooltip>strong,.chart-record-tooltip>small{display:block}
+
+.journey-side .pa-performance>.pa-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
+.pa-performance>.pa-kpis div>span{font-size:11px;line-height:1.6}
+.pa-performance .performance-series-legend{margin:8px 0}
+
+
+.pa-performance .performance-metric-tabs{flex-wrap:nowrap;overflow-x:auto;max-width:100%;gap:6px;margin:16px 0;scrollbar-width:thin}
+.pa-performance .performance-metric-tabs button{display:inline-flex;flex:0 0 auto;align-items:center;gap:6px;white-space:nowrap;padding:8px 10px}
+.performance-metric-tabs button i{width:12px;border-top:2px solid}
+
+/* Disclosure contents must not resize their right-aligned triggers or move the chart. */
+.ps-overview-heading,.progress-summary .ps-chart-heading{position:relative}
+.ps-stat-details,.ps-range-options{position:static;flex-shrink:0;margin-left:auto}
+.ps-stat-details>summary,.ps-range-options>summary{display:flex;align-items:center;justify-content:flex-end;min-height:30px;white-space:nowrap;padding:4px 0}
+.ps-stat-details>dl,.ps-range-options>div{position:absolute;right:0;top:calc(100% + 6px);z-index:12;box-sizing:border-box;width:min(264px,100%);max-width:none;margin:0;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:var(--workspace-shadow,0 8px 24px #24392a20);text-align:left}
+.ps-stat-details dl{gap:10px}.ps-stat-details dt{min-width:0}.ps-stat-details dd{white-space:nowrap}
+.review-workspace .ps-range-options .workout-select-trigger{height:32px;min-height:32px;font-size:12px}
+.review-workspace .ps-session-detail .workout-select-trigger{padding:4px 7px;margin-left:-7px;border-radius:6px;min-height:32px;gap:7px;flex-shrink:0}
+.review-workspace .ps-session-detail .workout-select-trigger[aria-expanded=true]{outline:1px solid var(--workspace-focus);outline-offset:0;background:var(--surface)}
+.workout-select-annotation{font:inherit;font-size:.83em;line-height:1.5;white-space:nowrap;border-radius:4px;padding:1px 5px;background:var(--workspace-selected,var(--soft));color:var(--green)}
+.workout-select-menu .workout-select-annotation{margin-left:auto}
+.workout-select-menu>[role=option]>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+
+/* One reading rhythm across member changes, proposals, plans and lesson history.
+   Keep cards for editable plans, conversation and individual lesson boundaries. */
+.review-workspace :is(.coaching-journey,.previous-lessons){
+ --report-heading:19px;
+ --report-body:14px;
+ --report-leading:1.85;
+ font-family:var(--workspace-font);
+ font-size:var(--report-body);
+ letter-spacing:-.02em;
+ color:var(--reading-ink);
+}
+.review-workspace .previous-lessons>.pane-body{
+ width:100%;max-width:880px;margin:0 auto;padding:28px 30px;box-sizing:border-box;
+}
+.review-workspace :is(.goal-direction-header h2,.plan-heading h2,.plan-intro h2,.previous-lessons-heading h2){
+ font-size:var(--report-heading);line-height:1.5;font-weight:650;letter-spacing:-.035em;margin:0;
+ word-break:keep-all;overflow-wrap:anywhere;
+}
+.review-workspace .goal-direction-header{margin:26px 0 16px;}
+.review-workspace .coaching-report-overview .goal-review-heading>h2{
+ font-size:19px;line-height:1.5;font-weight:650;letter-spacing:-.035em;margin:0;
+}
+.review-workspace .coaching-report-overview .goal-review-heading{min-height:28.5px;}
+.review-workspace .report-goal-link{
+ margin-left:auto;max-width:45%;min-width:0;font-size:12px;line-height:1.65;
+ display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+@media(max-width:600px){
+ .review-workspace .coaching-report-overview .goal-review-heading>h2{font-size:18px;}
+ .review-workspace .coaching-report-overview .goal-review-heading{flex-wrap:wrap;}
+ .review-workspace .report-goal-link{max-width:100%;}
+}
+.review-workspace .goal-checks{margin:0 0 28px;}
+.review-workspace .goal-checks-toggle{font-size:19px;font-weight:650;letter-spacing:-.035em;line-height:1.5;padding:26px 0 30px;border-top:0;}
+.review-workspace .goal-check-group{
+ background:var(--field,var(--soft));border-color:var(--line);border-radius:12px;padding:20px;
+}
+.review-workspace .goal-check-group :is(p,.goal-lens-explanation p){
+ font-size:var(--report-body);line-height:var(--report-leading);color:var(--reading-ink);
+ word-break:keep-all;overflow-wrap:anywhere;margin:12px 0 0;
+}
+.review-workspace .goal-check-group small{color:var(--muted);}
+.review-workspace .goal-check-fact{border-color:var(--line);}
+.review-workspace .goal-lens-explanation{margin-top:24px;}
+.review-workspace .goal-lens-explanation h4{font-size:15px;line-height:1.5;font-weight:650;color:var(--reading-ink);}
+.review-workspace .direction-conversation{
+ margin:28px 0;padding:20px;border:1px solid var(--line);border-radius:12px;background:var(--field,var(--soft));
+}
+.review-workspace .direction-opening p{font-size:var(--report-body);line-height:var(--report-leading);color:var(--reading-ink);word-break:keep-all;overflow-wrap:anywhere;}
+.review-workspace .direction-list-panel{margin:28px 0 24px;padding:22px 24px;border-color:var(--line);border-radius:12px;}
+.review-workspace .direction-list-panel h3{font-size:var(--report-heading);font-weight:650;line-height:1.5;letter-spacing:-.035em;margin:0;}
+.review-workspace .direction-list-panel .goal-section-heading{align-items:center;}
+.review-workspace .direction-list-panel .goal-section-note{margin:12px 0 20px;line-height:1.65;}
+.review-workspace .direction-list-panel li{border-color:var(--line);padding:18px 0;}
+.review-workspace .direction-list-panel textarea{
+ font-family:inherit;font-size:var(--report-body);line-height:var(--report-leading);letter-spacing:inherit;color:var(--reading-ink);
+}
+.review-workspace .direction-list-panel textarea:is(:hover,:focus){background:var(--surface);border-color:var(--line);}
+.review-workspace .direction-list-background{font-size:12px;color:var(--muted);}
+.review-workspace .direction-list-background p{font-size:13px;line-height:var(--report-leading);color:var(--reading-ink);margin-top:12px;}
+.review-workspace .goal-direction>.journey-actions{margin:28px 0 8px;padding-top:20px;border-top:1px solid var(--line);}
+/* Planning retains a bounded editing surface and a clear per-session hierarchy. */
+.review-workspace :is(.plan-intro,.plan-heading){margin:26px 0 24px;}
+.review-workspace .plan-heading{display:flex;flex-direction:column;align-items:flex-start;gap:10px;}
+.review-workspace .plan-heading>span{font-size:12px;line-height:1.65;color:var(--muted);}
+.review-workspace .plan-intro>p{margin-top:12px;font-size:var(--report-body);line-height:var(--report-leading);color:var(--muted);}
+.review-workspace .journey-plan .journey-settings{border-radius:12px;padding:20px 24px;gap:18px 14px;}
+.review-workspace .journey-plan .journey-settings legend{font-size:16px;font-weight:650;}
+.review-workspace .journey-plan .plan-directions{font-size:var(--report-body);padding:4px 0 24px;}
+.review-workspace .plan-directions-heading{font-size:16px;font-weight:650;}
+.review-workspace .plan-directions li{line-height:var(--report-leading);margin-top:14px;}
+.review-workspace .cycle-session-picker{margin:24px 0 20px;gap:8px;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));}
+.review-workspace .cycle-session-picker button{justify-content:flex-start;border-radius:10px;gap:8px;padding:12px 14px;}
+.review-workspace .cycle-session-picker strong{font-size:14px;font-weight:650;}
+.review-workspace .cycle-session-picker span{font-size:12px;line-height:1.65;word-break:keep-all;overflow-wrap:anywhere;}
+.review-workspace .cycle-session{padding:22px 24px;border-radius:12px;background:var(--surface);}
+.review-workspace .cycle-session>header{align-items:flex-start;flex-wrap:wrap;margin-bottom:4px;}
+.review-workspace .cycle-session h3{font-size:17px;font-weight:650;line-height:1.5;letter-spacing:-.03em;margin:0 0 8px;}
+.review-workspace .cycle-exercise{padding:24px 0;}
+.review-workspace :is(.cycle-exercise h4,.cycle-checks h4){font-size:16px;line-height:1.5;letter-spacing:-.03em;font-weight:650;margin:0 0 12px;}
+.review-workspace .cycle-prescription{font-size:var(--report-body);font-weight:650;line-height:1.65;margin:0 0 14px;}
+.review-workspace :is(.cycle-exercise p,.cycle-checks p,.cycle-checks li){font-size:var(--report-body);line-height:var(--report-leading);color:var(--reading-ink);word-break:keep-all;overflow-wrap:anywhere;}
+.review-workspace .cycle-exercise p+p,.review-workspace .cycle-checks p+p{margin-top:14px;}
+.review-workspace .cycle-evidence{margin-top:16px;}
+.review-workspace .cycle-evidence p{font-size:13px;margin-top:12px;color:var(--muted);}
+.review-workspace .cycle-checks{padding-top:24px;}
+.review-workspace .cycle-checks ul{margin:14px 0 20px;padding-left:20px;}
+.review-workspace .cycle-checks li+li{margin-top:10px;}
+/* Date cards group source records; a neutral note surface avoids false emphasis. */
+.review-workspace .previous-lessons-heading{align-items:flex-start;flex-wrap:wrap;gap:16px;margin:0 0 24px;}
+.review-workspace .previous-lessons-heading p{font-size:var(--report-body);line-height:var(--report-leading);margin-top:12px;color:var(--muted);}
+.review-workspace .previous-lessons-heading>button{font-size:12px;flex-shrink:0;}
+.review-workspace .lesson-split-overview{padding:0 0 24px;margin:0 0 20px;border-radius:0;border-bottom:1px solid var(--line);background:transparent;}
+.review-workspace .lesson-split-overview>strong{font-size:16px;font-weight:650;line-height:1.5;}
+.review-workspace .lesson-split-overview p{font-size:var(--report-body);line-height:var(--report-leading);color:var(--reading-ink);margin:12px 0 0;word-break:keep-all;overflow-wrap:anywhere;}
+.review-workspace .lesson-split-overview small{display:block;margin-top:10px;color:var(--muted);}
+.review-workspace .previous-lessons-pagination{margin:20px 0;flex-wrap:wrap;}
+.review-workspace .previous-lessons-pagination span{color:var(--muted);}
+.review-workspace .previous-lesson{margin:24px 0 0;border-color:var(--line);border-radius:12px;background:var(--surface);}
+.review-workspace .previous-lesson>header{padding:20px 24px;background:var(--field,var(--soft));border-bottom:1px solid var(--line);gap:12px;flex-wrap:wrap;}
+.review-workspace .previous-lesson h3{font-size:var(--report-heading);font-weight:650;letter-spacing:-.035em;line-height:1.5;margin:4px 0 0;}
+.review-workspace .previous-lesson header :is(small,span){font-size:12px;color:var(--muted);}
+.review-workspace .lesson-program-summary{margin:20px 24px;padding-bottom:20px;border-color:var(--line);}
+.review-workspace .lesson-program-summary>strong{font-size:16px;font-weight:650;color:var(--reading-ink);}
+.review-workspace .lesson-program-summary dl{margin-top:14px;}
+.review-workspace .lesson-program-summary dl>div{font-size:var(--report-body);line-height:var(--report-leading);margin:8px 0;}
+.review-workspace .lesson-program-summary dt{color:var(--muted);font-weight:500;}
+.review-workspace .previous-lesson ol{padding:0 24px 0 44px;}
+.review-workspace .previous-lesson li{padding:18px 0;border-color:var(--line);}
+.review-workspace .previous-lesson li>button{gap:8px;font-size:var(--report-body);line-height:var(--report-leading);}
+.review-workspace .previous-lesson li strong{font-weight:650;}
+.review-workspace .previous-lesson-dose{font-size:var(--report-body);color:var(--muted);overflow-wrap:anywhere;}
+.review-workspace .previous-lesson li>p{font-size:var(--report-body);line-height:var(--report-leading);color:var(--reading-ink);margin-top:12px;}
+.review-workspace .previous-lesson-note{margin:20px 24px;padding:14px 16px;border-radius:8px;background:var(--field,var(--soft));color:var(--reading-ink);line-height:var(--report-leading);}
+.review-workspace .previous-lessons-footnote{font-size:12px;line-height:1.65;margin-top:20px;color:var(--muted);}
+@media(max-width:760px){
+ .review-workspace .previous-lessons>.pane-body{padding:20px 16px;}
+ .review-workspace :is(.direction-list-panel,.cycle-session){padding:18px 16px;}
+ .review-workspace .journey-plan .journey-settings{padding:18px 16px;}
+ .review-workspace .previous-lesson>header{padding:18px 16px;}
+ .review-workspace :is(.lesson-program-summary,.previous-lesson-note){margin-inline:16px;}
+ .review-workspace .previous-lesson ol{padding-inline:36px 16px;}
+}
+
+
+/* All four journey screens use the same section geometry, with plain prose in plans/history. */
+.review-workspace .report-section{
+ margin:0;padding:26px 0 30px;border:0;border-bottom:1px solid var(--line);
+ border-radius:0;background:transparent;box-shadow:none;min-width:0;
+}
+.review-workspace .report-section>.report-section-heading{
+ display:flex;align-items:center;gap:8px;min-height:28.5px;margin:0 0 16px;
+}
+.review-workspace .report-section>.report-section-heading>:is(h2,h3){
+ font-size:19px;line-height:1.5;font-weight:650;letter-spacing:-.035em;margin:0;
+ word-break:keep-all;overflow-wrap:anywhere;
+}
+.review-workspace .report-section>p{
+ font-size:14px;line-height:1.85;letter-spacing:-.02em;color:var(--reading-ink);margin:0;
+ word-break:keep-all;overflow-wrap:anywhere;
+}
+.review-workspace .report-section>p+p{margin-top:14px;}
+.review-workspace .plan-overview>[role=status]{color:var(--muted);}
+.review-workspace .journey-summary-row{min-height:55px;}
+.review-workspace .previous-lessons{scrollbar-gutter:stable;}
+.review-workspace .previous-lessons-toolbar>button{height:36px;min-height:36px;padding:6px 12px;font-size:12px;flex-shrink:0;}
+.review-workspace .previous-lessons-overview .lesson-split-overview{margin:24px 0 0;padding:0;border:0;}
+.review-workspace .previous-lessons-overview .lesson-split-overview h3{font-size:16px;font-weight:650;line-height:1.5;letter-spacing:-.03em;margin:0 0 12px;}
+.review-workspace .previous-lessons-overview .lesson-split-overview p{margin:0;}
+.review-workspace .journey-plan .journey-settings{margin-top:26px;}
+@media(max-width:600px){
+ .review-workspace .report-section>.report-section-heading>:is(h2,h3){font-size:18px;}
+}
+
+/* Expanded record summaries share the reading scale of the report body. */
+.review-workspace .journey-record-summary{font-size:12px;line-height:1.65;letter-spacing:-.02em;color:var(--muted);}
+.review-workspace .journey-summary-row>.journey-record-summary>summary{font-size:12px;font-weight:500;line-height:36px;letter-spacing:-.02em;}
+.review-workspace .record-summary-body{display:grid;gap:14px;padding-top:14px;min-width:0;}
+.review-workspace .record-summary-body>p{margin:0;font-size:14px;font-weight:400;line-height:1.85;letter-spacing:-.02em;color:var(--reading-ink);word-break:keep-all;overflow-wrap:anywhere;}
+.review-workspace .record-summary-body>button{justify-self:start;max-width:100%;min-height:36px;height:auto;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:12px;font-weight:500;line-height:1.65;letter-spacing:-.02em;text-align:left;white-space:normal;word-break:keep-all;overflow-wrap:anywhere;}
+.review-workspace .record-summary-body>button:hover{background:var(--field,var(--soft));color:var(--reading-ink);}
+
+.review-workspace .nutrition-questions{margin-top:20px;padding-top:18px;border-top:1px solid var(--line);}
+.review-workspace .nutrition-questions h4{margin:0;font-size:14px;line-height:1.65;font-weight:600;letter-spacing:-.02em;}
+.review-workspace .nutrition-questions p{margin:6px 0 12px;font-size:13px;line-height:1.75;color:var(--muted);}
+.review-workspace .nutrition-questions>div{display:flex;flex-wrap:wrap;gap:8px;}
+.review-workspace .nutrition-questions button{height:auto;min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:12px;line-height:1.65;color:var(--green);white-space:normal;text-align:left;word-break:keep-all;}
+.review-workspace .nutrition-questions button:hover{background:var(--soft);}
+
+.assistant-answer-actions{flex-wrap:wrap;}
+.answer-save{display:inline-flex;align-items:center;gap:8px;}
+.answer-save-notice{font-size:11px;line-height:1.6;color:var(--muted);max-width:210px;}
+.answer-save-menu{position:fixed;inset:auto;margin:0;width:184px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--surface,#fff);box-shadow:0 8px 28px #24382c18;color:var(--ink);}
+.answer-save-menu button{display:block;width:100%;min-height:38px;padding:8px 12px;border:0;border-radius:7px;background:transparent;color:inherit;text-align:left;font:inherit;font-size:13px;cursor:pointer;}
+.answer-save-menu button:hover,.answer-save-menu button:focus-visible{background:var(--soft,#f2f5ef);}
+
+/* Google-supplied search chips retain their branding inside a fitted frame. */
+.assistant-search-entry{margin-top:14px;min-width:0}
+.assistant-search-entry-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:11px;line-height:1.5;margin-bottom:6px}
+.assistant-search-navigation{display:flex;align-items:center;gap:5px}
+.assistant-search-navigation button{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit;cursor:pointer}
+.assistant-search-navigation button:disabled{opacity:.35;cursor:default}
+.assistant-search-navigation button:first-of-type svg{transform:rotate(90deg)}
+.assistant-search-navigation button:last-of-type svg{transform:rotate(-90deg)}
+.assistant-search-entry .assistant-search-suggestions{display:block;width:100%;border:0;margin:0;border-radius:0;background:transparent}

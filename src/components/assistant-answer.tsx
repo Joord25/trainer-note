@@ -4,6 +4,8 @@ import {useEffect,useState,type ReactNode} from 'react';
 import type {ChatMessage} from '../lib/server-ai';
 import {HoverDetail} from './hover-detail';
 import {Icon} from './icons';
+import {AnswerSave} from './answer-save';
+import {SearchSuggestions} from './search-suggestions';
 type WebSource={url:string;title:string};
 function safeSource(source:WebSource){try{const url=new URL(source.url);return url.protocol==='https:'&&!url.username&&!url.password;}catch{return false;}}
 // Render a small, text-only Markdown subset; model HTML and arbitrary links stay inert.
@@ -48,11 +50,11 @@ export function AnswerRecords({scope,ids=[],records=[],saved=[],onOpen}:{scope?:
 }
 export function AnswerSources({sources=[],suggestions}:{sources?:WebSource[];suggestions?:string}){
  if(!sources.some(safeSource))return null;
- return <div className="assistant-web-sources"><details><summary><Icon name="globe" size={14}/> 웹 출처 {sources.filter(safeSource).length}<Icon name="chevron" size={13}/></summary><div>{sources.map((source,i)=>safeSource(source)?<a key={i} href={source.url} title={source.title} target="_blank" rel="noopener noreferrer"><strong>{i+1}. {source.title}</strong><small>{new URL(source.url).hostname}</small></a>:null)}</div></details>{suggestions&&<iframe className="assistant-search-suggestions" title="Google 검색 추천" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" srcDoc={'<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;; img-src data: https://www.gstatic.com; base-uri &#39;none&#39;; form-action &#39;none&#39;">'+suggestions}/>}</div>;
+ return <div className="assistant-web-sources"><details><summary><Icon name="globe" size={14}/> 웹 출처 {sources.filter(safeSource).length}<Icon name="chevron" size={13}/></summary><div>{sources.map((source,i)=>safeSource(source)?<a key={i} href={source.url} title={source.title} target="_blank" rel="noopener noreferrer"><strong>{i+1}. {source.title}</strong><small>{new URL(source.url).hostname}</small></a>:null)}</div></details>{suggestions&&<SearchSuggestions html={suggestions}/>}</div>;
 }
 export function AnswerActions({message,disabled,canRegenerate,onRegenerate}:{message:ChatMessage;disabled:boolean;canRegenerate:boolean;onRegenerate:()=>void}){
  const [copied,setCopied]=useState(false),[error,setError]=useState('');
  useEffect(()=>{if(!copied)return;const timer=setTimeout(()=>setCopied(false),2200);return()=>clearTimeout(timer);},[copied]);
  async function copy(){try{const sources=(message.webSources??[]).filter(safeSource),text=toFriendlyExplanation(message.answer??'')+(sources.length?'\n\n출처\n'+sources.map((s,i)=>`${i+1}. ${s.title}: ${s.url}`).join('\n'):'');await navigator.clipboard.writeText(text);setCopied(true);setError('');}catch{setCopied(false);setError('복사하지 못했어요. 브라우저의 클립보드 권한을 확인해주세요.');}}
- return <><div className="assistant-answer-actions"><HoverDetail content={copied?'답변을 복사했어요':'답변과 웹 출처를 함께 복사해요'}><button type="button" onClick={()=>void copy()}><Icon name={copied?'check':'copy'} size={15}/>{copied?'복사됨':'복사'}</button></HoverDetail>{canRegenerate&&<HoverDetail content="같은 질문으로 답변을 다시 만들어요. AI 이용량이 사용돼요."><button type="button" disabled={disabled} onClick={()=>{setCopied(false);onRegenerate();}}><Icon name="refresh" size={15}/>다시 생성</button></HoverDetail>}</div><span className="assistant-copy-status" role="status">{copied?'답변을 복사했어요.':''}</span>{error&&<p className="file-error" role="alert">{error}</p>}</>;
+ return <><div className="assistant-answer-actions"><HoverDetail content={copied?'답변을 복사했어요':'답변과 웹 출처를 함께 복사해요'}><button type="button" onClick={()=>void copy()}><Icon name={copied?'check':'copy'} size={15}/>{copied?'복사됨':'복사'}</button></HoverDetail>{canRegenerate&&<HoverDetail content="같은 질문으로 답변을 다시 만들어요. AI 이용량이 사용돼요."><button type="button" disabled={disabled} onClick={()=>{setCopied(false);onRegenerate();}}><Icon name="refresh" size={15}/>다시 생성</button></HoverDetail>}<AnswerSave message={message}/></div><span className="assistant-copy-status" role="status">{copied?'답변을 복사했어요.':''}</span>{error&&<p className="file-error" role="alert">{error}</p>}</>;
 }

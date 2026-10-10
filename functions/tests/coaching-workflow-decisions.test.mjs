@@ -19,7 +19,7 @@ async function setup(){
   await db.doc(`${base}/records/${id}`).set({exerciseName:'백스쿼트',rawName:'BB sq',bodyPart:'하체',loadType:'weighted',sets:[{kg:60,reps:5},{kg:60,reps:5}],notes:'',status:'confirmed',origin:'manual',revision:1,sourceHash:'',sourceName:'',sourcePage:0,performedAt:Timestamp.fromMillis(Date.parse(date+'T12:00:00Z'))});
  // The plan model returns a valid one-session plan built on the first candidate.
  const paid=async(_uid,kind,request)=>{calls.push(kind);const candidates=JSON.parse(request.parts[0].text).candidates;return {value:{title:'계획',sessions:[{number:1,focus:'f',progressWhen:'p',adjustWhen:'a',checks:['c'],items:[{candidateId:candidates[0].id,reason:'r',recovery:'',segments:[{kg:60,reps:5,leftReps:null,rightReps:null,distanceMeters:null,durationSeconds:null,inclinePercent:null,speedKph:null}]}]}]}};};
- const flow=createCoachingWorkflow({db,paid,sessionNotesFor:async()=>[],now});
+ const flow=createCoachingWorkflow({research:async()=>null,db,paid,sessionNotesFor:async()=>[],now});
  const {inputKey}=await flow.workflowContext(uid,mid);
  const publish=async directions=>db.doc(`${base}/changeReviews/${inputKey}`).set({status:'ready',report:report(directions),updatedAt:Timestamp.fromMillis(now())});
  await publish(directionsA);

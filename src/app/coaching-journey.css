@@ -233,3 +233,30 @@ html[data-theme="dark"] .journey-error{background:#302b25;border-color:#504436}h
 .review-workspace .assistant-table-scroll th{background:var(--sage-light,#eef3e9);color:var(--ink,#29372f);font-weight:650}
 .review-workspace .assistant-table-scroll tr:last-child td{border-bottom:0}
 .review-workspace .assistant-table-scroll :is(th,td)+:is(th,td){border-left:1px solid var(--line,#dfe6df)}
+
+/* Detailed coaching rationale stays out of the primary decision flow until requested. */
+.goal-checks-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;padding:16px 0;border-block:1px solid var(--line);font-weight:600}
+.goal-checks-toggle::-webkit-details-marker{display:none}
+.goal-checks-toggle::before{content:'▸';font-size:12px;color:var(--muted)}
+.goal-checks[open]>.goal-checks-toggle::before{content:'▾'}
+.goal-checks-toggle small{margin-left:auto;font-size:12px;font-weight:400;color:var(--muted)}
+.goal-checks[open]>.goal-section-note{margin-top:12px}
+.goal-lens-explanation{margin-top:18px}
+.goal-lens-explanation h4{font-size:13px;margin:0;color:var(--green,#315d46)}
+.goal-lens-explanation p{white-space:pre-line}
+
+.goal-criteria{margin:10px 0 18px;font-size:12px;line-height:1.65}
+.goal-criteria>a{color:var(--green,#315d46);text-decoration:underline;text-underline-offset:3px}
+.goal-criteria dl{margin:8px 0}
+.goal-criteria dl>div{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.goal-criteria dt{font-weight:600}.goal-criteria dd{margin:0}
+.goal-criteria>small{font-size:11px;font-weight:400;color:var(--muted)}
+
+.coaching-research-note{margin:12px 0 24px;font-size:13px;color:var(--muted);line-height:1.65}
+.coaching-research-note>summary{cursor:pointer;width:fit-content;padding:6px 0}
+.coaching-research-note>p{margin:10px 0}
+.coaching-research-note section{border-top:1px solid var(--line);padding:14px 0;color:var(--ink)}
+.coaching-research-note section>small{display:block;color:var(--muted);margin-top:4px}
+.coaching-research-note section p{font-size:13px;margin:8px 0;line-height:1.65}
+.coaching-research-note blockquote{margin:10px 0;padding:8px 12px;border-left:2px solid var(--line);font-size:12px;color:var(--muted)}
+.coaching-research-note .research-query{overflow-wrap:anywhere;font-size:12px}

@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {initializeApp,deleteApp} from 'firebase-admin/app';
 import {getFirestore,Timestamp} from 'firebase-admin/firestore';
 import {createCoachingWorkflow} from '../coaching-workflow.mjs';
-let app,db,service,calls,inputs;const base='trainers/workflow-test/members/member',uid='workflow-test',mid='member';
+let app,db,service,calls,inputs,reviseResponse,researchCalls,researchResult;const base='trainers/workflow-test/members/member',uid='workflow-test',mid='member';
 before(()=>{if(!process.env.FIRESTORE_EMULATOR_HOST)throw Error('Emulator required');app=initializeApp({projectId:'demo-trainer-note'},'workflow');db=getFirestore(app);});
 after(async()=>{await deleteApp(app);});
-beforeEach(async()=>{await db.recursiveDelete(db.doc('trainers/workflow-test'));await db.doc(base).set({name:'테스트',goal:'근력',notes:''});await db.doc(base+'/records/a').set({exerciseName:'스쿼트',bodyPart:'하체',loadType:'weighted',sets:[{kg:8,reps:12}],revision:1,performedAt:Timestamp.fromDate(new Date('2026-09-01'))});calls=[];inputs=[];service=createCoachingWorkflow({db,sessionNotesFor:async()=>[],paid:async(uid,kind,request)=>{calls.push(kind);const f=JSON.parse(request.parts[0].text);inputs.push(f);if(kind==='direction-discussion')return {value:{answer:'의도를 확인했어요. 기록과 목표에 비춰 검토하겠습니다.',sourceIds:[],directions:f.mode==='draft'?['스쿼트를 같은 조건에서 진행하고 수행 여유를 확인합니다.']:[]}};if(kind==='member-changes')return {value:{goalReview:{lenses:f.programChecks.map(c=>({id:c.id,interpretation:'목표와 기록을 함께 확인합니다.',question:'',sourceIds:[]})),summary:'하체 스쿼트 기록 확인',reason:'회원 목표와 수행 기록을 함께 검토합니다.',nextStep:'같은 조건에서 수행 여유를 비교합니다.',evidenceIds:[f.evidence[0].id],sourceIds:[]},headline:'단일 기록 확인',findings:[{evidenceId:f.evidence[0].id,interpretation:'변화 판단 전 기준 기록',uncertainty:'추가 기록 필요'}],directions:[{goalAspect:'resistance',kind:'keep',reason:'기록된 수행 변화에 따라 비교가 필요합니다.',check:'같은 기구와 중량에서 반복수를 기록해 비교합니다.',text:'스쿼트 수행 기록 유지',evidenceIds:[f.evidence[0].id]}]}};return {value:{title:'기본 수행 확인',sessions:Array.from({length:f.options.count},(_,i)=>({number:i+1,focus:'동작 확인',progressWhen:'같은 자세로 완료하면 검토',adjustWhen:'피로가 크면 유지',checks:['수행 여유'],items:[{candidateId:f.candidates[0].id,reason:'선택한 방향 유지',recovery:'',segments:[{kg:8,reps:12}]}]}))}};}});});
+beforeEach(async()=>{await db.recursiveDelete(db.doc('trainers/workflow-test'));await db.doc(base).set({name:'테스트',goal:'근력',notes:''});await db.doc(base+'/records/a').set({exerciseName:'스쿼트',bodyPart:'하체',loadType:'weighted',sets:[{kg:8,reps:12}],revision:1,performedAt:Timestamp.fromDate(new Date('2026-09-01'))});calls=[];inputs=[];researchCalls=[];researchResult=null;reviseResponse=v=>v;service=createCoachingWorkflow({research:async input=>{researchCalls.push(input);return researchResult;},db,sessionNotesFor:async()=>[],paid:async(uid,kind,request)=>{calls.push(kind);const f=JSON.parse(request.parts[0].text);inputs.push(f);if(kind==='direction-discussion')return {value:{answer:'의도를 확인했어요. 기록과 목표에 비춰 검토하겠습니다.',sourceIds:[],directions:f.mode==='draft'?['스쿼트를 같은 조건에서 진행하고 수행 여유를 확인합니다.']:[]}};if(kind==='member-changes')return {value:reviseResponse({goalReview:{lenses:f.programChecks.map(c=>({id:c.id,interpretation:'목표와 기록을 함께 확인합니다.',comparison:c.id==='resistance'?'NASM 기준은 최대근력 1–5회, 근비대 6–12회, 근지구력 12–20회와 파워의 폭발적 속도를 함께 봐요.':c.id==='aerobic'?'WHO 주 150–300분 기준은 전체 활동과 강도를 확인해 비교해요.':'대한비만학회 기준과 기록 범위를 구분해요.',recommendation:'기록된 조건에서 수행 여유를 비교하고 조절해요.',question:'',sourceIds:c.id==='resistance'?['NASM-OPT']:c.id==='aerobic'?['WHO2020']:[]} )),summary:'하체 스쿼트 기록 확인',reason:'NASM의 근력 기준에 비춰 회원 목표와 수행 기록을 함께 검토해요.',nextStep:'같은 조건에서 수행 여유를 비교합니다.',evidenceIds:[f.evidence[0].id],sourceIds:['NASM-OPT']},headline:'단일 기록 확인',findings:[{evidenceId:f.evidence[0].id,interpretation:'변화 판단 전 기준 기록',uncertainty:'추가 기록 필요'}],directions:[{goalAspect:'resistance',kind:'keep',reason:'기록된 수행 변화에 따라 비교가 필요합니다.',check:'같은 기구와 중량에서 반복수를 기록해 비교합니다.',text:'스쿼트 수행 기록 유지',evidenceIds:[f.evidence[0].id]}]})};return {value:{title:'기본 수행 확인',sessions:Array.from({length:f.options.count},(_,i)=>({number:i+1,focus:'동작 확인',progressWhen:'같은 자세로 완료하면 검토',adjustWhen:'피로가 크면 유지',checks:['수행 여유'],items:[{candidateId:f.candidates[0].id,reason:'선택한 방향 유지',recovery:'',segments:[{kg:8,reps:12}]}]}))}};}});});
 const options={count:4,frequency:2,minutes:50,equipment:'',directions:[{id:'direction-1',text:'스쿼트 수행 기록 유지'}]};
 async function analyzed(){const c=await service.workflowContext(uid,mid);return service.analyzeChanges(uid,mid,{inputKey:c.inputKey});}
 test('review is read-only; analysis caches; workflow activation does not mutate member schema',async()=>{const c=await service.workflowContext(uid,mid);assert.equal(c.days,1);assert.equal(c.goal,'근력');assert.equal(calls.length,0);await service.enableCoachingWorkflow(uid,mid);assert.equal((await db.doc(base).get()).data().coachingWorkflow,undefined);assert.equal((await db.doc(base+'/workflowSettings/current').get()).data().version,2);await analyzed();await analyzed();assert.deepEqual(calls,['member-changes']);});
@@ -175,4 +175,54 @@ test('reopening saved workflow restores results and plan without more model call
  const other=await service.workflowContext(uid,'other');
  assert.equal(other.report,null);assert.equal(other.savedPlan,null);
  assert.deepEqual(calls,before);
+});
+
+test('current composition observations are returned without rerunning or rewriting the saved interpretation',async()=>{
+ const original=await analyzed(),count=calls.length;
+ const fresh=await service.workflowContext(uid,mid),check=fresh.programChecks.find(c=>c.id==='resistance');
+ assert.equal(check.label,'반복수·부하 구성');assert.match(check.observation,/횟수 기록 1세트 · 중량 기록 1세트/);
+ assert.match(check.detail,/6–12회 1세트/);assert.deepEqual(fresh.report,original.report);assert.deepEqual(fresh.targetFingerprints,original.targetFingerprints);assert.equal(calls.length,count);
+});
+
+
+test('missing narrative attribution receives one specific, metered content repair',async()=>{
+ reviseResponse=v=>{if(calls.filter(k=>k==='member-changes').length===1)v.goalReview.reason='일반적인 기준 내에서 잘 진행하고 있어요.';return v;};
+ const c=await analyzed();
+ assert.equal(c.status,'ready');assert.deepEqual(calls,['member-changes','member-changes']);
+ assert.match(inputs.at(-1).revision.feedback,/종합 summary\/reason/);
+ assert.match(c.report.goalReview.reason,/NASM/);
+});
+test('content repair is bounded and does not cache a still-uncited response',async()=>{
+ reviseResponse=v=>{v.goalReview.reason='일반적인 기준 내에서 잘 진행하고 있어요.';return v;};
+ await assert.rejects(()=>analyzed(),/출처와 판단 기준/);
+ const c=await service.workflowContext(uid,mid);
+ assert.equal(c.status,'error');assert.equal(c.report,null);
+ assert.deepEqual(calls,['member-changes','member-changes']);
+});
+
+test('research is attached to new analysis only; cached reads and stale requests never research again',async()=>{
+ researchResult={status:'unverified',notice:'원문 미확인',checkedAt:'2026-10-11',query:'general training',sources:[],searchSuggestions:''};
+ const c=await analyzed();assert.equal(researchCalls.length,1);assert.ok(researchCalls[0].privateTerms.includes('테스트'));assert.equal(c.report.goalReview.publicResearch.status,'unverified');
+ assert.equal(inputs[0].publicResearch.query,'general training');
+ await service.workflowContext(uid,mid);await service.analyzeChanges(uid,mid,{inputKey:c.inputKey});await service.analyzeChanges(uid,mid,{inputKey:'stale'});assert.equal(researchCalls.length,1);
+ await service.analyzeChanges(uid,mid,{inputKey:c.inputKey,retry:true});assert.equal(researchCalls.length,2);
+});
+
+test('invalid proposal evidence preserves the report, caches surviving proposals and does not repeat paid calls',async()=>{
+ reviseResponse=v=>{v.directions.unshift({...v.directions[0],evidenceIds:[]});return v;};
+ const c=await analyzed();assert.equal(c.status,'ready');assert.equal(c.report.directions.length,1);assert.equal(c.report.directions[0].id,'direction-2');assert.equal(c.report.warnings.length,1);
+ assert.deepEqual(calls,['member-changes']);assert.deepEqual((await service.workflowContext(uid,mid)).report,c.report);
+});
+test('no valid proposals still keeps the validated report accessible',async()=>{
+ reviseResponse=v=>{v.directions[0].evidenceIds=[];return v;};
+ const c=await analyzed();assert.equal(c.status,'ready');assert.deepEqual(c.report.directions,[]);assert.ok(c.report.goalReview);assert.equal(c.report.warnings.length,1);assert.deepEqual(calls,['member-changes']);
+});
+test('verified web sources pass full workflow NASM and WHO validation without repair',async()=>{
+ researchResult={status:'verified',notice:'확인',checkedAt:'2026-10-11',query:'general training',sources:[{id:'WEB1',title:'Public guide',url:'https://www.who.int/guideline',type:'공개 본문 확인',claim:'일반 기준',scope:'성인'}]};
+ reviseResponse=v=>{for(const l of v.goalReview.lenses)if(['aerobic','resistance'].includes(l.id)){l.comparison+=' [웹1]';l.sourceIds.push('WEB1');}return v;};
+ const c=await analyzed();assert.equal(c.status,'ready');assert.equal(c.report.goalReview.publicResearch.sources.length,1);assert.deepEqual(calls,['member-changes']);
+});
+test('unknown main citation receives bounded repair instead of immediate whole-report failure',async()=>{
+ reviseResponse=v=>{if(calls.length===1)v.goalReview.reason+=' [웹99]';return v;};
+ const c=await analyzed();assert.equal(c.status,'ready');assert.deepEqual(calls,['member-changes','member-changes']);assert.match(inputs.at(-1).revision.feedback,/미검증 인용/);assert.ok(!JSON.stringify(c.report).includes('웹99'));
 });

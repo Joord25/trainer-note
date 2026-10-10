@@ -7,7 +7,7 @@ const root=new URL('../../',import.meta.url);
 import assert from 'node:assert/strict';
 const dir=mkdtempSync(join(tmpdir(),'analysis-test-'));
 for(const name of ['cardio-distribution','goal-coaching','assessment-results','training-assessment','workout-measurements','training-goals','progress-analysis'])writeFileSync(join(dir,name+'.mjs'),ts.transpileModule(readFileSync(new URL('src/lib/'+name+'.ts',root),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/from '\.\/(cardio-distribution|goal-coaching|assessment-results|training-assessment|training-goals|workout-measurements)'/g,"from './$1.mjs'"));
-const {sessionChartContext,displayWorkoutNotes,analysisWindow,exerciseGroups,performanceDays,allocation}=await import(pathToFileURL(join(dir,'progress-analysis.mjs')));
+const {sessionChartContext,displayWorkoutNotes,analysisWindow,exerciseGroups,exerciseFamilies,performanceMetrics,performanceChartDays,companionMetric,performanceDays,allocation}=await import(pathToFileURL(join(dir,'progress-analysis.mjs')));
 const {blankTrainingGoal}=await import(pathToFileURL(join(dir,'training-goals.mjs')));
 const base={id:'a',date:'2026-09-10',exerciseName:'스쿼트',bodyPart:'하체',loadType:'weighted',sets:[{kg:10,reps:18,leftReps:10,rightReps:8}],status:'confirmed',pending:false};
 const cardio={...base,id:'cardio',exerciseName:'로잉',bodyPart:'전신',loadType:'unknown',measurementType:'distance_time',sets:[{kg:null,reps:0,distanceMeters:500,durationSeconds:140}]};
@@ -28,6 +28,37 @@ assert.equal(exerciseGroups(analysisWindow(aliasRows,'1').records)[0].sessionDay
 assert.equal(exerciseGroups([...aliasRows,{...air,id:'different',exerciseName:'바이크'}]).length,2);
 assert.equal(exerciseGroups([{...air,exerciseName:'AIR Bike'},{...air,exerciseName:'airbike'}]).length,1);
 assert.equal(air.exerciseName,'에어 바이크');
+const walkDistance={...base,id:'walk-distance',exerciseName:'덤벨 워킹런지',measurementType:'distance',loadType:'unknown',sets:[{kg:null,reps:0,distanceMeters:160}]};
+const walkLoaded={...walkDistance,id:'walk-loaded',date:'2026-09-11',exerciseName:'덤벨 워킹 런지',measurementType:'weight_distance',loadType:'weighted',sets:[{kg:2,reps:0,distanceMeters:160}]};
+const beforeWalk=JSON.stringify([walkDistance,walkLoaded]);
+const walks=exerciseFamilies([walkDistance,walkLoaded,{...walkDistance,id:'same-date',exerciseName:'덤벨  워킹 런지'}]);
+assert.equal(walks.length,1);assert.equal(walks[0].sessionDays,2);assert.equal(walks[0].variants.length,2);
+assert.equal(exerciseGroups([walkDistance,walkLoaded]).length,2);
+assert.deepEqual(performanceDays(walks[0].variants.find(v=>v.kind==='weight_distance').records,'kg').map(d=>d.value),[2]);
+assert.equal(JSON.stringify([walkDistance,walkLoaded]),beforeWalk);
+assert.equal(exerciseFamilies([walkDistance,{...walkDistance,exerciseName:'케틀벨 워킹 런지'},{...walkDistance,exerciseName:'덤벨 사이드 런지'}]).length,3);
+assert.equal(exerciseFamilies([walkDistance,{...walkDistance,bodyPart:'등'}]).length,2);
+
+const combined=exerciseFamilies([walkDistance,walkLoaded])[0];
+assert.deepEqual(performanceDays(combined.records,'distance').map(d=>[d.date,d.value]),[['2026-09-10',160],['2026-09-11',160]]);
+assert.deepEqual(performanceDays(combined.records,'kg').map(d=>d.value),[null,2]);
+assert.deepEqual(performanceDays(combined.records,'volume').map(d=>d.value),[null,null]);
+assert.deepEqual(performanceDays(combined.records,'reps').map(d=>d.value),[null,null]);
+assert.deepEqual(new Set(performanceMetrics(combined.records)),new Set(['distance','kg']));
+const zeroWeight={...walkLoaded,id:'zero',date:'2026-09-12',sets:[{kg:0,reps:0,distanceMeters:160}]};
+assert.deepEqual(performanceDays([...combined.records,zeroWeight,{...walkDistance,id:'gap',date:'2026-09-13'}],'kg').map(d=>d.value),[null,2,0,null]);
+assert.deepEqual(performanceDays([base,{...walkLoaded,date:base.date}],'volume').map(d=>d.value),[180]);
+assert.equal(combined.records.length,2);
+assert.equal(JSON.stringify([walkDistance,walkLoaded]),beforeWalk);
+
+assert.deepEqual(performanceChartDays([...combined.records,zeroWeight],'kg').map(d=>[d.value,d.plotValue,d.missing]),[[null,0,true],[2,2,false],[0,0,false]]);
+assert.equal(companionMetric(performanceMetrics(combined.records),'distance'),'kg');
+assert.equal(companionMetric(performanceMetrics([base]),'volume'),'kg');
+assert.equal(companionMetric(performanceMetrics([cardio]),'distance'),'duration');
+assert.equal(companionMetric(performanceMetrics([{...base,loadType:'bodyweight',sets:[{kg:null,reps:10}]}]),'reps'),'sets');
+assert.equal(companionMetric(performanceMetrics([walkDistance]),'distance'),null);
+assert.deepEqual(performanceChartDays([{...base,loadType:'bodyweight',sets:[{kg:null,reps:12}]}, {...base,date:'2026-09-11'}],'kg').map(d=>d.plotValue),[0,10]);
+
 const memo={...base,trainerNote:'무릎 통증 호소로 세트 축소',sourceHash:'a',sourceName:'일지.png',sourcePage:2};
 const context=sessionChartContext([memo,{...memo,id:'second'},{...memo,id:'other',date:'2026-09-09'}],base.date);
 assert.equal(context.notes.length,1);assert.equal(context.notes[0].text,memo.trainerNote);assert.equal(context.sources.length,1);assert.equal(context.sources[0].id,base.id);

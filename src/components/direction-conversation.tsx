@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {callAi,aiMessage} from '../lib/server-ai';
 import {AnswerText} from './assistant-answer';
 import {GuidanceNote} from './guidance-note';
@@ -9,7 +9,7 @@ export type DirectionSelection={directions:{id:string;text:string}[];version:str
 type Row={id:string;mode:'discuss'|'draft';question:string;answer:string;references:GuidanceSource[];directions:{id:string;text:string}[];basedOnDirections:{id:string;text:string}[]};
 type Conversation={revision:number;messages:Row[];processing:boolean;notice:string};
 const empty:Conversation={revision:0,messages:[],processing:false,notice:''};
-export function DirectionConversation({request=callAi,memberId,inputKey,discussionKey,online,directions,onApply}:{request?:typeof callAi;memberId:string;inputKey:string;discussionKey:string;online:boolean;directions:{id:string;text:string}[];onApply:(directions:{id:string;text:string}[])=>Promise<void>}){
+export function DirectionConversation({request=callAi,memberId,inputKey,discussionKey,online,directions,onApply,relatedQuestions}:{relatedQuestions?:ReactNode;request?:typeof callAi;memberId:string;inputKey:string;discussionKey:string;online:boolean;directions:{id:string;text:string}[];onApply:(directions:{id:string;text:string}[])=>Promise<void>}){
  const [state,setState]=useState<Conversation>(empty),[question,setQuestion]=useState(''),[loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[applied,setApplied]=useState(''),[refresh,setRefresh]=useState(0);
  const live=useRef(true),lock=useRef(false),retry=useRef<{key:string;id:string}|null>(null),input=useRef<HTMLTextAreaElement>(null),dialogue=useRef<HTMLDivElement>(null);
  useEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
@@ -42,6 +42,7 @@ export function DirectionConversation({request=callAi,memberId,inputKey,discussi
   {!!state.messages.length&&<div ref={dialogue} className="direction-dialogue" role="region" tabIndex={0} aria-label="이 분석의 대화 기록">{state.messages.map((m,i)=><div className="assistant-turn direction-exchange" key={m.id}>{i<state.messages.length-2?<details><summary>{m.mode==='draft'?'방향 초안 정리':m.question}</summary><div className="assistant-answer"><AnswerText text={m.answer}/></div>{!!m.references.length&&<GuidanceNote sources={m.references}/>}</details>:<><div className="assistant-question"><p>{m.question}</p></div><div className="assistant-answer"><AnswerText text={m.answer}/>{!!m.references.length&&<GuidanceNote sources={m.references}/>}</div></>}</div>)}</div>}
   {(busy||state.processing)&&<p className="assistant-thinking" role="status"><span className="assistant-thinking-icon"><Icon name="spark" size={20}/></span>{busy?'목표와 기록을 함께 검토하고 있어요…':'앞선 답변을 불러오고 있어요…'}</p>}
   <form className="assistant-compose direction-composer" onSubmit={e=>{e.preventDefault();void send('discuss');}}><textarea ref={input} id="direction-question" aria-label="지도 의도나 의견을 들려주세요" title="Enter로 보내기 · Shift+Enter로 줄바꿈" rows={1} maxLength={2000} disabled={blocked} value={question} placeholder="이 분석에 대한 의견이나 지도 의도를 알려주세요" onChange={e=>setQuestion(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void send('discuss');}}}/><div className="assistant-compose-actions"><button className="primary" aria-label="의견 보내기" title="의견 보내기" disabled={blocked||!question.trim()} type="submit"><Icon name={busy||state.processing?'clock':'arrow'} size={19}/></button></div></form>
+  {relatedQuestions}
   {(error||state.notice)&&<p role="alert">{error||state.notice} <button onClick={()=>setRefresh(v=>v+1)} disabled={busy}>대화 다시 불러오기</button></p>}
   {!!state.messages.length&&<div className="direction-draft-action"><button disabled={blocked||!!question.trim()} onClick={()=>void send('draft')}>대화 내용으로 방향 업데이트</button><small>{question.trim()?'작성 중인 의견을 먼저 보내주세요.':'전체 분석을 다시 실행하지 않고, 아래 방향 목록의 변경안을 제안해요.'}</small></div>}
   {draft&&applied===draft.id?<p className="direction-applied" role="status">✓ 아래 방향 목록에 반영했어요. 필요한 내용은 직접 수정할 수 있어요.</p>:draft&&<section className="direction-draft-preview" aria-label="수업 방향 변경안"><h4>이렇게 정리하면 어떨까요?</h4><ol>{draft.directions.map(d=><li key={d.id}>{d.text}</li>)}</ol>{applied===draft.id?<p role="status">아래 방향 목록에 반영했어요. 직접 수정한 뒤 수업 계획으로 이어갈 수 있어요.</p>:<><button className="primary" title={draftChanged?'방향을 수정한 뒤에는 대화 내용으로 방향 업데이트를 다시 눌러주세요.':undefined} aria-label={draftChanged?'방향 변경됨 · 다시 업데이트 후 반영 가능':undefined} disabled={blocked||draftChanged} onClick={()=>void apply(draft)}>확인한 내용으로 목록에 반영</button></>}</section>}

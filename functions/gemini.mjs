@@ -1,12 +1,13 @@
+import {RESEARCH_SEARCH_PROMPT,scopedResearchQuery} from './coaching-research.mjs';
 import {tabulateReportFacts,REPORT_TABLE_INSTRUCTION} from './report-input.mjs';
 import {MODEL,MODEL_PRICES} from './domain.mjs';
 import {SEARCH_SAFETY,SEARCH_PROMPT,validatePublicQuery,groundedResult,searchQueryCount} from './web-search.mjs';
-export function createGemini({apiKey,fetcher=fetch}){return async function gemini({system,schema,parts,maxOutputTokens,maxInputTokens,thinkingLevel,searchQuery,compactReportInput=false,timeoutMs=120000,model:chosenModel=MODEL}){
+export function createGemini({apiKey,fetcher=fetch}){return async function gemini({system,schema,parts,maxOutputTokens,maxInputTokens,thinkingLevel,searchQuery,searchPolicy,compactReportInput=false,timeoutMs=120000,model:chosenModel=MODEL}){
  if(!Object.hasOwn(MODEL_PRICES,chosenModel))throw Object.assign(Error('지원하지 않는 AI 모델이에요.'),{notBillable:true});
  if(thinkingLevel!==undefined&&!['minimal','low','medium','high'].includes(thinkingLevel))throw Object.assign(Error('AI 추론 설정을 확인해주세요.'),{notBillable:true});
  const search=searchQuery!==undefined;
  // Rebuild search contents: private facts, history and images can never enter this call.
- if(search){searchQuery=validatePublicQuery(searchQuery);system=SEARCH_PROMPT;parts=[{text:searchQuery}];}
+ if(search){searchQuery=validatePublicQuery(searchQuery);system=searchPolicy==='coaching-evidence'?RESEARCH_SEARCH_PROMPT:SEARCH_PROMPT;parts=[{text:searchPolicy==='coaching-evidence'?scopedResearchQuery(searchQuery):searchQuery}];}
  const base=`https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}`,headers={'Content-Type':'application/json','x-goog-api-key':apiKey()},signal=AbortSignal.timeout(timeoutMs);
  const generateContentRequest={model:`models/${chosenModel}`,systemInstruction:{parts:[{text:system}]},contents:[{role:'user',parts}],generationConfig:{maxOutputTokens,...(thinkingLevel&&!search?{thinkingConfig:{thinkingLevel}}:{}),...(!search?{responseMimeType:'application/json',responseSchema:schema}:{})},safetySettings:SEARCH_SAFETY,...(search?{tools:[{google_search:{}}]}:{})};
  let countResponse=await fetcher(base+':countTokens',{method:'POST',headers,body:JSON.stringify({generateContentRequest}),signal});

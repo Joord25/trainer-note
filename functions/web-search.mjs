@@ -29,7 +29,8 @@ export function groundedResult(data){
  const meta=data?.candidates?.[0]?.groundingMetadata;
  if(!meta||!searchQueryCount(data))throw Error('웹 검색에서 확인 가능한 출처를 받지 못했어요.');
  const sources=[],evidence=[],byUrl=new Map();let length=0;
- for(const support of meta.groundingSupports??[]){
+ for(const support of Array.isArray(meta.groundingSupports)?meta.groundingSupports:[]){
+  if(!support||!Array.isArray(support.groundingChunkIndices))continue;
   const text=support.segment?.text;if(typeof text!=='string'||!text.trim()||text.length>1400||evidence.some(e=>e.text===text))continue;
   if(length+text.length+30>1500)continue;
   const ids=[];

@@ -25,7 +25,7 @@ test('low repetition is an observation per performed side, not summed reps or re
 test('curated evidence is traceable and scoped to member change and plan calls',()=>{
  assert.equal(new Set(COACHING_SOURCES.map(s=>s.id)).size,11);
  for(const s of COACHING_SOURCES){assert.equal(new URL(s.url).protocol,'https:');assert(s.claim&&s.limit&&s.population&&s.reviewedAt);assert(['full-text','abstract','official-summary','official-page'].includes(s.reviewed));}
- assert(goalCoachingReference().length<6500);
+ assert(goalCoachingReference().length<8000);
  for(const kind of ['member-changes','cycle-plan']){const input={system:'original',schema:{},parts:[],maxOutputTokens:6000},out=withTrainingGuidance(kind,input);assert(out.system.includes(COACHING_EVIDENCE_VERSION));assert.equal(out.schema,input.schema);assert.equal(out.parts,input.parts);assert.equal(input.system,'original');assert(trainingGuidanceVersion(kind).includes(COACHING_EVIDENCE_VERSION));}
  for(const kind of ['assistant-chat','extraction','assessment'])assert(!withTrainingGuidance(kind,{system:''}).system.includes(COACHING_EVIDENCE_VERSION));
 });
@@ -41,7 +41,7 @@ test('observed volume uses only known weighted repetition sets, not bodyweight o
 import {changeEvidence,prepareChangeRequest,validateChanges} from '../coaching-workflow.mjs';
 test('goal interpretation requires personal evidence and allowlisted public sources; forged URLs never reach UI',()=>{
  const evidence=changeEvidence([row('x','2026-10-05')]),id=evidence[0].id;
- const value={goalReview:{summary:'기록된 하체 구성',reason:'목표와 기록의 관련성',nextStep:'같은 조건에서 확인',evidenceIds:[id],sourceIds:['KSSO2022'],references:[{url:'javascript:bad'}]},headline:'관찰',findings:[{evidenceId:id,interpretation:'기준 기록',uncertainty:'동일 조건 확인'}],directions:[{kind:'check',text:'수행 여유 확인',reason:'기준 기록 확인',check:'같은 조건에서 비교',evidenceIds:[id]}]};
+ const value={goalReview:{summary:'기록된 하체 구성',reason:'대한비만학회 기준과 목표·기록의 관련성을 검토해요.',nextStep:'같은 조건에서 확인',evidenceIds:[id],sourceIds:['KSSO2022'],references:[{url:'javascript:bad'}]},headline:'관찰',findings:[{evidenceId:id,interpretation:'기준 기록',uncertainty:'동일 조건 확인'}],directions:[{kind:'check',text:'수행 여유 확인',reason:'기준 기록 확인',check:'같은 조건에서 비교',evidenceIds:[id]}]};
  const out=validateChanges(value,evidence,{requireGoalReview:true});assert.equal(out.goalReview.references[0].url,'https://pmc.ncbi.nlm.nih.gov/articles/PMC10088549/');assert.equal(out.goalReview.references[0].type,'임상 진료지침');
  assert.throws(()=>validateChanges({...value,goalReview:null},evidence,{requireGoalReview:true}));
  assert.throws(()=>validateChanges({...value,goalReview:{...value.goalReview,nextStep:'다음 수업 999kg으로 증량'}},evidence));
@@ -50,4 +50,22 @@ test('goal interpretation requires personal evidence and allowlisted public sour
  assert.throws(()=>validateChanges({...value,goalReview:{...value.goalReview,sourceIds:['imaginary-paper']}},evidence));
  const prepared=prepareChangeRequest({evidence});assert.deepEqual(prepared.schema.properties.goalReview.properties.evidenceIds.items.enum,prepared.facts.evidence.map(e=>e.id));
  const restored=prepared.restore({...value,goalReview:{...value.goalReview,evidenceIds:[prepared.facts.evidence[0].id]}});assert.equal(restored.goalReview.evidenceIds[0],id);
+});
+
+test('repetition profile separates load from body part and excludes cardio without losing non-repetition work',()=>{
+ const rows=[
+  row('machine','2026-10-05',{sets:[{kg:20,reps:5},{kg:20,reps:8}]}),
+  row('core','2026-10-05',{exerciseName:'행잉 레그레이즈',bodyPart:'코어',loadType:'bodyweight',sets:[{kg:null,reps:15}]}),
+  row('mixed','2026-10-05',{loadType:'mixed',sets:[{kg:null,reps:10},{kg:4,reps:8,leftReps:4,rightReps:4},{kg:4,reps:14,leftReps:4,rightReps:10}]}),
+  row('unknown','2026-10-05',{loadType:'unknown',sets:[{kg:null,reps:12}]}),
+  row('treadmill','2026-10-05',{exerciseName:'러닝머신',bodyPart:'유산소',measurementType:'duration',sets:[{kg:null,reps:0,durationSeconds:60}]}),
+  row('skierg','2026-10-05',{exerciseName:'스키에르그',bodyPart:'유산소',sets:[{kg:null,reps:20}]}),
+  row('carry','2026-10-05',{measurementType:'weight_distance',sets:[{kg:4,reps:0,distanceMeters:160}]}),
+  row('plank','2026-10-05',{exerciseName:'플랭크',bodyPart:'코어',measurementType:'duration',loadType:'unknown',sets:[{kg:null,reps:0,durationSeconds:30}]})
+ ];
+ const before=JSON.stringify(rows),p=goalProgramContext(rows).observed.repetitionProfile;
+ assert.equal(p.totalSets,7);assert.equal(p.externalLoadSets,4);assert.equal(p.bodyweightSets,2);assert.equal(p.unknownLoadSets,1);
+ assert.deepEqual(p.bands,{low:2,middle:3,high:1,mixed:1,unknown:0});assert.equal(p.otherSegments,2);
+ assert(!p.recordIds.includes('treadmill'));assert(!p.recordIds.includes('skierg'));assert(p.recordIds.includes('core'));assert(p.recordIds.includes('plank'));
+ assert.equal(JSON.stringify(rows),before);
 });

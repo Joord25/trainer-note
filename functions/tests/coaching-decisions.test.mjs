@@ -85,3 +85,15 @@ test('low-rep status is unchanged from the original rule',()=>{
  const observed=(low,total)=>({window:null,weeks:[],observed:{recordedDays:3,repetitionSets:total,primaryParts:[],cardio:{days:0,segments:0,knownSeconds:null,missingTimeSegments:0,recordIds:[]},lowRepetitionRecords:low?[{recordId:'r1',setNumbers:Array.from({length:low},(_,i)=>i+1)}]:[]}});
  assert.equal(programChecks(observed(2,87)).find(c=>c.id==='resistance').status,'check');
 });
+
+test('changing a detailed recommendation changes its discussion fingerprint',()=>{
+ const old=findTarget(report,{kind:'lens',id:'muscles'});
+ const next=structuredClone(report);
+ next.goalReview.lenses[0].comparison='현재 구성과 기준을 비교해요.';
+ next.goalReview.lenses[0].recommendation='기존 세션에서 보조동작을 교체해요.';
+ const revised=findTarget(next,{kind:'lens',id:'muscles'});
+ assert.notEqual(revised.fingerprint,old.fingerprint);
+ assert.equal(revised.value.recommendation,next.goalReview.lenses[0].recommendation);
+ next.goalReview.lenses[0].recommendation='같은 구성을 유지해요.';
+ assert.notEqual(findTarget(next,{kind:'lens',id:'muscles'}).fingerprint,revised.fingerprint);
+});

@@ -2,17 +2,18 @@
 import {useEffect,useId,useRef,useState,type CSSProperties,type KeyboardEvent} from 'react';
 import {createPortal} from 'react-dom';
 import {Icon} from './icons';
-type Option={value:string;label:string};
+type Option={value:string;label:string;annotation?:string};
 /** A styled select with keyboard navigation, without the operating system popup. */
-export function WorkoutSelect({label,value,options,onChange,disabled=false}:{label:string;value:string;options:Option[];onChange:(value:string)=>void;disabled?:boolean}){
+export function WorkoutSelect({label,value,options,onChange,disabled=false,menuMinWidth=0}:{label:string;value:string;options:Option[];onChange:(value:string)=>void;disabled?:boolean;menuMinWidth?:number}){
  const id=useId(),trigger=useRef<HTMLButtonElement>(null),menu=useRef<HTMLDivElement>(null);
  const [popup,setPopup]=useState<{host:Element;style:CSSProperties}|null>(null),[active,setActive]=useState(0);
  const selected=Math.max(0,options.findIndex(option=>option.value===value));
  function open(index=selected){
   const button=trigger.current;if(!button||button.matches(':disabled'))return;
   const rect=button.getBoundingClientRect(),font=getComputedStyle(button),scale=rect.height/(button.offsetHeight||rect.height),fontSize=parseFloat(font.fontSize)*scale;
+  const popupWidth=Math.min(Math.max(rect.width,menuMinWidth*scale),window.innerWidth-16);
   const below=window.innerHeight-rect.bottom-10,above=rect.top-10,up=below<Math.min(240,options.length*fontSize*2.5)&&above>below;
-  setActive(index);setPopup({host:button.closest('dialog[open]')||document.body,style:{position:'fixed',left:Math.max(8,Math.min(rect.left,window.innerWidth-rect.width-8)),width:Math.min(rect.width,window.innerWidth-16),...(up?{bottom:window.innerHeight-rect.top+5}:{top:rect.bottom+5}),maxHeight:Math.max(60,Math.min(320,up?above:below)),fontSize,fontFamily:font.fontFamily}});
+  setActive(index);setPopup({host:button.closest('dialog[open]')||document.body,style:{position:'fixed',left:Math.max(8,Math.min(rect.left,window.innerWidth-popupWidth-8)),width:popupWidth,...(up?{bottom:window.innerHeight-rect.top+5}:{top:rect.bottom+5}),maxHeight:Math.max(60,Math.min(320,up?above:below)),fontSize,fontFamily:font.fontFamily}});
  }
  function choose(index:number){if(!trigger.current?.matches(':disabled')&&options[index].value!==value)onChange(options[index].value);setPopup(null);trigger.current?.focus({preventScroll:true});}
  function key(e:KeyboardEvent<HTMLButtonElement>){
@@ -30,6 +31,6 @@ export function WorkoutSelect({label,value,options,onChange,disabled=false}:{lab
   document.addEventListener('pointerdown',dismiss);document.addEventListener('scroll',scroll,true);window.addEventListener('resize',close);
   return()=>{document.removeEventListener('pointerdown',dismiss);document.removeEventListener('scroll',scroll,true);window.removeEventListener('resize',close);};
  },[popup]);
- useEffect(()=>{menu.current?.querySelector(`[data-option-index="${active}"]`)?.scrollIntoView({block:'nearest'});},[active,popup]);
- return <><button ref={trigger} className="workout-select-trigger" type="button" role="combobox" aria-label={label} aria-haspopup="listbox" aria-expanded={!!popup} aria-controls={popup?id:undefined} aria-activedescendant={popup?`${id}-${active}`:undefined} disabled={disabled} onClick={()=>popup?setPopup(null):open()} onKeyDown={key} onBlur={()=>setPopup(null)}><span>{options.find(option=>option.value===value)?.label||'선택'}</span><Icon name="chevron" size={15}/></button>{popup&&createPortal(<div ref={menu} id={id} role="listbox" aria-label={label} className="workout-select-menu" style={popup.style} onPointerDown={e=>e.preventDefault()} onClick={e=>e.stopPropagation()}>{options.map((option,index)=><div key={option.value} id={`${id}-${index}`} role="option" aria-selected={option.value===value} data-option-index={index} data-active={active===index} onPointerMove={()=>setActive(index)} onClick={()=>choose(index)}><span>{option.label}</span>{option.value===value&&<Icon name="check" size={15}/>}</div>)}</div>,popup.host)}</>;
+ useEffect(()=>{const list=menu.current,option=list?.querySelector<HTMLElement>(`[data-option-index="${active}"]`);if(!list||!option)return;const bounds=list.getBoundingClientRect(),item=option.getBoundingClientRect();if(item.top<bounds.top)list.scrollTop-=bounds.top-item.top;else if(item.bottom>bounds.bottom)list.scrollTop+=item.bottom-bounds.bottom;},[active,popup]);
+ return <><button ref={trigger} className="workout-select-trigger" type="button" role="combobox" aria-label={label} aria-haspopup="listbox" aria-expanded={!!popup} aria-controls={popup?id:undefined} aria-activedescendant={popup?`${id}-${active}`:undefined} disabled={disabled} onClick={()=>popup?setPopup(null):open()} onKeyDown={key} onBlur={()=>setPopup(null)}><span>{options.find(option=>option.value===value)?.label||'선택'}</span>{options[selected]?.annotation&&<small className="workout-select-annotation">{options[selected].annotation}</small>}<Icon name="chevron" size={15}/></button>{popup&&createPortal(<div ref={menu} id={id} role="listbox" aria-label={label} className="workout-select-menu" style={popup.style} onPointerDown={e=>e.preventDefault()} onClick={e=>e.stopPropagation()}>{options.map((option,index)=><div key={option.value} id={`${id}-${index}`} role="option" aria-selected={option.value===value} data-option-index={index} data-active={active===index} onPointerMove={()=>setActive(index)} onClick={()=>choose(index)}><span>{option.label}</span>{option.annotation&&<small className="workout-select-annotation">{option.annotation}</small>}{option.value===value&&<Icon name="check" size={15}/>}</div>)}</div>,popup.host)}</>;
 }

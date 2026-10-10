@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useId,useRef,useState,type ReactNode} from 'react';
-type Point={date:string;x:number;y:number|null;sets:number;volume:number|null;notes?:{text:string;label:string}[];sources?:{id:string;label:string}[]};
+type Point={values?:{label:string;value:number|null;unit:string;missingAtZero?:boolean}[];date:string;x:number;y:number|null;sets:number;volume:number|null;notes?:{text:string;label:string}[];sources?:{id:string;label:string}[]};
 const number=(v:number)=>v.toLocaleString('ko-KR',{maximumFractionDigits:1});
 export function ChartRecordHover({points,metric,children,valueLabel,valueUnit,axisY=247/266*100,onOpenRecord,onSelectDate,selectedDate}:{onSelectDate?:(date:string)=>void;selectedDate?:string;onOpenRecord?:(id:string)=>void;axisY?:number;valueLabel?:string;valueUnit?:string;points:Point[];metric:'sets'|'volume';children:ReactNode}){
  const root=useRef<HTMLDivElement>(null),[width,setWidth]=useState(0);
@@ -24,7 +24,7 @@ export function ChartRecordHover({points,metric,children,valueLabel,valueUnit,ax
  {onSelectDate&&points.filter(p=>p.notes?.length).map(p=><span key={p.date} className="chart-note-dot" aria-hidden="true" style={{left:p.x+'%',top:(axisY+5)+'%'}}/>)}
  {!onSelectDate&&points.filter(p=>p.notes?.length).map(p=><button className="chart-note-marker" key={p.date} type="button" aria-label={`${p.date} 수업 메모 보기`} aria-expanded={active===p.date&&memoVisible} style={{left:p.x+'%',top:(p.y??80)+'%'}} onMouseEnter={()=>activate(p.date)} onFocus={()=>activate(p.date)} onClick={()=>{setActive(p.date);setPinned(true);}}>✎</button>)}
  {!onSelectDate&&memoVisible&&point&&<aside className="chart-session-note" aria-label={`${point.date} 수업 메모`} style={{left:memoLeft,width:memoWidth,top:Math.min(point.y??50,70)+'%'}}><header><strong>{point.notes?.[0]?.label??'원본 기록'}</strong>{pinned&&<button type="button" aria-label="메모 닫기" onClick={()=>{setPinned(false);setActive(null);}}>×</button>}</header><div className="chart-session-note-body">{point.notes?.map((n,i)=><p key={i}>{n.text}</p>)}{pinned&&point.sources&&onOpenRecord&&<div className="chart-session-sources">{point.sources.map(s=><button type="button" key={s.id} onClick={()=>onOpenRecord(s.id)}>{s.label} ↗</button>)}</div>}</div></aside>}
- {point&&point.y!==null&&<div className="chart-record-tooltip" id={id} role="tooltip" style={{left:point.x+'%',top:point.y+'%'}}><strong>{metric==='sets'?number(point.sets)+'세트':point.volume===null?'기록 없음':number(point.volume)+' '+(valueUnit??'kg·회')}</strong></div>}
+ {point&&point.y!==null&&<div className="chart-record-tooltip" id={id} role="tooltip" style={{left:point.values?`clamp(90px, ${point.x}%, calc(100% - 90px))`:point.x+'%',top:point.y+'%'}}>{point.values?<><small>{point.date}</small>{point.values.map(v=><strong key={v.label}>{v.label} · {v.value===null?(v.missingAtZero?'미기록 (0 표시)':'미기록'):number(v.value)+' '+v.unit}</strong>)}</>:<strong>{metric==='sets'?number(point.sets)+'세트':point.volume===null?'기록 없음':number(point.volume)+' '+(valueUnit??'kg·회')}</strong>}</div>}
 
  </div>;
 }

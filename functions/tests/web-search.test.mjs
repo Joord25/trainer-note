@@ -39,3 +39,9 @@ test('source sufficiency gates automatic search without overriding explicit publ
  assert.equal(searchDecision({...value,evidenceNeed:'sufficient'},'공식 논문 검색해줘').requested,true);
  assert.equal(searchDecision({...value,evidenceNeed:'external'},'웹 검색하지 마').requested,undefined);
 });
+
+test('coaching research retains public-only contents and enforces its academic search prompt',async()=>{
+ let body;const gemini=createGemini({apiKey:()=> 'test',fetcher:async(url,options)=>{body=JSON.parse(options.body);return {ok:true,json:async()=>url.endsWith(':countTokens')?{totalTokens:10}:response()};}});
+ await gemini({searchQuery:publicQuery,searchPolicy:'coaching-evidence',parts:[{text:'PRIVATE'}],maxInputTokens:1000,maxOutputTokens:100});
+ assert.match(body.systemInstruction.parts[0].text,/Restrict searches using site operators/);assert.match(body.systemInstruction.parts[0].text,/Exclude news/);assert.ok(!JSON.stringify(body).includes('PRIVATE'));
+});

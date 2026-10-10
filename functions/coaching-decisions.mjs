@@ -37,7 +37,7 @@ export function targetFingerprints(report){
 function locate(report,target){
  if(target.kind==='lens'){
   const l=report?.goalReview?.lenses?.find(l=>l.id===target.id);
-  if(l)return {kind:'lens',id:l.id,label:l.label??GOAL_ASPECTS[l.id]??l.id,value:{id:l.id,label:l.label,status:l.status,observation:l.observation,interpretation:l.interpretation,question:l.question}};
+  if(l)return {kind:'lens',id:l.id,label:l.label??GOAL_ASPECTS[l.id]??l.id,value:{id:l.id,label:l.label,status:l.status,observation:l.observation,interpretation:l.interpretation,...(l.comparison?{comparison:l.comparison,recommendation:l.recommendation}:{}),question:l.question}};
  }else{
   const d=report?.directions?.find(d=>d.id===target.id);
   if(d)return {kind:'direction',id:d.id,label:`${GOAL_ASPECTS[d.goalAspect]??'수행 기록'} · ${d.text.slice(0,60)}`,value:{id:d.id,goalAspect:d.goalAspect,kind:d.kind,text:d.text,reason:d.reason,check:d.check}};
@@ -52,7 +52,7 @@ export function discussionFacts({report,target,goal,checks,programContext,traine
   target,
   goal,
   memberNotes,
-  goalReview:{summary:report.goalReview?.summary??'',reason:report.goalReview?.reason??'',nextStep:report.goalReview?.nextStep??'',lenses:(report.goalReview?.lenses??[]).map(({id,label,status,observation,interpretation,question})=>({id,label,status,observation,interpretation,question}))},
+  goalReview:{summary:report.goalReview?.summary??'',reason:report.goalReview?.reason??'',nextStep:report.goalReview?.nextStep??'',lenses:(report.goalReview?.lenses??[]).map(({id,label,status,observation,interpretation,comparison,recommendation,question})=>({id,label,status,observation,interpretation,...(comparison?{comparison,recommendation}:{}),question}))},
   directions:(report.directions??[]).map(({id,goalAspect,kind,text,reason,check})=>({id,goalAspect,kind,text,reason,check})),
   programChecks:withoutIds(checks),
   programContext:{window:programContext.window,completeWeeklyActivityKnown:programContext.completeWeeklyActivityKnown,observed:withoutIds(programContext.observed),weeks:withoutIds(programContext.weeks)},

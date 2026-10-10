@@ -4,7 +4,7 @@ export const USAGE_REPORT_LIMIT=10000;
 export const usageMonth=now=>new Date(now+9*3600000).toISOString().slice(0,7);
 const validPurpose=value=>['production','development'].includes(value);
 const number=value=>Number.isFinite(value)&&value>=0?value:0;
-const groups={extraction:['extraction','원본 판독'],'analysis-and-plan':['analysis','기록 분석'],'member-changes':['analysis','기록 분석'],'goal-visual':['analysis','기록 분석'],'assessment-review':['assessment','평가·목표'],'assessment':['assessment','평가·목표'],'goal-design':['assessment','평가·목표'],'cycle-plan':['planning','수업 계획'],'connected-lesson':['planning','수업 계획'],'direction-discussion':['discussion','방향 논의'],'search-safety':['search','웹 검색·안전 확인'],'assistant-web-search':['search','웹 검색·안전 확인']};
+const groups={'coaching-search-plan':['search','웹 검색·안전 확인'],'coaching-web-search':['search','웹 검색·안전 확인'],'coaching-source-review':['search','웹 검색·안전 확인'],extraction:['extraction','원본 판독'],'analysis-and-plan':['analysis','기록 분석'],'member-changes':['analysis','기록 분석'],'goal-visual':['analysis','기록 분석'],'assessment-review':['assessment','평가·목표'],'assessment':['assessment','평가·목표'],'goal-design':['assessment','평가·목표'],'cycle-plan':['planning','수업 계획'],'connected-lesson':['planning','수업 계획'],'direction-discussion':['discussion','방향 논의'],'search-safety':['search','웹 검색·안전 확인'],'assistant-web-search':['search','웹 검색·안전 확인']};
 function group(call){
  if(call.kind==='assistant-chat')return call.model==='gemini-3.5-flash-lite'?['chat-deep','AI 도우미 · 심층']:call.model==='gemini-3.1-flash-lite'?['chat-quick','AI 도우미 · 기본']:['chat-other','AI 도우미 · 이전/기타'];
  return groups[call.kind]??['other','기타'];

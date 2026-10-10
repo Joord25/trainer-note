@@ -11,7 +11,7 @@ export function InsightReport({stats,goal,period,review,onSource,onProgram}:{sta
  <div className="report-block"><span className="report-label">목표와 연결</span><p>목표는 ‘{goal}’입니다. 총세트 증가보다 <b>같은 동작·기구·수행 조건에서의 변화</b>를 확인할 수 있는 기록이 우선이에요.</p></div>
  <div className="report-block"><span className="report-label">해석을 보류한 부분</span><p>{mixedSquats?(review==='다른 운동으로 분리'?'스쿼트 종류를 분리했으므로 서로 다른 동작의 중량을 직접 비교하지 않아요.':'스쿼트 표기가 달라 동작과 기구 확인 전에는 중량 변화를 발전으로 단정하지 않았어요.'):'현재 선택된 기간의 기록만으로 장기적인 목표 달성 여부를 단정하지 않았어요.'} 기록에 수행 노력과 컨디션이 없어 고·중·저 강도도 확정하지 않았습니다.</p></div>
  <div className="report-evidence"><span>분포 근거</span>{top.sessionDates.map(d=><button key={d} onClick={()=>onSource(d)}>{d}<Icon name="file" size={12}/></button>)}</div>
- <div className="report-conclusion"><span className="report-label">다음 수업의 방향</span><p>최근 수업의 구성을 출발점으로 삼고, 기준 동작과 오늘 컨디션을 확인하는 프로그램 초안을 준비했어요.</p></div>
+ <div className="report-conclusion"><span className="report-label">수업 제안</span><p>최근 수업의 구성을 출발점으로 삼고, 기준 동작과 오늘 컨디션을 확인하는 프로그램 초안을 준비했어요.</p></div>
  <button className="primary wide" onClick={onProgram}>이 의견으로 수업 준비 <Icon name="arrow" size={16}/></button>
  </section>
 }

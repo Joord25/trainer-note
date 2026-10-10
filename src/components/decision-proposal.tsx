@@ -22,7 +22,7 @@ export function DecisionProposalCard({message,memberId,disabled,onSaved}:{messag
   <header><small>결정 제안 · {p.target.label}</small><strong>{decisionChoiceLabels[p.choice]}</strong></header>
   <p>{p.reason}</p>
   {p.patch&&<div className="decision-patch"><small>바뀌는 다음 수업 제안</small><p>{p.patch.text}</p>{p.patch.check&&<p><small>실행·확인 조건</small> {p.patch.check}</p>}</div>}
-  {applied?<p className="decision-state" role="status">반영했어요. 다음 수업의 방향에 표시됩니다.</p>
+  {applied?<p className="decision-state" role="status">반영했어요. 수업 제안에 표시됩니다.</p>
   :dismissed?<p className="decision-state">넘겼어요. 저장된 내용은 없어요. <button type="button" onClick={()=>setDismissed(false)}>다시 보기</button></p>
   :editing?<div className="decision-edit">
     <label>결정<select value={choice} disabled={busy} onChange={e=>setChoice(e.target.value as DecisionChoice)}>{(Object.keys(decisionChoiceLabels) as DecisionChoice[]).map(k=><option key={k} value={k}>{decisionChoiceLabels[k]}</option>)}</select></label>

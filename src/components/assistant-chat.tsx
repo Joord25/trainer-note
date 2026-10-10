@@ -13,9 +13,9 @@ import {useWorkspaceTextScale} from '../lib/workspace-text-scale';
 import {aiMessage,callAi,listenChats,listenChatState,listenChatSessions,serverAiEnabled,type ChatState,type ChatSession,type ChatMessage,type DiscussionTarget} from '../lib/server-ai';
 const activity={checking_search:'검색할 내용을 확인하고 있어요',searching_web:'웹 자료를 검색하고 있어요',searching_records:'관련 기록을 찾고 있어요',analyzing_capture:'캡처를 분석하고 있어요',analyzing_records:'운동 기록을 분석하고 있어요',thinking:'답변을 생각하고 있어요',composing:'답변을 정리하고 있어요',complete:'답변이 준비됐어요'};
 /** discussion: opened from an item in "next lesson direction"; answers use that analysis' basis and may propose a decision. */
-export type AssistantDraft={id:string;fileId:string;fileName:string;page:number;question:string;discussion?:DiscussionTarget&{label:string}};
+export type AssistantDraft={id:string;fileId:string;fileName:string;page:number;question:string;autoSend?:boolean;discussion?:DiscussionTarget&{label:string}};
 export type SourceSelection={kind?:'source'|'screen';fileId:string;fileName:string;page:number;rect:{x:number;y:number;width:number;height:number};image:string};
-export function AssistantChat({hideHeading=false,memberName,memberId,online,selection,onRestoreSelection,onClearSelection,onSelectArea,onClose,onEvidence,onOriginal,onDecision,draft,referenceRecords=[]}:{onDecision?:()=>void;hideHeading?:boolean;memberName:string;memberId:string;online:boolean;selection:SourceSelection|null;onRestoreSelection:(v:SourceSelection|null)=>void;onClearSelection:()=>void;onSelectArea:()=>void;onClose:()=>void;onEvidence:(id:string)=>void;onOriginal:(fileId:string,page:number)=>void;draft?:AssistantDraft|null;referenceRecords?:RecordReference[]}){
+export function AssistantChat({hideHeading=false,memberName,memberId,online,selection,onRestoreSelection,onClearSelection,onSelectArea,onClose,onEvidence,onOriginal,onDecision,draft,onDraftConsumed,referenceRecords=[]}:{onDraftConsumed?:(id:string)=>void;onDecision?:()=>void;hideHeading?:boolean;memberName:string;memberId:string;online:boolean;selection:SourceSelection|null;onRestoreSelection:(v:SourceSelection|null)=>void;onClearSelection:()=>void;onSelectArea:()=>void;onClose:()=>void;onEvidence:(id:string)=>void;onOriginal:(fileId:string,page:number)=>void;draft?:AssistantDraft|null;referenceRecords?:RecordReference[]}){
  const [textScale]=useWorkspaceTextScale(memberId);
  const [answerMode,setAnswerMode]=useState<'quick'|'deep'>('quick');
  const [messages,setMessages]=useState<ChatMessage[]>([]),[question,setQuestion]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -24,7 +24,7 @@ export function AssistantChat({hideHeading=false,memberName,memberId,online,sele
  const drafts=useRef(new Map<number,{question:string;context:AssistantDraft|null;selection:SourceSelection|null}>());
  const [loadedGeneration,setLoadedGeneration]=useState<number|null>(null);
  const [context,setContext]=useState<AssistantDraft|null>(null),[preview,setPreview]=useState<SourceSelection|null>(null);
- useEffect(()=>{if(draft){setQuestion(draft.question);setContext(draft);}},[draft]);
+ useEffect(()=>{if(draft){setQuestion(draft.question);setContext(draft);if(draft.autoSend)setArchived(null);}},[draft]);
  const input=useRef<HTMLTextAreaElement>(null),composing=useRef(false),historyMenu=useRef<HTMLDetailsElement>(null);
  useEffect(()=>{
   function outside(e:PointerEvent){const menu=historyMenu.current;if(menu?.open&&!menu.contains(e.target as Node))menu.removeAttribute('open');}
@@ -68,16 +68,24 @@ export function AssistantChat({hideHeading=false,memberName,memberId,online,sele
    requestAnimationFrame(()=>{if(field.isConnected)field.setSelectionRange(start+1,start+1);});
   }else if(!e.shiftKey&&!e.ctrlKey&&!e.metaKey){e.preventDefault();if(!e.repeat)e.currentTarget.form?.requestSubmit();}
  }
- async function send(e:FormEvent){e.preventDefault();if(lock.current||blocked||!online||!serverAiEnabled||!question.trim())return;lock.current=true;setBusy(true);setError('');
-  const discussion=context?.discussion&&(!selection||selection.kind==='screen')?{kind:context.discussion.kind,id:context.discussion.id,inputKey:context.discussion.inputKey,fingerprint:context.discussion.fingerprint}:null;
-  const payload={answerMode,chatGeneration:generation,resumeConversation:!!archived,question:question.trim(),fileId:discussion?'':selection?.fileId??context?.fileId??'',...(discussion?{discussion}:{}),previousId:[...shown].reverse().find(m=>m.status==='ready')?.id??'',...(selection?{selection:{kind:selection.kind??'source',page:selection.page,rect:selection.rect,image:selection.image}}:{})},encoded=JSON.stringify(payload);
-  const id=retry.current?.payload===encoded?retry.current.id:crypto.randomUUID();retry.current={id,payload:encoded};
+ async function send(e?:FormEvent,automatic?:AssistantDraft){e?.preventDefault();if(lock.current||blocked||!online||!serverAiEnabled||!question.trim())return;lock.current=true;setBusy(true);setError('');
+  const sentContext=automatic??context;
+  const publicQuestion=!!sentContext?.autoSend,sentSelection=publicQuestion?null:selection;
+  const discussion=sentContext?.discussion&&(!sentSelection||sentSelection.kind==='screen')?{kind:sentContext.discussion.kind,id:sentContext.discussion.id,inputKey:sentContext.discussion.inputKey,fingerprint:sentContext.discussion.fingerprint}:null;
+  const payload={answerMode,chatGeneration:generation,resumeConversation:!!archived,question:question.trim(),fileId:discussion?'':sentSelection?.fileId??sentContext?.fileId??'',...(discussion?{discussion}:{}),previousId:publicQuestion?'':[...shown].reverse().find(m=>m.status==='ready')?.id??'',...(sentSelection?{selection:{kind:sentSelection.kind??'source',page:sentSelection.page,rect:sentSelection.rect,image:sentSelection.image}}:{})},encoded=JSON.stringify(payload);
+  const id=automatic?.id??(retry.current?.payload===encoded?retry.current.id:crypto.randomUUID());retry.current={id,payload:encoded};
   followBottom.current=true;setShowLatest(false);
-  setPending({message:{id,generation,answerMode,question:payload.question,fileId:payload.fileId,previousId:payload.previousId,status:'processing',phase:'thinking',selection:selection?{kind:selection.kind,page:selection.page,rect:selection.rect}:undefined,captureAvailable:!!selection},image:selection?.image});
-  setQuestion('');
-  try{await callAi({action:'chat',memberId,requestId:id,...payload});if(alive.current){drafts.current.delete(generation);if(!discussion)setContext(null);onClearSelection();retry.current=null;}}
+  setPending({message:{id,generation,answerMode,question:payload.question,fileId:payload.fileId,previousId:payload.previousId,status:'processing',phase:'thinking',selection:sentSelection?{kind:sentSelection.kind,page:sentSelection.page,rect:sentSelection.rect}:undefined,captureAvailable:!!sentSelection},image:sentSelection?.image});
+  setQuestion('');if(automatic)onDraftConsumed?.(automatic.id);
+  try{await callAi({action:'chat',memberId,requestId:id,...payload});if(alive.current){drafts.current.delete(generation);if(!discussion)setContext(current=>current?.id===sentContext?.id?null:current);onClearSelection();retry.current=null;}}
   catch(e){if(alive.current){setQuestion(current=>current||question);setError(aiMessage(e));}}finally{lock.current=false;if(alive.current){setBusy(false);setPending(null);}}
  }
+ const autoSent=useRef<string|null>(null);
+ useEffect(()=>{
+  if(!draft?.autoSend||autoSent.current===draft.id||context?.id!==draft.id||question!==draft.question||blocked||!online||!serverAiEnabled||archived||lock.current)return;
+  autoSent.current=draft.id;
+  void send(undefined,draft);
+ },[draft,context,question,blocked,online,archived]);
  async function regenerate(message:ChatMessage){
   if(lock.current||blocked||!online||!serverAiEnabled)return;
   lock.current=true;setBusy(true);setError('');
