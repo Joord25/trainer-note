@@ -1,3 +1,4 @@
+import {memberOverviews} from './member-overview.mjs';
 import {createUsageAccess} from './usage-access.mjs';
 import {createUsageReporting} from './usage-report.mjs';
 import {createRecordDeletion} from './record-deletion.mjs';
@@ -37,6 +38,11 @@ const service=createService({db,model:gemini,readSource:async(uid,mid,file)=>{
 },enqueue:async(data,id)=>{try{await getFunctions().taskQueue(`locations/${region}/functions/buildMemberReport`).enqueue(data,{id:'tn-'+id,scheduleDelaySeconds:30,dispatchDeadlineSeconds:180});}catch(e){if(e.code!=='functions/task-already-exists')throw e;}}});
 const deleteRecords=createRecordDeletion({db,scheduleReport:service.scheduleReport});
 function input(data){if(!data||typeof data!=='object'||Array.isArray(data)||Buffer.byteLength(JSON.stringify(data))>1024*1024||typeof data.memberId!=='string'||!/^[-_a-zA-Z0-9]{1,100}$/.test(data.memberId))throw new HttpsError('invalid-argument','회원 정보를 확인해주세요.');if(data.fileId!==undefined&&!(data.action==='chat'&&data.fileId==='')&&(typeof data.fileId!=='string'||!/^[a-f0-9]{64}$/.test(data.fileId)))throw new HttpsError('invalid-argument','원본 파일을 확인해주세요.');return data;}
+export const trainerDirectory=onCall({region,maxInstances:3,minInstances:0,concurrency:20,memory:'256MiB',timeoutSeconds:60,enforceAppCheck:true},async request=>{
+ if(!request.auth)throw new HttpsError('unauthenticated','로그인이 필요해요.');
+ if(await deletionPending(request.auth.uid))throw new HttpsError('permission-denied','회원탈퇴 처리 중이에요.');
+ try{return await memberOverviews(db,request.auth.uid,request.data?.memberIds);}catch{throw new HttpsError('invalid-argument','회원 목록을 확인해주세요.');}
+});
 export const trainerAi=onCall({...options,enforceAppCheck:true},async request=>{
  if(!request.auth)throw new HttpsError('unauthenticated','로그인이 필요해요.');const uid=request.auth.uid,data=input(request.data);
  if(await deletionPending(uid))throw new HttpsError('permission-denied','회원탈퇴 처리 중이에요.');

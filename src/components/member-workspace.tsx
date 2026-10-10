@@ -6,6 +6,9 @@ import { Icon } from "./icons";
 import {SettingsDialog} from "./settings-dialog";
 import {useDisplayPreferences,DisplayPreferenceContext} from "../lib/display-preferences";
 import {MemberActions,memberAvatarLabel} from "./member-actions";
+import {useMemberOverviews,overviewGoal} from '../lib/member-overview';
+import {listenTrainingGoal} from '../lib/training-goal-store';
+import {trainingGoalTitle,type SavedTrainingGoal} from '../lib/training-goals';
 import {MemberDirectory} from "./member-directory";
 import {LiveAnalysisWorkspace} from "./live-analysis-workspace";
 
@@ -59,6 +62,7 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const [goalRequest,setGoalRequest]=useState(0);
   const selected = members.find(m => m.id === selectedId);
   const showHome=home||!selected;
+  const overviews=useMemberOverviews(trainer.uid,membersInFolder(members,memberFolder).map(m=>m.id),showHome&&online&&!loading&&!cached);
   function openMember(id:string){if(selectedId!==id&&unsaved.current&&!window.confirm('저장하지 않은 수정 내용이 있어요. 버리고 다른 회원으로 이동할까요?'))return false;if(selectedId!==id){unsaved.current=false;setUploadRequest(0);setGoalRequest(0);}setSelectedId(id);setHome(false);closeMobileSidebar();return true;}
   function goHome(){setHome(true);setSearch('');closeMobileSidebar();}
 
@@ -90,7 +94,7 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
     <aside id="member-sidebar" ref={sidebarRef} className="sidebar" aria-label="주 메뉴" role={narrow&&mobileSidebarOpen?"dialog":undefined} aria-modal={narrow&&mobileSidebarOpen?true:undefined}>
       <div className="brand-row"><button className="brand" aria-label="회원 홈으로" title="회원 홈" onClick={goHome}><span className="brand-full">trainer<span>note</span><i/></span></button><button ref={sidebarToggleRef} className="sidebar-toggle icon-button" aria-label={compact?"사이드바 펼치기":"사이드바 접기"} title={compact?"사이드바 펼치기":"사이드바 접기"} aria-expanded={!compact} aria-controls="member-sidebar" onClick={toggleSidebar}><span className="toggle-monogram" aria-hidden="true">tn<i/></span><Icon name="panel" size={21}/></button></div>
       <button className="member-home-nav" aria-current={showHome?"page":undefined} onClick={goHome} title="회원 목록" aria-label="회원 목록"><Icon name="users" size={18}/><span>회원 목록</span></button>
-      <nav className="real-member-list" aria-label="회원 목록">{membersInFolder(members,'active').map((m,i)=><div key={m.id} className={'sidebar-member-item '+(!showHome&&selectedId===m.id?'is-active':'')}><div className="sidebar-member-row"><button className="member" onClick={()=>openMember(m.id)} aria-label={m.name+' 회원 보기'} aria-current={!showHome&&selectedId===m.id?'true':undefined} title={m.name}><span className={'avatar tone-'+i%3}>{m.name.slice(0,1)}</span><span className="member-copy"><strong>{m.name}</strong><small>{m.pending?'저장 중…':m.goal||'목표 미설정'}</small></span></button><MemberActions onStatus={status=>void moveMember(m,status)} member={m} compact={compact} compactLabel={memberAvatarLabel(m.name)} available={available} online={online} onOpen={()=>openMember(m.id)} onEdit={()=>{closeMobileSidebar();setEditor({kind:'edit',member:m});}} onUpload={()=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} onDelete={()=>{closeMobileSidebar();setEditor({kind:'delete',member:m});}}/></div></div>)}</nav>
+      <nav className="real-member-list" aria-label="회원 목록">{membersInFolder(members,'active').map((m,i)=><div key={m.id} className={'sidebar-member-item '+(!showHome&&selectedId===m.id?'is-active':'')}><div className="sidebar-member-row"><button className="member" onClick={()=>openMember(m.id)} aria-label={m.name+' 회원 보기'} aria-current={!showHome&&selectedId===m.id?'true':undefined} title={m.name}><span className={'avatar tone-'+i%3}>{m.name.slice(0,1)}</span><span className="member-copy"><strong>{m.name}</strong><small>{m.pending?'저장 중…':overviewGoal(overviews[m.id],m.goal)}</small></span></button><MemberActions onStatus={status=>void moveMember(m,status)} member={m} compact={compact} compactLabel={memberAvatarLabel(m.name)} available={available} online={online} onOpen={()=>openMember(m.id)} onEdit={()=>{closeMobileSidebar();setEditor({kind:'edit',member:m});}} onUpload={()=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} onDelete={()=>{closeMobileSidebar();setEditor({kind:'delete',member:m});}}/></div></div>)}</nav>
       <button className="member-demo-button" onClick={()=>{if(!unsaved.current||window.confirm('저장하지 않은 수정 내용을 버리고 예시로 이동할까요?'))onDemo();}} title="예시 둘러보기" aria-label="예시 둘러보기"><Icon name="chart" size={17}/><span>예시 둘러보기</span></button>
       <AccountControl onSettings={()=>{closeMobileSidebar();setSettings(true);}}/>
     </aside>
@@ -102,7 +106,7 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
         {!showHome&&selected&&memberStatus(selected.status)!=='active'&&<div className="member-notice member-archive-notice"><span>{memberFolderLabels[memberStatus(selected.status)]} 보관함의 회원입니다. 운동 기록은 계속 확인할 수 있어요.</span><button disabled={!available||selected.pending} onClick={()=>void moveMember(selected,'active')}>관리 중으로 복원</button></div>}
         {!online && <div className="member-notice" role="status">인터넷 연결을 확인해주세요. 다시 연결되면 회원 목록을 불러옵니다.</div>}
         {error ? <div className="member-error" role="alert"><h2>회원 목록을 불러오지 못했어요</h2><p>{error}</p><button onClick={() => setAttempt(v => v + 1)}>다시 시도</button></div> : loading ? <div className="empty-state" aria-busy="true"><span className="auth-spinner"/><p>{online ? "회원 정보를 불러오고 있어요." : "인터넷 연결을 기다리고 있어요."}</p></div> : <>
-          {showHome&&<MemberDirectory folder={memberFolder} onFolder={setMemberFolder} onStatus={(m,status)=>void moveMember(m,status)} onEdit={m=>setEditor({kind:'edit',member:m})} onDelete={m=>setEditor({kind:'delete',member:m})} onUpload={m=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} online={online} preferences={preferences} onPreferences={updatePreferences} members={members} search={search} onSearch={setSearch} onOpen={openMember} onCreate={()=>setEditor({kind:"create"})} canCreate={available}/>}
+          {showHome&&<MemberDirectory overviews={overviews} folder={memberFolder} onFolder={setMemberFolder} onStatus={(m,status)=>void moveMember(m,status)} onEdit={m=>setEditor({kind:'edit',member:m})} onDelete={m=>setEditor({kind:'delete',member:m})} onUpload={m=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} online={online} preferences={preferences} onPreferences={updatePreferences} members={members} search={search} onSearch={setSearch} onOpen={openMember} onCreate={()=>setEditor({kind:"create"})} canCreate={available}/>}
           {selected&&<div className="member-session" hidden={showHome}>{selected.createdAt ? <LiveAnalysisWorkspace onBack={goHome} initialViewMode={preferences.viewMode} key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest} goalRequest={goalRequest} onUnsavedChange={v=>{unsaved.current=v;}}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}</div>}
         </>}
 
@@ -119,6 +123,9 @@ function MemberDialog({editor, online, onClose, onSaved}: {editor: Editor; onlin
   const [input, setInput] = useState<MemberInput>(editor.kind === "create" ? {name: "", goal: "", notes: ""} : {name: editor.member.name, goal: editor.member.goal, notes: editor.member.notes});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [savedGoal,setSavedGoal]=useState<SavedTrainingGoal|null>(null),[goalChecked,setGoalChecked]=useState(editor.kind!=='edit'),[goalError,setGoalError]=useState(false);
+  const editId=editor.kind==='edit'?editor.member.id:'';
+  useEffect(()=>{if(!editId)return;return listenTrainingGoal(editId,goal=>{setSavedGoal(goal);setGoalChecked(true);setGoalError(false);},()=>{setGoalChecked(true);setGoalError(true);});},[editId]);
   const blockedDelete=editor.kind==='delete'&&(editor.member.fileCount>0||editor.member.recordCount>0);
   const pending = useRef(false);
   const mounted = useRef(true);
@@ -138,7 +145,7 @@ function MemberDialog({editor, online, onClose, onSaved}: {editor: Editor; onlin
       <div className="dialog-title"><div><span className="section-eyebrow">내 회원 관리</span><h2>{editor.kind === "create" ? "새 회원 등록" : editor.kind === "edit" ? "회원 정보 수정" : "회원을 삭제할까요?"}</h2></div><button type="button" className="icon-button" onClick={onClose} disabled={busy} aria-label="닫기"><Icon name="close"/></button></div>
       {editor.kind === "delete" ? <><p><strong>{editor.member.name}</strong> 회원의 이름·목표·메모가 영구 삭제돼요. 이 작업은 되돌릴 수 없어요.</p>{blockedDelete&&<p className="member-notice">일지 {editor.member.fileCount}개·운동 기록 {editor.member.recordCount}개가 연결되어 있어요. 연결된 파일과 기록을 먼저 삭제해주세요.</p>}</> : <>
         <label className="field-label">회원 이름 <span>필수</span><input autoFocus required maxLength={60} value={input.name} onChange={e => setInput({...input, name: e.target.value})} disabled={busy} placeholder="예: 김민수"/></label>
-        <label className="field-label">운동 목표 <span>선택</span><textarea maxLength={300} value={input.goal} onChange={e => setInput({...input, goal: e.target.value})} disabled={busy} placeholder="예: 주 2회 운동 습관 만들기" rows={2}/></label>
+        {!goalChecked?<p className="caption">등록 목표 확인 중…</p>:goalError?<p className="caption">등록 목표를 확인하지 못했어요. 목표는 회원 화면의 ‘훈련 목표’에서 확인해주세요.</p>:savedGoal?<div className="field-label">훈련 목표<p>{trainingGoalTitle(savedGoal)}</p><small>목표 변경은 회원 화면 상단의 ‘훈련 목표’에서 할 수 있어요.</small></div>:<label className="field-label">운동 목표 <span>선택</span><textarea maxLength={300} value={input.goal} onChange={e => setInput({...input, goal: e.target.value})} disabled={busy} placeholder="예: 주 2회 운동 습관 만들기" rows={2}/></label>}
         <label className="field-label">트레이너 메모 <span>선택</span><textarea maxLength={1000} value={input.notes} onChange={e => setInput({...input, notes: e.target.value})} disabled={busy} placeholder="수업 준비에 참고할 내용" rows={3}/></label>
       </>}
       {error && <p className="error" role="alert">{error}</p>}

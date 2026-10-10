@@ -4,7 +4,7 @@ import {hash} from './domain.mjs';
 import {validateDiscussionRequest} from './coaching-decisions.mjs';
 // Member-wide chat includes records, goals, guidance and conversation history.
 export const CHAT_MAX_INPUT_TOKENS=65536;
-export const CHAT_VERSION='workout-assistant-v27-nutrition-conversation';
+export const CHAT_VERSION='workout-assistant-v28-visible-context';
 export const CHAT_QUALITY_PROMPT=`
 질문 의도 우선
 - 비공개 정보 보호와 사실 정확성의 경계 안에서, 현재 질문자가 해결하려는 일을 최우선으로 답한다. 현재 질문의 명시적 조건·정정·요청한 형식 → 이어지는 사용자 대화 → 그 의도와 관련된 회원 기록 → 일반 운동 지식 순으로 해석한다. 이전 AI 답변이나 기록이 사용자가 지정한 가상 조건을 덮어쓰게 하지 않는다.

@@ -935,3 +935,12 @@ test('paid calls freeze their usage purpose at reservation, including failed cal
  provider=async()=>{throw Object.assign(Error('preflight'),{notBillable:true});};await assert.rejects(()=>service.chat(uid,mid,chatInput({fileId:'',requestId:'usage-purpose-failure',question:'스쿼트란?'})));
  const failed=(await db.collection(`trainers/${uid}/aiCalls`).get()).docs.map(d=>d.data()).find(v=>v.status==='failed');assert.equal(failed.purpose,'production');assert.equal(failed.estimatedMicros,0);
 });
+
+test('nutrition uses the saved primary goal and persists its actual displayed topic',async()=>{
+ await service.startImport(uid,mid,fileId);calls=[];provider=async()=>plainAnswer();
+ await db.doc(base+'/trainingGoals/current').set({primary:'다이어트(체지방 감소)',secondary:['근비대'],detail:'',revision:1});
+ const result=await service.chat(uid,mid,chatInput({fileId:'',question:'식단을 짜줘',requestId:'nutrition-primary-goal-01'}));
+ const facts=JSON.parse(calls.at(-1).parts[0].text);
+ assert.equal(facts.nutrition.conditions.goal,'다이어트(체지방 감소)');assert.equal(result.contextScope.topic,'nutrition');assert.equal(result.contextScope.recordCount,0);
+ assert.equal((await db.doc(base+'/chats/nutrition-primary-goal-01').get()).data().contextScope.topic,'nutrition');
+});
