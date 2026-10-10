@@ -108,7 +108,7 @@ export function AssistantChat({hideHeading=false,memberName,memberId,online,sele
 }
 
 function ChatContext({message}:{message:ChatMessage}){
- const kind=message.contextScope?.topic??message.chatContext?.kind;
+ const kind=message.contextScope?.topic??(message.chatContext?.kind==='member'?undefined:message.chatContext?.kind);
  const labels:Record<string,string>={nutrition:'식단·영양 상담',hypothetical:'별도 사례',general:'일반 지식',capture:'첨부 캡처',member:'회원 기록 상담',discussion:'다음 수업 방향 논의'};
  const scope=message.contextScope;
  if(!kind&&!scope)return null;
