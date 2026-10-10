@@ -86,7 +86,6 @@ export function AssistantChat({hideHeading=false,memberName,memberId,online,sele
  }
  return <aside className="assistant-panel" aria-label="AI 도우미">
   {!hideHeading&&<header className="assistant-heading"><span><Icon name="spark" size={17}/> AI 도우미</span><button className="icon-button" aria-label="AI 도우미 닫기" onClick={onClose}><Icon name="close" size={18}/></button></header>}
-  <div className="assistant-member-context"><Icon name="users" size={15}/><strong>{memberName}</strong><span>회원별 대화</span></div>
   <div className="assistant-conversation-tools" aria-label="대화 관리">
    {sessions.length?<details ref={historyMenu} className="assistant-history"><summary><Icon name="clock" size={15}/> 대화 기록</summary><div>{sessions.map(session=><button key={session.id} aria-label={session.title} aria-current={session.generation===generation?"page":undefined} disabled={waiting||resetBusy} onClick={e=>{openConversation(session);e.currentTarget.closest('details')?.removeAttribute('open');}}><span>{session.title}</span><small>{session.endAt.toDate().toLocaleDateString('ko-KR')}</small></button>)}</div></details>:<button type="button" className="assistant-history-empty" disabled title="저장된 대화가 아직 없어요"><Icon name="clock" size={15}/> 대화 기록</button>}
    <button type="button" className="assistant-new-chat" disabled={blocked||!online||!serverAiEnabled} onClick={()=>{historyMenu.current?.removeAttribute('open');newChatId.current=crypto.randomUUID();setNewChatError('');setNewChatOpen(true);}}><Icon name="plus" size={15}/>새 채팅</button>
