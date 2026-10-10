@@ -73,3 +73,39 @@
 
 .review-workspace .journey-brief .goal-review-heading{align-items:center;margin-bottom:16px}
 .review-workspace .journey-brief .goal-review-heading>h3{margin:0}
+
+/* Keep the summary focused on the trend and the context of one selected lesson. */
+.review-workspace .progress-summary .ps-goal{padding:0 0 16px;font-size:12px;gap:8px;flex-wrap:nowrap}
+.review-workspace .ps-goal>button{padding:5px 8px;font-size:11px;white-space:nowrap;flex-shrink:0}
+.ps-overview-heading{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}
+.review-workspace .ps-overview-heading h3{font-size:16px;line-height:1.5;margin:0 0 3px}
+.ps-overview-heading>div>span{font-size:11px;color:var(--muted)}
+.ps-stat-details{font-size:11px;color:var(--muted)}
+.ps-stat-details summary,.ps-range-options summary,.ps-session-originals summary,.ps-session-memos summary{cursor:pointer;list-style:none}
+.ps-stat-details summary::-webkit-details-marker,.ps-range-options summary::-webkit-details-marker,.ps-session-originals summary::-webkit-details-marker,.ps-session-memos summary::-webkit-details-marker{display:none}
+.ps-stat-details summary:after,.ps-range-options>summary:after{content:'⌄';margin-left:5px}
+.ps-stat-details dl{margin:10px 0 0;display:grid;gap:6px}.ps-stat-details dl>div{display:flex;gap:16px;justify-content:space-between}.ps-stat-details dd{margin:0;color:var(--ink)}
+.review-workspace .progress-summary .ps-chart{padding:14px 0 20px;border-color:var(--line)}
+.review-workspace .progress-summary .ps-chart-heading{align-items:start;flex-wrap:nowrap;gap:8px}
+.review-workspace .progress-summary .ps-filter button{min-height:30px;padding:4px 10px;font-size:12px;border:0}
+.ps-range-options{font-size:11px;color:var(--muted);text-align:right;min-width:0}
+.ps-range-options>summary{padding:6px 0}.ps-range-options>div{padding:10px 0;max-width:200px;text-align:left}
+.review-workspace .ps-range-options p{font-size:11px;line-height:1.6;margin:8px 0}
+.review-workspace .ps-range-options button{font-size:11px;padding:5px 7px}
+.review-workspace .ps-chart>.chart-record-hover>svg{margin:0}
+.chart-note-dot{position:absolute;width:5px;height:5px;background:var(--green);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:2}
+.ps-chart-caption{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:8px 0 12px;font-size:10px;color:var(--muted)}
+.ps-chart-caption>span{display:inline-flex;align-items:center;gap:5px}.ps-note-key{width:5px;height:5px;border-radius:50%;background:var(--green)}.ps-band-key i{width:12px;height:7px}
+.ps-session-detail{background:var(--surface-alt,#f7f9f6);border-radius:10px;padding:12px 14px;min-width:0}
+.ps-session-detail>header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.review-workspace .ps-session-detail .workout-select-trigger{background:transparent;border:0;padding:2px 0;min-height:28px;min-width:0;max-width:100%;font-size:12px;width:auto;gap:6px}
+.ps-session-detail>header>strong{font-size:18px;line-height:1.5;font-weight:600;font-variant-numeric:tabular-nums}.ps-session-detail strong small{font-size:11px;font-weight:400;color:var(--muted)}
+.ps-session-memos{margin-top:8px}.ps-session-memos small{font-size:10px;color:var(--muted)}
+.review-workspace .ps-session-memos p{font-size:13px;line-height:1.65;color:var(--ink);margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.ps-session-memos details{margin-top:8px;font-size:11px;color:var(--muted)}.ps-session-memos details>div{margin-top:8px}
+.review-workspace .ps-session-detail .ps-no-memo,.review-workspace .ps-session-detail .ps-range-status{font-size:11px;color:var(--muted);margin:6px 0 0}
+.ps-session-originals{margin-top:10px;font-size:11px;color:var(--muted)}.ps-session-originals summary{display:flex;align-items:center;gap:3px;width:fit-content}
+.review-workspace .ps-session-originals button{display:block;text-align:left;padding:6px 0;border:0;background:none;font-size:11px;color:var(--green);overflow-wrap:anywhere;white-space:normal}
+html[data-theme="dark"] .ps-session-detail{background:var(--field)}
+/* A wider 2-view panel should not magnify the chart and its axis labels. */
+.progress-summary .ps-chart>.chart-record-hover{max-width:680px;margin-inline:auto}
