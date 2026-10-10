@@ -16,7 +16,8 @@ service cloud.firestore {
       let goal=data.goal;
       let notes=data.notes;
       return data.keys().hasAll(['name','goal','notes','createdAt','updatedAt'])
-        && data.keys().hasOnly(['name','goal','notes','createdAt','updatedAt','fileCount','lastFileId','recordCount','lastRecordId'])
+        && data.keys().hasOnly(['name','goal','notes','createdAt','updatedAt','fileCount','lastFileId','recordCount','lastRecordId','status'])
+        && data.get('status','active') in ['active','hidden','ended']
         && fileCount is int && fileCount >= 0 && fileCount <= 500
         && fileId is string && fileId.size() <= 64
         && recordCount is int && recordCount >= 0 && recordCount <= 5000

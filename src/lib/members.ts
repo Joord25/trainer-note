@@ -3,8 +3,10 @@
 import { collection, deleteDoc, doc, getFirestore, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, type Timestamp } from "firebase/firestore";
 import { getClientAuth } from "./firebase-client";
 
+import {memberStatus,type MemberStatus} from "./member-status";
+
 export type MemberInput = { name: string; goal: string; notes: string };
-export type Member = MemberInput & { id: string; createdAt: Timestamp | null; pending: boolean; fileCount: number; recordCount: number };
+export type Member = MemberInput & { id: string; status?: MemberStatus; createdAt: Timestamp | null; pending: boolean; fileCount: number; recordCount: number };
 
 function membersCollection() {
   const auth = getClientAuth();
@@ -19,7 +21,7 @@ export function cleanMember(input: MemberInput): MemberInput {
 }
 export function listenMembers(onData: (members: Member[], fromCache: boolean) => void, onError: (error: unknown) => void) {
   return onSnapshot(query(membersCollection(), orderBy("createdAt", "desc")), {includeMetadataChanges: true}, snapshot => {
-    onData(snapshot.docs.map(d => ({id: d.id, name: d.data().name, goal: d.data().goal, notes: d.data().notes, createdAt: d.data().createdAt ?? null, fileCount: d.data().fileCount ?? 0, recordCount: d.data().recordCount ?? 0, pending: d.metadata.hasPendingWrites})), snapshot.metadata.fromCache);
+    onData(snapshot.docs.map(d => ({id: d.id, status:memberStatus(d.data().status), name: d.data().name, goal: d.data().goal, notes: d.data().notes, createdAt: d.data().createdAt ?? null, fileCount: d.data().fileCount ?? 0, recordCount: d.data().recordCount ?? 0, pending: d.metadata.hasPendingWrites})), snapshot.metadata.fromCache);
   }, onError);
 }
 export async function createMember(input: MemberInput) {
@@ -29,6 +31,10 @@ export async function createMember(input: MemberInput) {
 }
 export async function editMember(id: string, input: MemberInput) {
   await updateDoc(doc(membersCollection(), id), {...cleanMember(input), updatedAt: serverTimestamp()});
+}
+export async function setMemberStatus(id:string,status:MemberStatus){
+  if(!['active','hidden','ended'].includes(status))throw new Error('회원 분류를 확인해주세요.');
+  await updateDoc(doc(membersCollection(),id),{status,updatedAt:serverTimestamp()});
 }
 export async function removeMember(id: string) {
   await deleteDoc(doc(membersCollection(), id));

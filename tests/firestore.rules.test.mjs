@@ -95,3 +95,32 @@ test("same names retain separate document identities", async () => {
  await setDoc(doc(own, "trainers/trainer-a/members/member-2"), valid());
  assert.equal((await getDocs(collection(own, "trainers/trainer-a/members"))).size, 2);
 });
+
+
+test('member folders persist across sessions without changing records or profile',async()=>{
+ const own=db('trainer-a'),ref=doc(own,path);
+ await setDoc(ref,valid());
+ await env.withSecurityRulesDisabled(async context=>{
+  await setDoc(doc(context.firestore(),path+'/records/existing'),{notes:'preserve record'});
+  await updateDoc(doc(context.firestore(),path),{recordCount:1});
+ });
+ const before=(await getDoc(ref)).data();
+ for(const status of ['hidden','ended','active']){
+  await assertSucceeds(updateDoc(ref,{status,updatedAt:serverTimestamp()}));
+  const data=(await getDoc(doc(db('trainer-a'),path))).data();
+  assert.equal(data.status,status);assert.equal(data.name,before.name);assert.equal(data.goal,before.goal);assert.equal(data.notes,before.notes);assert.equal(data.recordCount,1);assert.ok(data.createdAt.isEqual(before.createdAt));
+  assert.equal((await assertSucceeds(getDoc(doc(own,path+'/records/existing')))).data().notes,'preserve record');
+  await assertFails(deleteDoc(ref));
+ }
+});
+test('member folder values and ownership are enforced on create and update',async()=>{
+ const own=db('trainer-a'),ref=doc(own,path);
+ for(const status of ['active','hidden','ended'])await assertSucceeds(setDoc(doc(own,path+'-'+status),{...valid(),status}));
+ await setDoc(ref,valid());
+ for(const status of ['deleted','',null,1,{},['hidden']]){
+  await assertFails(setDoc(doc(own,path+'-invalid'),{...valid(),status}));
+  await assertFails(updateDoc(ref,{status,updatedAt:serverTimestamp()}));
+ }
+ for(const actor of [null,'trainer-b'])for(const status of ['hidden','ended','active'])await assertFails(updateDoc(doc(db(actor),path),{status,updatedAt:serverTimestamp()}));
+ await assertFails(updateDoc(ref,{status:'hidden'}));
+});

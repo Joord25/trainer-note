@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useId,useRef,useState} from 'react';
 import {Icon} from './icons';
+import {memberStatus,type MemberStatus} from '../lib/member-status';
 import type {Member} from '../lib/members';
 /** A compact mark that still distinguishes members who share a surname. */
 export function memberAvatarLabel(name:string){
@@ -9,7 +10,7 @@ export function memberAvatarLabel(name:string){
  if(chars.length===1)return chars;
  return `${chars[0]}${chars[chars.length-1]}`;
 }
-export function MemberActions({member,compact=false,card=false,compactLabel,available,online,onOpen,onEdit,onUpload,onDelete}:{member:Member;compact?:boolean;card?:boolean;compactLabel?:string;available:boolean;online:boolean;onOpen:()=>void;onEdit:()=>void;onUpload:()=>void;onDelete:()=>void}){
+export function MemberActions({member,compact=false,card=false,compactLabel,available,online,onOpen,onEdit,onUpload,onDelete,onStatus}:{member:Member;compact?:boolean;card?:boolean;compactLabel?:string;available:boolean;online:boolean;onOpen:()=>void;onEdit:()=>void;onUpload:()=>void;onDelete:()=>void;onStatus:(status:MemberStatus)=>void}){
  const id=useId(),button=useRef<HTMLButtonElement>(null),menu=useRef<HTMLDivElement>(null),[open,setOpen]=useState(false),[position,setPosition]=useState({left:0,top:0});
  function place(){const b=button.current?.getBoundingClientRect();if(!b)return;const width=200,height=menu.current?.offsetHeight||180;setPosition({left:Math.max(8,Math.min(compact?b.right+8:b.right-width,window.innerWidth-width-8)),top:Math.max(8,Math.min(compact?b.top:b.bottom+6,window.innerHeight-height-8))});}
  useEffect(()=>{if(!open)return;place();window.addEventListener('resize',place);window.addEventListener('scroll',place,true);return()=>{window.removeEventListener('resize',place);window.removeEventListener('scroll',place,true);};},[open,compact]);
@@ -19,6 +20,9 @@ export function MemberActions({member,compact=false,card=false,compactLabel,avai
  {compact&&<button onClick={()=>act(onOpen)}><Icon name="file" size={15}/>운동 기록 열기</button>}
  <button disabled={!available} onClick={()=>act(onEdit)}><Icon name="edit" size={15}/>회원 정보 수정</button>
  <button disabled={!online||member.pending} onClick={()=>act(onUpload)}><Icon name="plus" size={16}/>일지 추가</button>
+ {memberStatus(member.status)!=='active'&&<button disabled={!available||member.pending} onClick={()=>act(()=>onStatus('active'))}><Icon name="refresh" size={15}/>관리 중으로 복원</button>}
+ {memberStatus(member.status)==='active'&&<button disabled={!available||member.pending} onClick={()=>act(()=>onStatus('hidden'))}><Icon name="eye-off" size={15}/>회원 숨기기</button>}
+ {memberStatus(member.status)!=='ended'&&<button disabled={!available||member.pending} onClick={()=>act(()=>onStatus('ended'))}><Icon name="folder" size={15}/>계약 종료로 이동</button>}
  <button className="member-dropdown-delete" disabled={!available||member.pending} onClick={()=>act(onDelete)}>회원 삭제</button>
  </div></>;
 }

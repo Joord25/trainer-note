@@ -9,7 +9,9 @@ import {MemberActions,memberAvatarLabel} from "./member-actions";
 import {MemberDirectory} from "./member-directory";
 import {LiveAnalysisWorkspace} from "./live-analysis-workspace";
 
-import { cleanMember, createMember, editMember, listenMembers, memberError, removeMember, type Member, type MemberInput } from "../lib/members";
+import { cleanMember, createMember, editMember, listenMembers, memberError, removeMember, setMemberStatus, type Member, type MemberInput } from "../lib/members";
+
+import {memberStatus,membersInFolder,type MemberStatus,type MemberFolder,memberFolderLabels} from "../lib/member-status";
 
 type Editor = { kind: "create" } | { kind: "edit"; member: Member } | { kind: "delete"; member: Member };
 
@@ -41,6 +43,7 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [home,setHome]=useState(true);
+  const [memberFolder,setMemberFolder]=useState<MemberFolder>('active');
   const unsaved=useRef(false);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -48,6 +51,8 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [editor, setEditor] = useState<Editor | null>(null);
+  const [statusBusy,setStatusBusy]=useState(false),[statusError,setStatusError]=useState("");
+  const statusPending=useRef(false);
   const [toast, setToast] = useState("");
   const [online, setOnline] = useState(true);
   const [uploadRequest,setUploadRequest]=useState(0);
@@ -71,23 +76,33 @@ export function MemberWorkspace({onDemo}: {onDemo: () => void}) {
     return () => {window.removeEventListener("online", update); window.removeEventListener("offline", update);};
   }, []);
   useEffect(() => {if (!toast) return; const timer = setTimeout(() => setToast(""), 4000); return () => clearTimeout(timer);}, [toast]);
-  const available = !loading && !error && online && !cached;
+  const available = !loading && !error && online && !cached && !statusBusy;
+  async function moveMember(member:Member,status:MemberStatus){
+    if(!available||member.pending||statusPending.current)return;
+    statusPending.current=true;setStatusBusy(true);setStatusError('');
+    try{await setMemberStatus(member.id,status);setToast(status==='active'?`${member.name} 회원을 관리 중으로 복원했어요.`:status==='hidden'?`${member.name} 회원을 숨겼어요. 숨긴 회원에서 다시 볼 수 있어요.`:`${member.name} 회원을 계약 종료 보관함으로 옮겼어요.`);}
+    catch(error){setStatusError(memberError(error));}
+    finally{statusPending.current=false;setStatusBusy(false);}
+  }
 
   return <DisplayPreferenceContext.Provider value={{preferences,update:updatePreferences}}><div className={"app-shell member-shell "+(!showHome?"live-member-shell ":"")+(compact?"sidebar-compact ":"sidebar-expanded ")+(mobileSidebarOpen?"sidebar-mobile-open":"")}>
     {narrow&&mobileSidebarOpen&&<button className="sidebar-backdrop" tabIndex={-1} aria-label="사이드바 닫기" onClick={dismissSidebar}/>}
     <aside id="member-sidebar" ref={sidebarRef} className="sidebar" aria-label="주 메뉴" role={narrow&&mobileSidebarOpen?"dialog":undefined} aria-modal={narrow&&mobileSidebarOpen?true:undefined}>
       <div className="brand-row"><button className="brand" aria-label="회원 홈으로" title="회원 홈" onClick={goHome}><span className="brand-full">trainer<span>note</span><i/></span></button><button ref={sidebarToggleRef} className="sidebar-toggle icon-button" aria-label={compact?"사이드바 펼치기":"사이드바 접기"} title={compact?"사이드바 펼치기":"사이드바 접기"} aria-expanded={!compact} aria-controls="member-sidebar" onClick={toggleSidebar}><span className="toggle-monogram" aria-hidden="true">tn<i/></span><Icon name="panel" size={21}/></button></div>
       <button className="member-home-nav" aria-current={showHome?"page":undefined} onClick={goHome} title="회원 목록" aria-label="회원 목록"><Icon name="users" size={18}/><span>회원 목록</span></button>
-      <nav className="real-member-list" aria-label="회원 목록">{members.map((m,i)=><div key={m.id} className={'sidebar-member-item '+(!showHome&&selectedId===m.id?'is-active':'')}><div className="sidebar-member-row"><button className="member" onClick={()=>openMember(m.id)} aria-label={m.name+' 회원 보기'} aria-current={!showHome&&selectedId===m.id?'true':undefined} title={m.name}><span className={'avatar tone-'+i%3}>{m.name.slice(0,1)}</span><span className="member-copy"><strong>{m.name}</strong><small>{m.pending?'저장 중…':m.goal||'목표 미설정'}</small></span></button><MemberActions member={m} compact={compact} compactLabel={memberAvatarLabel(m.name)} available={available} online={online} onOpen={()=>openMember(m.id)} onEdit={()=>{closeMobileSidebar();setEditor({kind:'edit',member:m});}} onUpload={()=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} onDelete={()=>{closeMobileSidebar();setEditor({kind:'delete',member:m});}}/></div></div>)}</nav>
+      <nav className="real-member-list" aria-label="회원 목록">{membersInFolder(members,'active').map((m,i)=><div key={m.id} className={'sidebar-member-item '+(!showHome&&selectedId===m.id?'is-active':'')}><div className="sidebar-member-row"><button className="member" onClick={()=>openMember(m.id)} aria-label={m.name+' 회원 보기'} aria-current={!showHome&&selectedId===m.id?'true':undefined} title={m.name}><span className={'avatar tone-'+i%3}>{m.name.slice(0,1)}</span><span className="member-copy"><strong>{m.name}</strong><small>{m.pending?'저장 중…':m.goal||'목표 미설정'}</small></span></button><MemberActions onStatus={status=>void moveMember(m,status)} member={m} compact={compact} compactLabel={memberAvatarLabel(m.name)} available={available} online={online} onOpen={()=>openMember(m.id)} onEdit={()=>{closeMobileSidebar();setEditor({kind:'edit',member:m});}} onUpload={()=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} onDelete={()=>{closeMobileSidebar();setEditor({kind:'delete',member:m});}}/></div></div>)}</nav>
       <button className="member-demo-button" onClick={()=>{if(!unsaved.current||window.confirm('저장하지 않은 수정 내용을 버리고 예시로 이동할까요?'))onDemo();}} title="예시 둘러보기" aria-label="예시 둘러보기"><Icon name="chart" size={17}/><span>예시 둘러보기</span></button>
       <AccountControl onSettings={()=>{closeMobileSidebar();setSettings(true);}}/>
     </aside>
     <main className="main-workspace real-main" inert={narrow&&mobileSidebarOpen}>
 
       <div className="real-content">
+        {statusError&&<div className="member-notice" role="alert">{statusError}<button onClick={()=>setStatusError('')}>닫기</button></div>}
+        {statusBusy&&<p className="member-notice" role="status">회원 분류를 저장하고 있어요…</p>}
+        {!showHome&&selected&&memberStatus(selected.status)!=='active'&&<div className="member-notice member-archive-notice"><span>{memberFolderLabels[memberStatus(selected.status)]} 보관함의 회원입니다. 운동 기록은 계속 확인할 수 있어요.</span><button disabled={!available||selected.pending} onClick={()=>void moveMember(selected,'active')}>관리 중으로 복원</button></div>}
         {!online && <div className="member-notice" role="status">인터넷 연결을 확인해주세요. 다시 연결되면 회원 목록을 불러옵니다.</div>}
         {error ? <div className="member-error" role="alert"><h2>회원 목록을 불러오지 못했어요</h2><p>{error}</p><button onClick={() => setAttempt(v => v + 1)}>다시 시도</button></div> : loading ? <div className="empty-state" aria-busy="true"><span className="auth-spinner"/><p>{online ? "회원 정보를 불러오고 있어요." : "인터넷 연결을 기다리고 있어요."}</p></div> : <>
-          {showHome&&<MemberDirectory onEdit={m=>setEditor({kind:'edit',member:m})} onDelete={m=>setEditor({kind:'delete',member:m})} onUpload={m=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} online={online} preferences={preferences} onPreferences={updatePreferences} members={members} search={search} onSearch={setSearch} onOpen={openMember} onCreate={()=>setEditor({kind:"create"})} canCreate={available}/>}
+          {showHome&&<MemberDirectory folder={memberFolder} onFolder={setMemberFolder} onStatus={(m,status)=>void moveMember(m,status)} onEdit={m=>setEditor({kind:'edit',member:m})} onDelete={m=>setEditor({kind:'delete',member:m})} onUpload={m=>{if(openMember(m.id))setUploadRequest(v=>v+1);}} online={online} preferences={preferences} onPreferences={updatePreferences} members={members} search={search} onSearch={setSearch} onOpen={openMember} onCreate={()=>setEditor({kind:"create"})} canCreate={available}/>}
           {selected&&<div className="member-session" hidden={showHome}>{selected.createdAt ? <LiveAnalysisWorkspace onBack={goHome} initialViewMode={preferences.viewMode} key={selected.id} memberId={selected.id} memberName={selected.name} goal={selected.goal} online={online} uploadRequest={uploadRequest} goalRequest={goalRequest} onUnsavedChange={v=>{unsaved.current=v;}}/> : <div className="empty-state" role="status">회원 정보를 저장하고 있어요.</div>}</div>}
         </>}
 
