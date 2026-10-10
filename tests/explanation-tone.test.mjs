@@ -14,6 +14,7 @@ test('verbatim quotes, code, links and existing friendly prose are preserved',()
  assert.equal(convert(literal),literal);
  assert.equal(convert('아직 비교하기 어려워요. 목표를 확인해주세요.'),'아직 비교하기 어려워요. 목표를 확인해주세요.');
  assert.equal(convert('표로 정리해 드립니다. 부담을 줄여줍니다.'),'표로 정리해 드려요. 부담을 줄여줘요.');
+ assert.equal(convert('참여 빈도가 높아졌습니다. 중량을 늘렸습니다.'),'참여 빈도가 높아졌어요. 중량을 늘렸어요.');
  assert.equal(convert('합니다만 추가 확인이 필요합니다.'),'합니다만 추가 확인이 필요해요.');
 });
 test('generation style applies only to explanatory tasks, preserving raw requests',()=>{
