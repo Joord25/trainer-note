@@ -10,13 +10,15 @@ const require=createRequire(import.meta.url);
 let code=ts.transpileModule(readFileSync(new URL('../src/components/assistant-answer.tsx',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 code=code.replace(/import \{ HoverDetail \} from ['"]\.\/hover-detail['"];?/, 'const HoverDetail=({children})=>children;');
 code=code.replace(/from ["']react["']/g,`from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)}`).replace(/from ["']react\/jsx-runtime["']/g,`from ${JSON.stringify(pathToFileURL(require.resolve('react/jsx-runtime')).href)}`).replace(/import \{ Icon \} from ['"]\.\/icons['"];?/,'const Icon=()=>null;');
+const toneCode=ts.transpileModule(readFileSync(new URL('../src/lib/explanation-tone.ts',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
+code=code.replace("'../lib/explanation-tone'",JSON.stringify('data:text/javascript;base64,'+Buffer.from(toneCode).toString('base64')));
 const {AnswerText}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 const render=text=>renderToStaticMarkup(React.createElement(AnswerText,{text}));
 test('numbered titles and their indented explanations remain in one ordered list',()=>{
  const html=render('결론입니다.\n\n1. **운동량**\n   첫 설명입니다.\n   같은 항목의 다음 줄입니다.\n\n2. **해석**\n   두 번째 설명입니다.\n\n마지막 문단입니다.');
  assert.equal((html.match(/<ol/g)||[]).length,1);assert.equal((html.match(/<li/g)||[]).length,2);
- assert.match(html,/<li value="1"><div class="assistant-point-title"><strong[^>]*>운동량<\/strong><\/div><p>첫 설명입니다\.\n같은 항목의 다음 줄입니다\.<\/p><\/li>/);
- assert.match(html,/<\/ol><p>마지막 문단입니다\.<\/p>/);
+ assert.match(html,/<li value="1"><div class="assistant-point-title"><strong[^>]*>운동량<\/strong><\/div><p>첫 설명이에요\.\n같은 항목의 다음 줄이에요\.<\/p><\/li>/);
+ assert.match(html,/<\/ol><p>마지막 문단이에요\.<\/p>/);
 });
 test('legacy paragraphs, decimal measurements and model-supplied HTML stay intact and inert',()=>{
  const html=render('12.5kg × 10회입니다.\n\n- 기존 항목\n\n<script>alert(1)</script>');

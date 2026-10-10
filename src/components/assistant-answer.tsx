@@ -1,4 +1,5 @@
 "use client";
+import {toFriendlyExplanation} from '../lib/explanation-tone';
 import {useEffect,useState,type ReactNode} from 'react';
 import type {ChatMessage} from '../lib/server-ai';
 import {HoverDetail} from './hover-detail';
@@ -14,7 +15,7 @@ export function AnswerText({text,sources=[]}:{text:string;sources?:WebSource[]})
  });}
  // Older answers sometimes flattened numbered sections. Only split sentence boundaries,
  // never decimal loads, dates, or a number inside a sentence.
- const lines=text.replace(/([.!?。]) +(?=\d{1,2}\. [^\d\s])/g,'$1\n\n').split(/\r?\n/),blocks:ReactNode[]=[];
+ const lines=toFriendlyExplanation(text).replace(/([.!?。]) +(?=\d{1,2}\. [^\d\s])/g,'$1\n\n').split(/\r?\n/),blocks:ReactNode[]=[];
  let paragraph:string[]=[],items:{number?:number;text:string;details:string[]}[]=[];
  function flushParagraph(){if(paragraph.length){blocks.push(<p key={blocks.length}>{inline(paragraph.join('\n'))}</p>);paragraph=[];}}
  function flushList(){if(items.length){const ordered=items[0].number!==undefined,children=items.map((item,i)=><li key={i} value={item.number}>{item.details.length?<><div className="assistant-point-title">{inline(item.text)}</div><p>{inline(item.details.join('\n'))}</p></>:inline(item.text)}</li>);blocks.push(ordered?<ol key={blocks.length} start={items[0].number}>{children}</ol>:<ul key={blocks.length}>{children}</ul>);items=[];}}
@@ -52,6 +53,6 @@ export function AnswerSources({sources=[],suggestions}:{sources?:WebSource[];sug
 export function AnswerActions({message,disabled,canRegenerate,onRegenerate}:{message:ChatMessage;disabled:boolean;canRegenerate:boolean;onRegenerate:()=>void}){
  const [copied,setCopied]=useState(false),[error,setError]=useState('');
  useEffect(()=>{if(!copied)return;const timer=setTimeout(()=>setCopied(false),2200);return()=>clearTimeout(timer);},[copied]);
- async function copy(){try{const sources=(message.webSources??[]).filter(safeSource),text=(message.answer??'')+(sources.length?'\n\n출처\n'+sources.map((s,i)=>`${i+1}. ${s.title}: ${s.url}`).join('\n'):'');await navigator.clipboard.writeText(text);setCopied(true);setError('');}catch{setCopied(false);setError('복사하지 못했어요. 브라우저의 클립보드 권한을 확인해주세요.');}}
+ async function copy(){try{const sources=(message.webSources??[]).filter(safeSource),text=toFriendlyExplanation(message.answer??'')+(sources.length?'\n\n출처\n'+sources.map((s,i)=>`${i+1}. ${s.title}: ${s.url}`).join('\n'):'');await navigator.clipboard.writeText(text);setCopied(true);setError('');}catch{setCopied(false);setError('복사하지 못했어요. 브라우저의 클립보드 권한을 확인해주세요.');}}
  return <><div className="assistant-answer-actions"><HoverDetail content={copied?'답변을 복사했어요':'답변과 웹 출처를 함께 복사해요'}><button type="button" onClick={()=>void copy()}><Icon name={copied?'check':'copy'} size={15}/>{copied?'복사됨':'복사'}</button></HoverDetail>{canRegenerate&&<HoverDetail content="같은 질문으로 답변을 다시 만들어요. AI 이용량이 사용돼요."><button type="button" disabled={disabled} onClick={()=>{setCopied(false);onRegenerate();}}><Icon name="refresh" size={15}/>다시 생성</button></HoverDetail>}</div><span className="assistant-copy-status" role="status">{copied?'답변을 복사했어요.':''}</span>{error&&<p className="file-error" role="alert">{error}</p>}</>;
 }

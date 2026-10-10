@@ -1,4 +1,5 @@
 "use client";
+import {toFriendlyExplanation} from '../lib/explanation-tone';
 import {useEffect,useRef,useState} from 'react';
 import {formatWorkoutSet,validMeasurement,type WorkoutSet} from '../lib/workout-measurements';
 import type {Cycle} from './coaching-journey';
@@ -27,12 +28,12 @@ export function CyclePlanReview({plan,canEdit,onSave,onOriginal,onDirty}:{onDirt
  <article className="cycle-session"><header><div><h3>{session.number}회 · {session.focus}</h3><small>{session.number===1?'다음 수업':'수행 결과에 따라 조정할 초안'}</small></div>{canEdit&&!draft&&<button onClick={()=>setDraft(structuredClone(plan))}>수업 수정</button>}</header>
  <fieldset disabled={saving} className="cycle-exercises">{session.items.map((item,index)=><div className="cycle-exercise" key={`${session.number}-${index}`}>
  <h4>{index+1}. {item.exerciseName}</h4><strong className="cycle-prescription">{prescription(item)}</strong>
- <p>{(draft||plan.trainerEdited)&&<small>AI 제안 당시 이유 · </small>}{item.reason}</p>{item.recovery&&!/^새 제안[.\s]*$/.test(item.recovery)&&<p>{item.recovery}</p>}
+ <p>{(draft||plan.trainerEdited)&&<small>AI 제안 당시 이유 · </small>}{toFriendlyExplanation(item.reason)}</p>{item.recovery&&!/^새 제안[.\s]*$/.test(item.recovery)&&<p>{toFriendlyExplanation(item.recovery)}</p>}
  {draft&&<div className="cycle-item-editor"><label>운동<select value={item.id} onChange={e=>{const next=candidates.find(c=>c.id===e.target.value);if(next)updateItem(index,structuredClone(next));}}>{candidates.filter(c=>c.id===item.id||!session.items.some(i=>i.id===c.id)).map(c=><option key={c.id} value={c.id}>{c.exerciseName}</option>)}</select></label>
  {item.segments.map((segment,row)=><div className="cycle-set-editor" key={row}><span>{row+1}{item.measurementType==='repetitions'?'세트':'구간'}</span>{Object.entries(segment).filter(([key,value])=>!(key==='reps'&&(item.measurementType!=='repetitions'||segment.leftReps!==undefined))&&!(key==='kg'&&item.loadType!=='weighted'&&item.loadType!=='mixed')&&(value!==null||key==='kg')).map(([key,value])=><label key={key}>{labels[key]??key}<input aria-label={`${item.exerciseName} ${row+1}세트 ${labels[key]??key}`} type="number" step={['reps','leftReps','rightReps'].includes(key)?1:'any'} value={value??''} placeholder={key==='kg'&&item.loadType==='mixed'?'맨몸':undefined} onChange={e=>setValue(index,row,key,e.target.value)}/></label>)}<button type="button" disabled={item.segments.length<=1} onClick={()=>updateItem(index,{...item,segments:item.segments.filter((_,i)=>i!==row)})}>삭제</button></div>)}<button type="button" disabled={item.segments.length>=8} onClick={()=>updateItem(index,{...item,segments:[...item.segments,{...item.segments.at(-1)!}]})}>세트·구간 추가</button></div>}
  <details className="cycle-evidence"><summary>근거 기록 보기</summary><p>{item.referenceDate} · {item.reference}</p><button type="button" onClick={()=>onOriginal(item.id)}>원본 보기</button></details>
  </div>)}</fieldset>
- <section className="cycle-checks"><h4>이번 수업에서 확인할 것</h4><ul>{session.checks.map((c,i)=><li key={i}>{c}</li>)}</ul><p><strong>다음 진행</strong> {session.progressWhen}</p><p><strong>유지·조정</strong> {session.adjustWhen}</p></section>
+ <section className="cycle-checks"><h4>이번 수업에서 확인할 것</h4><ul>{session.checks.map((c,i)=><li key={i}>{toFriendlyExplanation(c)}</li>)}</ul><p><strong>다음 진행</strong> {toFriendlyExplanation(session.progressWhen)}</p><p><strong>유지·조정</strong> {toFriendlyExplanation(session.adjustWhen)}</p></section>
  {draft&&<div className="journey-actions"><button disabled={saving} onClick={()=>{setDraft(null);setError('');}}>수정 취소</button><button className="primary" disabled={saving||!valid} onClick={()=>void save()}>{saving?'저장 중':'수정한 계획 저장'}</button></div>}{draft&&!valid&&<p role="alert">각 세트의 중량·횟수·단위를 확인해주세요.</p>}{error&&<p role="alert">{error}</p>}
  </article></section>;
 }

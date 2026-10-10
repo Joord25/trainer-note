@@ -1,4 +1,5 @@
 "use client";
+import {toFriendlyExplanation} from '../lib/explanation-tone';
 import {ChartRecordHover} from './chart-record-hover';
 import {changePresentation,evidencePoints,recordedDays,selectChangeCharts,type ChangeEvidence} from '../lib/change-card-selection';
 export type {ChangeEvidence} from '../lib/change-card-selection';
@@ -25,7 +26,7 @@ export function EvidenceGraph({evidence}:{evidence:ChangeEvidence}){
  <polyline points={points.map((p,i)=>`${x(i)},${y(p.value)}`).join(' ')} fill="none" stroke="var(--green,#39654d)" strokeWidth="2.5"/>
  {points.map((p,i)=><circle key={p.date} cx={x(i)} cy={y(p.value)} r="4" fill="var(--surface,#fff)" stroke="var(--green,#39654d)" strokeWidth="2"/>)}
  </svg></ChartRecordHover>
- {previous&&diff<0&&last.value>previous.value&&<small>전체 기간은 감소했지만 직전 기록({fmt(previous.value)} {unit})보다 늘었습니다.</small>}</figure>;
+ {previous&&diff<0&&last.value>previous.value&&<small>전체 기간은 감소했지만 직전 기록({fmt(previous.value)} {unit})보다 늘었어요.</small>}</figure>;
 
 }
 export type Finding={evidenceId:string;interpretation:string;uncertainty:string};
@@ -33,5 +34,5 @@ export function RegionChangeCard({region,evidence,findings,comment,onDetails,onA
  const related=findings.filter(f=>evidence.some(e=>e.id===f.evidenceId));
  const charts=selectChangeCharts(evidence);
  const content=charts.length?comment:undefined;
- return <article className="region-change-card"><header><h3>{region}</h3><span>{region==='상체'?'등 · 가슴 · 어깨 · 팔':region==='유산소'?'시간 · 거리 · 수행 조건':''}</span></header>{!evidence.length?<p className="region-empty"><mark className="report-key-point">비교할 기록이 없습니다.</mark></p>:<><div className="region-graphs">{charts.map(e=>{const finding=related.find(f=>f.evidenceId===e.id);return <div className="brief-exercise" key={e.id}><EvidenceGraph evidence={e}/><p className="brief-explanation">{finding?.interpretation||changePresentation(e)?.comment}</p></div>;})}</div>{content&&<p className="region-comment">{content}</p>}{!charts.length&&<p className="region-comment"><mark className="report-key-point">아직 같은 종목을 두 날짜 이상 비교할 수 없습니다.</mark> 개별 기록은 분석 자세히에서 볼 수 있어요.</p>}<footer><button onClick={()=>onDetails(charts[0]??evidence[0],region)}>분석 자세히 <span aria-hidden="true">↗</span></button>{onAsk&&<button onClick={()=>onAsk(`${region}의 변화를 종합해서 짧게 설명해주세요. 근거: ${charts.map(e=>e.observation).join(' / ')}. 수치 변화와 능력 향상을 구분하고, 피로·통증·휴가·복귀는 기록된 내용만 근거로 삼아 다음 지도 방향을 제안해주세요.`.slice(0,1200),charts[0]?.recordIds[0]??evidence[0].recordIds[0])}>AI에게 질문</button>}</footer></>}</article>;
+ return <article className="region-change-card"><header><h3>{region}</h3><span>{region==='상체'?'등 · 가슴 · 어깨 · 팔':region==='유산소'?'시간 · 거리 · 수행 조건':''}</span></header>{!evidence.length?<p className="region-empty"><mark className="report-key-point">비교할 기록이 없어요.</mark></p>:<><div className="region-graphs">{charts.map(e=>{const finding=related.find(f=>f.evidenceId===e.id);return <div className="brief-exercise" key={e.id}><EvidenceGraph evidence={e}/><p className="brief-explanation">{toFriendlyExplanation(finding?.interpretation||changePresentation(e)?.comment||'')}</p></div>;})}</div>{content&&<p className="region-comment">{toFriendlyExplanation(content)}</p>}{!charts.length&&<p className="region-comment"><mark className="report-key-point">아직 같은 종목을 두 날짜 이상 비교할 수 없어요.</mark> 개별 기록은 분석 자세히에서 볼 수 있어요.</p>}<footer><button onClick={()=>onDetails(charts[0]??evidence[0],region)}>분석 자세히 <span aria-hidden="true">↗</span></button>{onAsk&&<button onClick={()=>onAsk(`${region}의 변화를 종합해서 짧게 설명해주세요. 근거: ${charts.map(e=>e.observation).join(' / ')}. 수치 변화와 능력 향상을 구분하고, 피로·통증·휴가·복귀는 기록된 내용만 근거로 삼아 다음 지도 방향을 제안해주세요.`.slice(0,1200),charts[0]?.recordIds[0]??evidence[0].recordIds[0])}>AI에게 질문</button>}</footer></>}</article>;
 }
