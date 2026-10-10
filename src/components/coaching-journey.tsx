@@ -1,4 +1,5 @@
 "use client";
+import {ReportOutline} from './report-outline';
 import {GuidanceNote} from './guidance-note';
 import {DirectionReview,activeDecisions,type Direction,type GoalReview,type DiscussTarget} from './direction-review';
 import {DirectionConversation,type DirectionSelection} from './direction-conversation';
@@ -88,6 +89,7 @@ export function CoachingJourney({initialContext,allowAutomaticAnalysis=false,req
  const showingPlan=!!plan&&!editingPlan;
  useEffect(()=>{if(stage==='plan'&&!working)planTop.current?.closest('.journey-scroll')?.scrollTo({top:0,behavior:'smooth'});},[stage,showingPlan,working]);
  return <section className={"coaching-journey "+(stage==='analysis'?'journey-brief':stage==='plan'?'journey-plan':'')} aria-label="회원 변화와 수업 계획">
+ {stage==='analysis'&&context?.report&&<ReportOutline key={context.inputKey}/>}
  {error&&<JourneyError message={error}>{context?.status==='error'&&!context.report?<button disabled={!!busy} onClick={()=>void analyze()}>분석 다시 시도</button>:<button disabled={!!busy} onClick={()=>setRefresh(v=>v+1)}>최신 기록 다시 확인</button>}</JourneyError>}
  {!online&&<p role="status">연결 후 저장된 분석과 계획을 확인할 수 있어요.</p>}
 

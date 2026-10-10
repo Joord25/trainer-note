@@ -8,6 +8,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 const require=createRequire(import.meta.url);
 let code=ts.transpileModule(readFileSync(new URL('../src/components/assistant-answer.tsx',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+code=code.replace(/import \{ HoverDetail \} from ['"]\.\/hover-detail['"];?/, 'const HoverDetail=({children})=>children;');
 code=code.replace(/from ["']react["']/g,`from ${JSON.stringify(pathToFileURL(require.resolve('react')).href)}`).replace(/from ["']react\/jsx-runtime["']/g,`from ${JSON.stringify(pathToFileURL(require.resolve('react/jsx-runtime')).href)}`).replace(/import \{ Icon \} from ['"]\.\/icons['"];?/,'const Icon=()=>null;');
 const {AnswerText}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 const render=text=>renderToStaticMarkup(React.createElement(AnswerText,{text}));
@@ -42,4 +43,12 @@ test('table cells keep HTML inert and non-table pipes stay prose',()=>{
  const html=render('| 끼니 | 메뉴 |\n| --- | --- |\n| 첫 끼 | <img src=x onerror=alert(1)> |');
  assert.ok(!html.includes('<img'));assert.match(html,/&lt;img/);
  assert.ok(!render('밥 | 면 중 선택').includes('<table>'));
+});
+test('inline source badges retain exact source mapping and reject unsafe links',()=>{
+ const html=renderToStaticMarkup(React.createElement(AnswerText,{text:'근거 [웹1] 및 [웹2], 없는 출처 [웹3]',sources:[{url:'https://example.org/research',title:'훈련 근거'},{url:'javascript:alert(1)',title:'잘못된 주소'}]}));
+ assert.match(html,/href="https:\/\/example.org\/research"/);
+ assert.match(html,/웹 출처 1: 훈련 근거/);
+ assert.match(html,/>1<\/a>/);
+ assert.ok(!html.includes('href="javascript:'));
+ assert.match(html,/\[웹2\]/);assert.match(html,/\[웹3\]/);
 });
