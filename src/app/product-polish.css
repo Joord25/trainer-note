@@ -70,3 +70,6 @@
 .review-workspace .report-key-point{background:var(--reading-marker);color:inherit;padding:1px 3px;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 .review-workspace .brief-chart figcaption strong{padding:1px 4px;line-height:1.6}
 .review-workspace .assistant-answer-body .answer-key-point{padding:1px 3px}
+
+.review-workspace .journey-brief .goal-review-heading{align-items:center;margin-bottom:16px}
+.review-workspace .journey-brief .goal-review-heading>h3{margin:0}
